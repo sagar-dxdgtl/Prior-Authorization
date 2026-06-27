@@ -3,14 +3,19 @@ check that the HTTP shell maps requests to the service and serializes verdicts."
 
 from __future__ import annotations
 
+import sys
+
 import pytest
 
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
 
-from network_probe import api as api_mod  # noqa: E402
+import network_probe.api.app  # noqa: E402,F401  (register the module in sys.modules)
 from network_probe.domain.models import NetworkStatus, NetworkVerdict, ProviderQuery  # noqa: E402
 
+# The package re-exports the FastAPI `app`, which shadows the `app` submodule attribute,
+# so reach the module object via sys.modules to monkeypatch its module-level globals.
+api_mod = sys.modules["network_probe.api.app"]
 client = TestClient(api_mod.app)
 
 

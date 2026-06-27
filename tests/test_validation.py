@@ -1,6 +1,6 @@
 import pytest
 
-from network_probe.validation import normalize_dob, valid_npi
+from network_probe.api.validation import normalize_dob, valid_npi
 
 
 def test_npi_luhn():

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from network_probe.ratelimit import RateLimitHeadersMiddleware
+from network_probe.api.ratelimit import RateLimitHeadersMiddleware
 
 
 def _client():

@@ -1,6 +1,6 @@
 import pytest
 
-from network_probe.netutil import assert_safe_url
+from network_probe.api.netutil import assert_safe_url
 
 
 @pytest.mark.parametrize("url", [
@@ -12,7 +12,7 @@ def test_blocks_internal_and_nonhttp(url):
         assert_safe_url(url)
 
 def test_blocks_hostname_resolving_internal(monkeypatch):
-    monkeypatch.setattr("network_probe.netutil.socket.getaddrinfo",
+    monkeypatch.setattr("network_probe.api.netutil.socket.getaddrinfo",
                         lambda host, *a, **k: [(2, 1, 6, "", ("127.0.0.1", 0))])
     with pytest.raises(ValueError):
         assert_safe_url("http://localhost.evil.test/")
@@ -21,6 +21,6 @@ def test_allows_public_literal_ip():
     assert assert_safe_url("https://1.1.1.1/api") == "https://1.1.1.1/api"
 
 def test_allows_public_hostname(monkeypatch):
-    monkeypatch.setattr("network_probe.netutil.socket.getaddrinfo",
+    monkeypatch.setattr("network_probe.api.netutil.socket.getaddrinfo",
                         lambda host, *a, **k: [(2, 1, 6, "", ("93.184.216.34", 0))])
     assert assert_safe_url("https://example.test/") == "https://example.test/"
