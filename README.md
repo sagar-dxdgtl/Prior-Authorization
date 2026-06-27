@@ -163,12 +163,97 @@ than an honest `UNKNOWN`.
 
 ---
 
-## Tests
+## Run the full stack
+
+### 1. Install Python dependencies
 
 ```bash
-pytest -m "not live"   # fast, deterministic — fixture-driven (default)
-pytest -m live         # real end-to-end calls to hioscar.com + devoted.com (Algolia)
-pytest                 # everything
+python3 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### 2. Create the Postgres databases and app role
+
+```sql
+-- run as a superuser (e.g. psql -U postgres)
+CREATE DATABASE preauth;
+CREATE DATABASE preauth_test;
+CREATE USER preauth_app WITH PASSWORD 'CHANGE_ME';
+GRANT ALL ON DATABASE preauth TO preauth_app;
+GRANT ALL ON DATABASE preauth_test TO preauth_app;
+```
+
+### 3. Configure environment
+
+```bash
+cp .env.example .env
+```
+
+Open `.env` and set:
+
+- **`DATABASE_URL`** — owner connection string (postgres superuser or role with CREATEROLE).
+- **`APP_DB_URL`** — `preauth_app` connection string used at runtime.
+- **`JWT_SECRET`** — at least 32 random characters.
+- **`FERNET_KEYS`** — generate a fresh key:
+
+  ```bash
+  python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+  ```
+
+- **`MEMBER_ID_PEPPER`** — at least 32 random characters (distinct from the key above).
+- **`STEDI_API_KEY`** — optional; leave blank to skip live eligibility calls.
+- **`CORS_ORIGINS`** — set to `http://localhost:5173` for local dev (the Vite default).
+
+### 4. Run Alembic migrations (creates schema + seeds payers + demo admin)
+
+```bash
+alembic upgrade head
+```
+
+### 5. Start the API server
+
+```bash
+uvicorn network_probe.api:app --reload
+# API available at http://127.0.0.1:8000
+```
+
+### 6. Start the frontend
+
+```bash
+cd web
+npm install
+npm run dev
+# UI available at http://localhost:5173
+```
+
+### 7. Log in
+
+Default demo credentials (seeded by migration `0003_seed_admin.py`):
+
+| field | value |
+|---|---|
+| Username | `admin` |
+| Password | `ChangeMe-Admin-2026` |
+
+**A forced password-change 403 is returned on first login** — submit a `POST /api/auth/change-password` (or use the UI prompt) before making any other authenticated calls.
+
+---
+
+## Tests
+
+Test markers:
+
+| command | what runs | requires |
+|---|---|---|
+| `pytest -m "not live and not db"` | pure unit + integration tests (fixture-driven, no external services) | nothing beyond `pip install -r requirements.txt` |
+| `pytest -m db` | database-layer tests (models, RLS, auth routes, repo) | local Postgres `preauth_test` with `preauth_app` role |
+| `pytest -m live` | real end-to-end calls to Oscar, Devoted, Stedi | live network + prod `STEDI_API_KEY` |
+
+```bash
+pytest -m "not live and not db"   # fast, deterministic (default CI gate)
+pytest -m db                       # needs local preauth_test
+pytest -m live                     # needs prod Stedi key + live network
+pytest                             # everything
 ```
 
 - **Offline tests** replay captured responses (`tests/fixtures/`) through `httpx.MockTransport`, so

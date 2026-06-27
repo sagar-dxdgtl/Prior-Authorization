@@ -163,27 +163,27 @@ network_probe/
 
 ## 10. What pVerify does that we don't
 
-pVerify is a full **eligibility + benefits + RCM-workflow** platform; we are the network-accuracy slice.
+pVerify is a full **eligibility + benefits + RCM-workflow** platform; we are the network-accuracy slice with a HIPAA-grade platform under it (Slice A shipped).
 
 ### Within the pre-auth / eligibility moment
 | Capability | pVerify | Us |
 |---|---|---|
-| 270/271 eligibility (active?, eff/term dates) | ✅ | ❌ (we read it from an ingested 271, don't transact it) |
-| Benefits & cost-share (copay / coins / deductible / OOP) | ✅ | ❌ |
-| PCP / prior-auth / referral requirements | ✅ | ⚠️ partial (Oscar) |
-| COB / secondary / plan sponsor / IPA | ✅ | ❌ |
-| Broad payer reach via EDI/clearinghouse | ✅ (~all payers) | ⚠️ 5 payers (2 web-blocked, used via FHIR) |
-| Member-keyed lookup (member ID + DOB → plan) | ✅ | ✅ via 271 ingest |
+| 270/271 eligibility (active?, eff/term dates) | ✅ | ✅ via Stedi clearinghouse (primary source, Slice A) |
+| Benefits & cost-share (copay / coins / deductible / OOP) | ✅ | ✅ IN/OON cost-share, met-pairing, COB via `stedi/parse_271.py` |
+| PCP / prior-auth / referral requirements | ✅ | ⚠️ partial (Oscar adapter; not from Stedi) |
+| COB / secondary / plan sponsor / IPA | ✅ | ✅ COB parsed (PHI-redacted); secondary detail still partial |
+| Broad payer reach via EDI/clearinghouse | ✅ (~all payers) | ✅ Stedi + 5-payer AZ/CO/FL/NY catalogue; web-blocked payers via FHIR |
+| Member-keyed lookup (member ID + DOB → plan) | ✅ | ✅ via 271 ingest + `/api/eligibility` member key |
 | **Provider network status** | ⚠️ often "Unknown", manual, error-prone | ✅ **our core** |
 
 ### Beyond pre-auth (the wider platform)
 | Capability | pVerify | Us |
 |---|---|---|
-| Live claims-grade network truth (Availity / TIN portal / phone) | ✅ (manual) | 🟡 `StediSource` built; needs prod key |
-| Case-management workflow (notes, PEC, reschedule, retention) | ✅ | 🟡 seed (override store) |
-| Batch / scale / queue / retry hardening | ✅ | ⚠️ per-call + dev cache (batch CLI only) |
-| Persistence / datastore / member files | ✅ | ⚠️ JSON cache + JSON overrides |
-| Compliance (HIPAA BAA, encryption, audit, multilingual) | ✅ | ❌ demo only |
+| Live claims-grade network truth (Availity / TIN portal / phone) | ✅ (manual) | ✅ Stedi primary + directory merge; Slice A shipped |
+| Case-management workflow (notes, PEC, reschedule, retention) | ✅ | ⚠️ override store only; full case-mgmt in Slice B |
+| Batch / scale / queue / retry hardening | ✅ | ⚠️ per-call sync; queue/scale in Slice B |
+| Persistence / datastore / member files | ✅ | ✅ Postgres + UUID PKs + Alembic migrations (Slice A) |
+| Compliance (HIPAA BAA, encryption, audit, multilingual) | ✅ | ✅ Fernet PHI-at-rest, RLS multi-tenancy, PHI-redacted audit; multilingual in Slice B |
 
 > **The key inversion:** the one thing pVerify is *weakest* at — provider network status (its 271 returns
 > "Unknown", and its automated field was wrong in 4/4 of its own OON examples) — is exactly what we do
@@ -191,12 +191,46 @@ pVerify is a full **eligibility + benefits + RCM-workflow** platform; we are the
 
 ---
 
-## 11. Staged / deferred (not code gaps)
+## 11. Slice A platform layer (shipped)
 
-- **Stedi eligibility source** — built, `PAYER_IDS` mapped; needs a **production key + payer enrollment**.
-- **NPI→TIN crosswalk** — loader built; needs a **data file** (TiC parse / vendor crosswalk). No free API
-  exists; TiC files are per-payer and huge. See `TODO-unblock-phase2-3.md`.
-- **Phases 5–7** (scale/persistence, full benefits parity, compliance/ops) — deferred (demo scope).
+Slice A transformed the demo probe into a multi-tenant, HIPAA-aware eligibility + benefits service. The following are all built and committed:
+
+### Eligibility + benefits (primary)
+- **Stedi** (`stedi/client.py`) — real 270/271 clearinghouse transactions; no-PHI cache key.
+- **Benefits parser** (`stedi/parse_271.py`) — extracts IN/OON cost-share, deductible met-pairing, COB info, errors; PHI-redacted before logging.
+- **Benefits model** (`benefits.py`) — structured output for the UI and API.
+- **Engine** (`eligibility.py`) — Stedi primary + legacy directory merge; conflict → REVIEW; tenant-scoped override application.
+
+### Platform / data layer
+- **Config** (`config.py`) — `pydantic-settings` with fail-fast PHI-crypto validation; rejects weak/default `FERNET_KEYS` and `MEMBER_ID_PEPPER` outside dev.
+- **Secrets seam** (`secrets_provider.py`) — env vars in dev; AWS Secrets Manager in prod (swappable without code changes).
+- **Crypto** (`crypto.py`) — Fernet field-encryption for PHI at rest; peppered HMAC for member-id lookup keys.
+- **Postgres datastore** (`db/`) — SQLAlchemy models with UUID PKs; Alembic migrations; FORCE ROW LEVEL SECURITY per tenant; `SECURITY DEFINER auth_lookup_user` for pre-tenant login; tenant-scoped session + repositories.
+- **Payer catalogue** (`payers/`) — seeded AZ/CO/FL/NY payer roster with Stedi payer IDs; gated resolver.
+- **Audit log** (`audit.py`) — action-tagged, PHI hashed + encrypted, actor retained after user deletion.
+
+### Auth layer
+- **OAuth2 password + JWT** (`auth/`) — algorithm-pinned (HS256 + `typ` claim), `token_version` for server-side revocation, bcrypt passwords, RLS-safe login with atomic lockout + constant-time comparison.
+- **Gates**: must-change-password 403 gating; `/api/auth/login`, `/api/auth/refresh`, `/api/auth/change-password`.
+
+### API + frontend
+- **API** (`api.py`) — member-keyed `/api/eligibility`; auth + SSRF guard + audit on all PHI routes; leak-free errors; CORS allowlist; quota headers; body-size + upload caps.
+- **Frontend** (`web/`) — React + Vite + Ant Design; login flow + benefits matrix; `npm run dev` on port 5173.
+
+---
+
+## 12. Staged (not code gaps)
+
+### Slice B — queue, scale, RBAC, ops
+- **Queue / scale / retry hardening** — async task queue (Celery or similar) for batch eligibility; per-tenant rate limiting beyond in-process tokens.
+- **RBAC depth** — fine-grained role permissions (e.g. read-only vs. submit-PA vs. admin); resource-level policies.
+- **AWS KMS + Secrets Manager** — replace `FERNET_KEYS` env var with KMS-managed DEK; `secrets_provider.py` seam already prepared.
+- **Case-management workflow** — notes, prior-auth status tracking, PEC, reschedule, retention; override store is the seed.
+- **Multilingual** — i18n for member-facing outputs.
+
+### Slice C — directory breadth + crosswalk
+- **NPI→TIN crosswalk** — loader built (`tin_crosswalk.py`); needs a data file (TiC parse / vendor crosswalk). No free API exists; TiC files are per-payer and huge. See `TODO-unblock-phase2-3.md`.
+- **Additional payer directories** — expand beyond the current 5-payer catalogue; more FHIR PDEX adapters.
 
 See `TODO-pverify-parity.md` for the sequential roadmap and `TODO-network-accuracy.md` for the
 accuracy mechanisms in depth.
