@@ -52,6 +52,15 @@ class Payer(Base):
     stedi_payer_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     enrollment_status: Mapped[str] = mapped_column(String(30), default="unknown")
     network_indicator_supported: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Multi-source catalogue columns (Task: multi-source expansion). All nullable text.
+    # fhir_base_url      — verified public PDEX Plan-Net base URL (routes the directory leg) or None.
+    # tic_url            — verified Transparency-in-Coverage machine-readable-file index URL or None.
+    # directory_url      — human-facing "find a doctor" page (informational).
+    # directory_access   — "public-fhir" | "needs-authorized-api" | "none".
+    fhir_base_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    tic_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    directory_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    directory_access: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
 
 class EligibilityCheck(Base):

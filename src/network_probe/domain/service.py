@@ -33,17 +33,43 @@ for _key in _FHIR_ENDPOINTS:
     _ADAPTER_FACTORIES[_key] = _fhir_factory(_key)
 
 
-def get_adapter(payer: str, **kwargs) -> PayerAdapter:
+def _catalogue_fhir_base_url(payer: str, catalogue) -> str | None:
+    """Look up a verified-public FHIR PDEX base URL recorded for this payer in the catalogue.
+
+    Best-effort and failure-tolerant: if no catalogue is available (e.g. no DB), we return
+    None so the caller falls back to the normal 'no adapter' error — never a live call."""
+    try:
+        cat = catalogue
+        if cat is None:
+            from network_probe.payers.catalogue import DbPayerCatalogue
+
+            cat = DbPayerCatalogue()
+        row = cat.resolve(payer)
+    except Exception:
+        return None
+    return getattr(row, "fhir_base_url", None) if row is not None else None
+
+
+def get_adapter(payer: str, catalogue=None, **kwargs) -> PayerAdapter:
     key = (payer or "").strip().lower()
     factory = _ADAPTER_FACTORIES.get(key)
-    if factory is None:
-        supported = ", ".join(sorted(_ADAPTER_FACTORIES)) or "(none)"
-        raise ValueError(f"No adapter for payer {payer!r}. Supported: {supported}.")
-    return factory(**kwargs)
+    if factory is not None:
+        return factory(**kwargs)
+    # No more-specific registered adapter: route the directory leg to the generic FHIR PDEX
+    # adapter when we have a verified-public base_url — passed explicitly, or recorded for this
+    # payer in the catalogue (the multi-source `fhir_base_url` column).
+    base_url = kwargs.get("base_url") or _catalogue_fhir_base_url(payer, catalogue)
+    if base_url:
+        kwargs["base_url"] = base_url
+        return FhirPdexAdapter(payer_name=key or "fhir", **kwargs)
+    supported = ", ".join(sorted(_ADAPTER_FACTORIES)) or "(none)"
+    raise ValueError(f"No adapter for payer {payer!r}. Supported: {supported}.")
 
 
-def check_network(q: ProviderQuery, corroborate: bool = True, **adapter_kwargs) -> NetworkVerdict:
-    adapter = get_adapter(q.payer, **adapter_kwargs)
+def check_network(
+    q: ProviderQuery, corroborate: bool = True, catalogue=None, **adapter_kwargs
+) -> NetworkVerdict:
+    adapter = get_adapter(q.payer, catalogue=catalogue, **adapter_kwargs)
     raw = adapter.check_network(q)
     snapshot = {
         "status": raw.status.value,

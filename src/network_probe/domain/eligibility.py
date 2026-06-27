@@ -20,8 +20,13 @@ def check_eligibility(
     source = stedi or StediEligibilityClient(payer_id=payer.stedi_payer_id if payer else None)
     result = source.check(q)
     # Directory engine still owns provider-specific network status; merge/corroborate.
+    # Reuse the resolved catalogue so a payer with a verified-public `fhir_base_url` routes its
+    # directory leg to the FHIR PDEX adapter (no second DB lookup, no live call in tests).
+    kw: dict = {"catalogue": cat}
+    if base_url:
+        kw["base_url"] = base_url
     try:
-        verdict = check_network(q, **({"base_url": base_url} if base_url else {}))
+        verdict = check_network(q, **kw)
     except Exception:
         verdict = None
     if verdict is not None:

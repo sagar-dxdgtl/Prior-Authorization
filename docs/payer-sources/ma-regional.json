@@ -1,0 +1,134 @@
+[
+  {
+    "payer": "oscar_health",
+    "brand": "Oscar Health",
+    "fhir_pdex_base_url": null,
+    "fhir_verified": false,
+    "tic_index_url": "https://www.hioscar.com/transparency-in-coverage-files/oscar",
+    "directory_url": "https://www.hioscar.com/care-options",
+    "directory_access": "public",
+    "stedi_hint": "TAZWT (primary payer ID: OSCAR)",
+    "notes": "Patient Access API powered by 1upHealth (see https://www.hioscar.com/cms_patient_access_developer_page). No specific Plan-Net FHIR base URL is published; developer page refers to 1upHealth docs. TiC URL is a landing page (state-specific PDFs) not a CMS-schema JSON index. Existing Stedi eligibility adapter in repo uses TAZWT. Oscar also supports PDEX IG STU 2.0.0 per CMS compliance docs."
+  },
+  {
+    "payer": "devoted_health",
+    "brand": "Devoted Health",
+    "fhir_pdex_base_url": "https://fhir.devoted.com/fhir",
+    "fhir_verified": true,
+    "tic_index_url": null,
+    "directory_url": "https://www.devoted.com/search-providers/",
+    "directory_access": "public",
+    "stedi_hint": "ZRSYL (primary payer ID: DEVOT; aliases: 2061, 8196, DEVOTMA)",
+    "notes": "FHIR verified: GET /fhir/metadata returns CapabilityStatement (HAPI FHIR 6.6.0, FHIR 4.0.1); GET /fhir/Practitioner?_count=1 returns valid searchset with PDEX Plan-Net profile. Supports HealthcareService (21951), Location (72283), InsurancePlan (306), Practitioner. No TiC index URL found publicly; contact interop@devoted.com. Existing Algolia adapter in repo. Patient Access base URL: https://api.prod.devoted.com/fhir."
+  },
+  {
+    "payer": "alignment_health_plan",
+    "brand": "Alignment Health Plan",
+    "fhir_pdex_base_url": null,
+    "fhir_verified": false,
+    "tic_index_url": null,
+    "directory_url": "https://providersearch.alignmenthealthplan.com/",
+    "directory_access": "public",
+    "stedi_hint": "CCHPC (aliases: Alignment HealthCare, Citizens Choice Health Plan Fee-for-Service; primary payer ID: AHCA1 also found)",
+    "notes": "Interoperability page at https://www.alignmenthealth.com/interoperability-apis/ (redirected from /api) but content was not retrievable. No Plan-Net FHIR URL published publicly. No TiC index URL found; check https://www.alignmenthealthplan.com/providers/compliance-information. MA plan operating in CA, AZ, TX, NV."
+  },
+  {
+    "payer": "eternal_health",
+    "brand": "eternalHealth",
+    "fhir_pdex_base_url": null,
+    "fhir_verified": false,
+    "tic_index_url": null,
+    "directory_url": "https://nhconnect.eternalhealth.com/Provider/PublicPcpSearch",
+    "directory_access": "public",
+    "stedi_hint": "RP037",
+    "notes": "Small MA HMO (contract H2694 / H1280). Public provider search confirmed accessible without login. No Plan-Net FHIR URL found publicly. No TiC index URL found on eternalhealth.com. CMS enforcement action on record (see https://www.cms.gov/medicare/audits-compliance/part-c-d/part-c-and-part-d-enforcement-actions/eternalhealth-inc). Interoperability page not found."
+  },
+  {
+    "payer": "gold_kidney_health_plan",
+    "brand": "Gold Kidney Health Plan",
+    "fhir_pdex_base_url": null,
+    "fhir_verified": false,
+    "tic_index_url": null,
+    "directory_url": "https://www.goldkidney.com/provider-search/",
+    "directory_access": "public",
+    "stedi_hint": "A6865 (listed as Gold Kidney of Arizona on Stedi)",
+    "notes": "ESRD/CKD-focused MA special needs plan in AZ and FL. CMS-compliant APIs hosted by AaNeel Infotech; developer portal at https://developers.aaneelconnect.com/home?payerCode=65457434-4df9-4b6a-b9cf-a15287e60c5a (registration required, FHIR base URL not publicly disclosed). No TiC index JSON found. PDF provider directory available at goldkidney.com."
+  },
+  {
+    "payer": "scan_health_plan",
+    "brand": "SCAN Health Plan",
+    "fhir_pdex_base_url": null,
+    "fhir_verified": false,
+    "tic_index_url": null,
+    "directory_url": "https://www.scanhealthplan.com/helpful-tools/provider-search",
+    "directory_access": "bot-protected",
+    "stedi_hint": "SPSCN (primary payer ID: 10178)",
+    "notes": "Developer portal at https://developer.scanhealthplan.com/ (ECONNREFUSED at time of check — may be temporarily down). Covers CA, AZ, NV, NM, TX, WA. No TiC index JSON URL found publicly. Provider search page returned 403. SCAN uses Office Ally clearinghouse as primary; Stedi lists SPSCN. Payer ID 10178 confirmed via SCAN provider documentation."
+  },
+  {
+    "payer": "selecthealth",
+    "brand": "SelectHealth",
+    "fhir_pdex_base_url": null,
+    "fhir_verified": false,
+    "tic_index_url": "https://selecthealth.org/disclaimers/machine-readable-data",
+    "directory_url": "https://selecthealth.org/find-care",
+    "directory_access": "public",
+    "stedi_hint": "TLTBQ (primary payer ID: SX107)",
+    "notes": "Developer resources at https://selecthealth.org/developers/resources (403 at fetch time; OAuth 2.0 + FHIR + OpenID Connect referenced). Specific Plan-Net FHIR base URL not published externally. TiC also mirrored at https://transparency.auxiant.com/select-health/ (Auxiant portal). Intermountain Health-affiliated; UT, ID, NV, CO."
+  },
+  {
+    "payer": "avmed",
+    "brand": "AvMed",
+    "fhir_pdex_base_url": "https://myfhir.avmed.org/provider",
+    "fhir_verified": false,
+    "tic_index_url": "https://www.avmed.org/for-developers/",
+    "directory_url": "https://www.avmed.org/find-doctors-facilities/",
+    "directory_access": "login",
+    "stedi_hint": "59274 (primary payer ID: AVMED; also 10067 in some clearinghouse lists)",
+    "notes": "FHIR URL https://myfhir.avmed.org/provider sourced from AvMed developer page but /metadata returned TLS certificate expired error — endpoint may be stale or migrated. TiC machine-readable files base hosted at Azure blob: https://mrfproddestinationdata.blob.core.windows.net/avmed-mrf-output/ (see developer page for index paths). Find-a-doctor requires member portal login. Florida MA + commercial plan; acquired by Sentara Health 2023."
+  },
+  {
+    "payer": "align_senior_health_plan",
+    "brand": "Align Senior Care / AllyAlign Health",
+    "fhir_pdex_base_url": null,
+    "fhir_verified": false,
+    "tic_index_url": null,
+    "directory_url": "https://alignseniorcare.com/providers/provider-documents/",
+    "directory_access": "login",
+    "stedi_hint": "ASFL1 (FL) / ASCA1 (CA) / ASMI1 (MI) / ASVA1 (VA) — separate Stedi payer IDs per state",
+    "notes": "I-SNP / C-SNP / D-SNP Medicare Advantage operator. Interoperability API info at https://www.allyalign.com/interoperability-api/ (AllyConnectApp) and https://alignseniorcare.com/for-members/interoperability-api/. Specific Plan-Net FHIR base URL requires developer registration (contact [email protected], 804-480-1140). Provider portal login-gated. No TiC index URL found."
+  },
+  {
+    "payer": "curative",
+    "brand": "Curative",
+    "fhir_pdex_base_url": null,
+    "fhir_verified": false,
+    "tic_index_url": "https://curative.com/transparency-in-coverage-rates",
+    "directory_url": "https://curative.com/providers",
+    "directory_access": "login",
+    "stedi_hint": "CURTV",
+    "notes": "ACA employer plan (not MA). No Plan-Net FHIR URL found publicly. TiC landing page confirmed at curative.com/transparency-in-coverage-rates (actual MRF index URL behind the page not retrieved). Provider search requires member portal login via health.curative.com. Network search at curative.com/network may allow unauthenticated browsing. TX-focused employer plan."
+  },
+  {
+    "payer": "emblemhealth",
+    "brand": "EmblemHealth",
+    "fhir_pdex_base_url": null,
+    "fhir_verified": false,
+    "tic_index_url": "https://transparency.emblemhealth.com/",
+    "directory_url": "https://www.emblemhealth.com/find-a-doctor/find-the-right-care",
+    "directory_access": "public",
+    "stedi_hint": "13551 (Stedi ID for EmblemHealth Plan; HIP/EmblemHealth Insurance: 55247; GHI HMO: 25531)",
+    "notes": "FHIR API requires developer registration at https://prodtzinterop.developer.healthtranzformdev.com/ (HealthTranzform platform); Plan-Net base URL not publicly disclosed. TiC portal confirmed at transparency.emblemhealth.com with in-network file index at /INN. NY-based MA + commercial plan (GHI/HIP legacy). Find-a-doctor confirmed public."
+  },
+  {
+    "payer": "healthspring_cigna_medicare",
+    "brand": "Healthspring (Cigna Medicare)",
+    "fhir_pdex_base_url": null,
+    "fhir_verified": false,
+    "tic_index_url": "https://www.cigna.com/legal/compliance/machine-readable-files",
+    "directory_url": "https://www.healthspring.com/providers/network-participation",
+    "directory_access": "public",
+    "stedi_hint": "52192 (primary payer ID; Healthspring branded Cigna Medicare Advantage)",
+    "notes": "Healthspring is Cigna's MA brand (rebranded from Cigna-HealthSpring). Cigna Developer Portal at https://developer.cigna.com/docs/service-apis/provider-directory/implementation-guide but registration required; no public Plan-Net FHIR base URL. TiC page live but MRF download links returned errors at time of check. Cigna MRFs also available via https://www.healthplan.org/cigna_mrfs. Provider network validation at hsproviderdatavalidation.com."
+  }
+]
