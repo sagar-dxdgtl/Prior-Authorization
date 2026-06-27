@@ -4,7 +4,7 @@ import logging
 
 from network_probe.core.config import get_settings
 from network_probe.core.context import RequestContext
-from network_probe.core.crypto import FernetCrypto, hash_member_id
+from network_probe.core.crypto import FernetCrypto, hash_member_id, resolve_fernet_keys
 from network_probe.db.repo import EligibilityCheckRepo, ReviewCaseRepo
 from network_probe.db.session import tenant_session
 from network_probe.domain.benefits import EligibilityResult
@@ -14,7 +14,7 @@ log = logging.getLogger("preauth.audit")
 
 
 def _crypto() -> FernetCrypto:
-    return FernetCrypto(get_settings().fernet_key_list)
+    return FernetCrypto(resolve_fernet_keys(get_settings().fernet_key_list))
 
 
 def _full_name(q: ProviderQuery) -> str | None:
