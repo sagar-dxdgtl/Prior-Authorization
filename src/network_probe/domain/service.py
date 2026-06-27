@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from network_probe.adapters.devoted import DevotedAdapter
-from network_probe.adapters.fhir_pdex import KNOWN_ENDPOINTS as _FHIR_ENDPOINTS
-from network_probe.adapters.fhir_pdex import FhirPdexAdapter
-from network_probe.adapters.oscar import OscarAdapter
-from network_probe.base import PayerAdapter
 from network_probe.domain.models import NetworkVerdict, ProviderQuery
+from network_probe.payers.adapters.base import PayerAdapter
+from network_probe.payers.adapters.devoted import DevotedAdapter
+from network_probe.payers.adapters.fhir_pdex import KNOWN_ENDPOINTS as _FHIR_ENDPOINTS
+from network_probe.payers.adapters.fhir_pdex import FhirPdexAdapter
+from network_probe.payers.adapters.oscar import OscarAdapter
 
 
 def _fhir_factory(payer_key: str):

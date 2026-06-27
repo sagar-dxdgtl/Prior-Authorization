@@ -30,10 +30,10 @@ from urllib.parse import quote, urlencode
 
 import httpx
 
-from network_probe.base import PayerAdapter
 from network_probe.core._http import CachedClient
 from network_probe.domain.models import NetworkStatus, NetworkVerdict, ProviderQuery
 from network_probe.domain.plan_aliases import network_aliases
+from network_probe.payers.adapters.base import PayerAdapter
 
 NETWORK_EXT_URL = "http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/network-reference"
 FHIR_ACCEPT = {"accept": "application/fhir+json"}

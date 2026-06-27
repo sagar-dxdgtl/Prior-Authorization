@@ -6,9 +6,9 @@ Given a provider (NPI / name) and a payer + plan, query the payer's public
 See DISCOVERY.md for the reverse-engineered endpoint contract this is built on.
 """
 
-from network_probe.base import PayerAdapter
 from network_probe.domain.models import NetworkStatus, NetworkVerdict, ProviderQuery
 from network_probe.domain.service import check_network, get_adapter
+from network_probe.payers.adapters.base import PayerAdapter
 
 __all__ = [
     "NetworkStatus",

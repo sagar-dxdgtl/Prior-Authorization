@@ -24,9 +24,9 @@ from urllib.parse import parse_qs, urlsplit
 import httpx
 import pytest
 
-from network_probe.adapters.oscar import OscarAdapter
 from network_probe.core._http import CachedClient
 from network_probe.domain.models import NetworkStatus, ProviderQuery
+from network_probe.payers.adapters.oscar import OscarAdapter
 
 FIX = Path(__file__).parent / "fixtures"
 
