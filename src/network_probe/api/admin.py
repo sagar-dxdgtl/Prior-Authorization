@@ -4,8 +4,8 @@ from fastapi import APIRouter, Depends
 
 from network_probe.auth.deps import require_role
 from network_probe.core.context import RequestContext
+from network_probe.db.models import EligibilityCheck, User
 from network_probe.db.session import tenant_session
-from network_probe.db.models import User, EligibilityCheck
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 

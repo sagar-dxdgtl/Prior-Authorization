@@ -1,5 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
+
 from network_probe.api import app
 
 
@@ -22,10 +23,11 @@ def test_admin_lists_users_no_hash(admin_header):
 def test_admin_audit_redacted(admin_header, demo_tenant):
     # seed one audit row with PHI, then confirm the admin list view never exposes the encrypted PHI
     import uuid
-    from network_probe.domain.audit import write_audit
+
     from network_probe.core.context import RequestContext
-    from network_probe.domain.models import ProviderQuery, NetworkStatus
+    from network_probe.domain.audit import write_audit
     from network_probe.domain.benefits import EligibilityResult
+    from network_probe.domain.models import NetworkStatus, ProviderQuery
 
     ctx = RequestContext(tenant_id=demo_tenant, actor_id=uuid.uuid4(), role="admin")
     q = ProviderQuery(

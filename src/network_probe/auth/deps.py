@@ -44,8 +44,11 @@ def get_context_pwchange(authorization: str | None = Header(default=None)) -> Re
 
 
 def require_role(*roles: str):
+    if not roles:
+        raise ValueError("require_role needs at least one role")  # fail loud, never authn-only
+
     def dep(ctx: RequestContext = Depends(get_context)) -> RequestContext:
-        if roles and ctx.role not in roles:
+        if ctx.role not in roles:  # empty roles can't reach here; unmatched role -> 403
             raise HTTPException(status_code=403, detail={"message": "forbidden"})
         return ctx
     return dep
