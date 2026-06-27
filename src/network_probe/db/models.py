@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -101,6 +101,20 @@ class ReviewCase(Base):
     resolution: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+
+class UsageCounter(Base):
+    """Per-tenant request counter for daily/monthly quota enforcement. No PHI — just counts."""
+
+    __tablename__ = "usage_counters"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "period_type", "period_key", name="uq_usage_tenant_period"),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
+    period_type: Mapped[str] = mapped_column(String(8))  # "day" | "month"
+    period_key: Mapped[str] = mapped_column(String(16))  # e.g. "2026-06-28" | "2026-06"
+    count: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class ReviewNote(Base):

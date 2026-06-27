@@ -30,6 +30,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from network_probe.api.admin import router as admin_router
 from network_probe.api.netutil import assert_safe_url
+from network_probe.api.quota import enforce_quota
 from network_probe.api.ratelimit import RateLimitHeadersMiddleware
 from network_probe.api.review import router as review_router
 from network_probe.api.validation import normalize_dob, valid_npi
@@ -363,7 +364,7 @@ def eligibility_ping(ctx: RequestContext = Depends(get_context)):
 
 
 @app.post("/api/eligibility")
-def eligibility(req: CheckRequest, ctx: RequestContext = Depends(get_context)):
+def eligibility(req: CheckRequest, ctx: RequestContext = Depends(enforce_quota)):
     if req.base_url:
         try:
             assert_safe_url(req.base_url)
@@ -397,7 +398,7 @@ def eligibility(req: CheckRequest, ctx: RequestContext = Depends(get_context)):
 
 # sync `def` so FastAPI runs the blocking httpx calls in a threadpool
 @app.post("/api/check")
-def check(req: CheckRequest, ctx: RequestContext = Depends(get_context)):
+def check(req: CheckRequest, ctx: RequestContext = Depends(enforce_quota)):
     q = ProviderQuery(
         payer=req.payer,
         plan_hint=req.plan or "",
@@ -429,7 +430,7 @@ def check(req: CheckRequest, ctx: RequestContext = Depends(get_context)):
 
 
 @app.post("/api/check-from-report")
-def check_from_report(file: UploadFile = File(...), ctx: RequestContext = Depends(get_context)):
+def check_from_report(file: UploadFile = File(...), ctx: RequestContext = Depends(enforce_quota)):
     """Phase 1 — upload a pVerify 271 PDF; we parse payer/plan/provider/NPI and return the network
     verdict that fills the report's 'Provider Network: Unknown' field."""
     raw = file.file.read(10 * 1024 * 1024 + 1)

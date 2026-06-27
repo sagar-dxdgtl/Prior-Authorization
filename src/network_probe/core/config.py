@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     jwt_secret: str
     jwt_access_ttl: int = 1800
     jwt_refresh_ttl: int = 1209600
+    quota_daily: int = 1000
+    quota_monthly: int = 20000
     fernet_keys: str = ""
     member_id_pepper: str = "dev-pepper"
     stedi_api_key: str | None = None
