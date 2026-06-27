@@ -16,3 +16,9 @@ def test_dummy_hash_is_real_bcrypt_and_never_matches():
     assert DUMMY_HASH.startswith("$2")            # bcrypt format
     assert verify_password("anything", DUMMY_HASH) is False
     assert verify_password("not-a-real-password-constant-time-guard", DUMMY_HASH) is True
+
+def test_long_password_handled():
+    pw = "A1!" + "x"*100  # >72 bytes
+    h = hash_password(pw)
+    assert verify_password(pw, h) is True
+    assert verify_password("A1!" + "y"*100, h) is False
