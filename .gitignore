@@ -9,3 +9,9 @@ ui-*.png
 test-data/
 .overrides/
 .DS_Store
+.env
+.env.*
+!.env.example
+__MACOSX/
+web/node_modules/
+web/dist/
