@@ -3,7 +3,7 @@ layout (no PHI, no PDF dependency) so it runs in any checkout."""
 
 from __future__ import annotations
 
-from network_probe.report_ingest import parse_report, report_to_query
+from network_probe.domain.report_ingest import parse_report, report_to_query
 
 # Mirrors the real pVerify text layout: interleaved query block + clean PLAN COVERAGE / DETAILED RESULT.
 SYNTH = """QUERY CRITERIA

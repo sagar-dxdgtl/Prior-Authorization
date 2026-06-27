@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from network_probe.overrides import DbOverrideStore, Override
+from network_probe.domain.overrides import DbOverrideStore, Override
 
 
 def migrate(json_path: Path, tenant_id) -> int:

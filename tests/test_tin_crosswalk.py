@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import json
 
-from network_probe.corroboration import TinScopeSource
-from network_probe.models import NetworkStatus, NetworkVerdict, ProviderQuery
-from network_probe.tin_crosswalk import TinCrosswalk
+from network_probe.domain.corroboration import TinScopeSource
+from network_probe.domain.models import NetworkStatus, NetworkVerdict, ProviderQuery
+from network_probe.domain.tin_crosswalk import TinCrosswalk
 
 
 def _v(tins=None):
@@ -56,7 +56,7 @@ def test_tinscope_uses_crosswalk_when_directory_has_none():
 
 def test_default_crosswalk_has_seeded_uhc_uvc():
     # TiC-verified UnitedHealthcare TX-exchange mapping (United Vein & Vascular Centers, TIN 933510922).
-    from network_probe.tin_crosswalk import default_crosswalk
+    from network_probe.domain.tin_crosswalk import default_crosswalk
     assert default_crosswalk().tins_for("uhc", "1972603934") == ["933510922"]
     assert default_crosswalk().tins_for("uhc", "1710305735") == ["933510922"]
 

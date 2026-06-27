@@ -1,5 +1,5 @@
 """NetworkVerdict carries an optional additive `evidence` block."""
-from network_probe.models import NetworkStatus, NetworkVerdict
+from network_probe.domain.models import NetworkStatus, NetworkVerdict
 
 
 def _v(**kw):

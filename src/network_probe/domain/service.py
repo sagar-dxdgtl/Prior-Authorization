@@ -7,7 +7,7 @@ from network_probe.adapters.fhir_pdex import KNOWN_ENDPOINTS as _FHIR_ENDPOINTS
 from network_probe.adapters.fhir_pdex import FhirPdexAdapter
 from network_probe.adapters.oscar import OscarAdapter
 from network_probe.base import PayerAdapter
-from network_probe.models import NetworkVerdict, ProviderQuery
+from network_probe.domain.models import NetworkVerdict, ProviderQuery
 
 
 def _fhir_factory(payer_key: str):
@@ -54,7 +54,7 @@ def check_network(q: ProviderQuery, corroborate: bool = True, **adapter_kwargs) 
     final = raw
     signals: list = []
     if corroborate:
-        from network_probe.corroboration import default_sources, finalize, run_display_signals
+        from network_probe.domain.corroboration import default_sources, finalize, run_display_signals
         client = getattr(adapter, "client", None)
         sources = default_sources(client)
         # signals are computed once against the raw directory verdict so they are available for

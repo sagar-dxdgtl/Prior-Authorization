@@ -1,9 +1,9 @@
 """Verified TIN-level network status book (payer TIN portal facts) and its use by TinScopeSource."""
 from __future__ import annotations
 
-from network_probe.corroboration import TinScopeSource
-from network_probe.models import NetworkStatus, NetworkVerdict, ProviderQuery
-from network_probe.tin_status import TinStatus, TinStatusBook, default_tin_status
+from network_probe.domain.corroboration import TinScopeSource
+from network_probe.domain.models import NetworkStatus, NetworkVerdict, ProviderQuery
+from network_probe.domain.tin_status import TinStatus, TinStatusBook, default_tin_status
 
 
 def _oon_verdict():

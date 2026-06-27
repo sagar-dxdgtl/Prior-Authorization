@@ -13,7 +13,7 @@ import json
 import re
 
 from network_probe.core._http import CachedClient
-from network_probe.models import ProviderQuery
+from network_probe.domain.models import ProviderQuery
 
 # payer string (lowercased, substring) -> adapter key
 _PAYER_MAP = [

@@ -10,7 +10,7 @@ Endpoints:
     GET  /api/payers    -> available payers + the fields each needs + examples
     POST /api/check     -> run a verdict for one provider/plan
 
-The API is a thin shell over network_probe.service.check_network — the verdict logic
+The API is a thin shell over network_probe.domain.service.check_network — the verdict logic
 stays in the adapters, single source of truth.
 """
 
@@ -28,18 +28,18 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from network_probe.audit import write_audit
 from network_probe.auth.deps import get_context
 from network_probe.auth.routes import router as auth_router
-from network_probe.benefits import EligibilityResult
 from network_probe.core.config import get_settings
 from network_probe.core.context import RequestContext
-from network_probe.eligibility import check_eligibility
-from network_probe.models import NetworkStatus, ProviderQuery
+from network_probe.domain.audit import write_audit
+from network_probe.domain.benefits import EligibilityResult
+from network_probe.domain.eligibility import check_eligibility
+from network_probe.domain.models import NetworkStatus, ProviderQuery
+from network_probe.domain.report_ingest import parse_report, report_to_query
+from network_probe.domain.service import check_network
 from network_probe.netutil import assert_safe_url
 from network_probe.ratelimit import RateLimitHeadersMiddleware
-from network_probe.report_ingest import parse_report, report_to_query
-from network_probe.service import check_network
 from network_probe.validation import normalize_dob, valid_npi
 
 log = logging.getLogger("preauth.api")
@@ -348,7 +348,7 @@ def check_from_report(file: UploadFile = File(...), ctx: RequestContext = Depend
 @app.post("/api/override")
 def add_override(req: OverrideRequest, ctx: RequestContext = Depends(get_context)):
     """Record a human/authoritative-confirmed status (golden record). Wins over the directory."""
-    from network_probe.overrides import DbOverrideStore, Override
+    from network_probe.domain.overrides import DbOverrideStore, Override
     rid = uuid.uuid4().hex[:12]
     try:
         DbOverrideStore(ctx.tenant_id).add(Override(

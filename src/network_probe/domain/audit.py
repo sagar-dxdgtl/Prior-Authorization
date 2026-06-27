@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import logging
 
-from network_probe.benefits import EligibilityResult
 from network_probe.core.config import get_settings
 from network_probe.core.context import RequestContext
 from network_probe.core.crypto import FernetCrypto, hash_member_id
 from network_probe.db.repo import EligibilityCheckRepo
 from network_probe.db.session import tenant_session
-from network_probe.models import ProviderQuery
+from network_probe.domain.benefits import EligibilityResult
+from network_probe.domain.models import ProviderQuery
 
 log = logging.getLogger("preauth.audit")
 

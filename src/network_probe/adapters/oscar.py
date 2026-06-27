@@ -22,7 +22,7 @@ from urllib.parse import quote, urlencode
 
 from network_probe.base import PayerAdapter
 from network_probe.core._http import CachedClient
-from network_probe.models import NetworkStatus, NetworkVerdict, ProviderQuery
+from network_probe.domain.models import NetworkStatus, NetworkVerdict, ProviderQuery
 
 BASE = "https://www.hioscar.com"
 

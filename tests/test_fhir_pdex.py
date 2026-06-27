@@ -20,8 +20,8 @@ import pytest
 
 from network_probe.adapters.fhir_pdex import FhirPdexAdapter
 from network_probe.core._http import CachedClient
-from network_probe.models import NetworkStatus, ProviderQuery
-from network_probe.plan_aliases import network_aliases
+from network_probe.domain.models import NetworkStatus, ProviderQuery
+from network_probe.domain.plan_aliases import network_aliases
 
 FIX = Path(__file__).parent / "fixtures"
 KYLE_NPI = "1679766943"

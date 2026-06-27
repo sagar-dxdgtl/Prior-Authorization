@@ -2,8 +2,8 @@ import json
 import pathlib
 from decimal import Decimal
 
-from network_probe.benefits import BenefitCategory, CoverageLevel, Network
-from network_probe.models import NetworkStatus
+from network_probe.domain.benefits import BenefitCategory, CoverageLevel, Network
+from network_probe.domain.models import NetworkStatus
 from network_probe.stedi.parse_271 import parse_271_benefits
 
 DATA = json.loads((pathlib.Path(__file__).parent / "fixtures/stedi-271-inn-oon.json").read_text())

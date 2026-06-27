@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from network_probe.core._http import CachedClient
-from network_probe.models import NetworkStatus, NetworkVerdict, ProviderQuery
+from network_probe.domain.models import NetworkStatus, NetworkVerdict, ProviderQuery
 
 # what counts as "high error rate" framing in the caveat
 _DIRECTORY_CAVEAT = ("Single payer-directory source; directories are frequently stale "
@@ -127,7 +127,7 @@ class TinScopeSource:
         # (a) Verified payer TIN-level network status (e.g. Cigna's Network Status portal or an
         # Availity TIN check). Authoritative for the specific (provider, TIN) and works even when
         # the directory didn't list the provider — this is a real group-level answer, not a guess.
-        from network_probe.tin_status import default_tin_status
+        from network_probe.domain.tin_status import default_tin_status
         book = self.status_book or default_tin_status()
         vs = book.lookup(q.payer, q.npi, q.tin) if book else None
         if vs:
@@ -151,7 +151,7 @@ class TinScopeSource:
         tins = (verdict.matched_provider or {}).get("in_network_tins")
         src = "payer directory"
         if not tins:  # directory had none → try the NPI→TIN crosswalk (TiC-derived)
-            from network_probe.tin_crosswalk import default_crosswalk
+            from network_probe.domain.tin_crosswalk import default_crosswalk
             cw = self.crosswalk or default_crosswalk()
             tins = cw.tins_for(q.payer, q.npi) if cw else []
             src = "contracted-TIN crosswalk (TiC)"
@@ -314,7 +314,7 @@ def finalize(verdict: NetworkVerdict, q: ProviderQuery, sources: list | None = N
     caller can run the sources once and reuse them; when None they are computed here.
     """
     # #5 — a confirmed override wins over the live directory.
-    from network_probe.overrides import OverrideStore, verdict_from_override
+    from network_probe.domain.overrides import OverrideStore, verdict_from_override
     store = OverrideStore() if override_store is None else override_store
     ov = store.lookup(q)
     if ov:

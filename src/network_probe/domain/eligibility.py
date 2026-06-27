@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from network_probe.benefits import EligibilityResult
-from network_probe.models import NetworkStatus, ProviderQuery
+from network_probe.domain.benefits import EligibilityResult
+from network_probe.domain.models import NetworkStatus, ProviderQuery
+from network_probe.domain.service import check_network
 from network_probe.payers.catalogue import DbPayerCatalogue, PayerCatalogue
-from network_probe.service import check_network
 from network_probe.stedi.client import EligibilitySource, StediEligibilityClient
 
 
@@ -33,7 +33,7 @@ def check_eligibility(q: ProviderQuery, base_url: str | None = None,
     # Apply tenant-scoped golden-record override as the authoritative last word.
     store = override_store
     if store is None and tenant_id is not None:
-        from network_probe.overrides import DbOverrideStore
+        from network_probe.domain.overrides import DbOverrideStore
         store = DbOverrideStore(tenant_id)
     if store is not None:
         ov = store.lookup(q)

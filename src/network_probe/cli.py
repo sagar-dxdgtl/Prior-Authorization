@@ -9,8 +9,8 @@ import argparse
 import json
 import sys
 
-from network_probe.models import NetworkStatus, ProviderQuery
-from network_probe.service import check_network
+from network_probe.domain.models import NetworkStatus, ProviderQuery
+from network_probe.domain.service import check_network
 
 _STATUS_GLYPH = {
     NetworkStatus.IN_NETWORK: "✓ IN-NETWORK",

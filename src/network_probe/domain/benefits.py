@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import Enum
 
-from network_probe.models import NetworkStatus, NetworkVerdict
+from network_probe.domain.models import NetworkStatus, NetworkVerdict
 
 
 class Network(str, Enum):

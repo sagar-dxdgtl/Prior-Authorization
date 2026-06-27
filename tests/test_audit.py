@@ -3,10 +3,10 @@ import uuid
 
 import pytest
 
-from network_probe.audit import write_audit
-from network_probe.benefits import EligibilityResult
 from network_probe.core.context import RequestContext
-from network_probe.models import NetworkStatus, ProviderQuery
+from network_probe.domain.audit import write_audit
+from network_probe.domain.benefits import EligibilityResult
+from network_probe.domain.models import NetworkStatus, ProviderQuery
 
 
 def _res():

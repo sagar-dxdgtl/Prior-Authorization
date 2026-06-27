@@ -1,7 +1,7 @@
 from decimal import Decimal
 
-from network_probe.benefits import BenefitCategory, BenefitLine, CoverageLevel, EligibilityResult, Network
-from network_probe.models import NetworkStatus
+from network_probe.domain.benefits import BenefitCategory, BenefitLine, CoverageLevel, EligibilityResult, Network
+from network_probe.domain.models import NetworkStatus
 
 
 def test_eligibility_result_to_dict_is_json_safe_and_phi_free():

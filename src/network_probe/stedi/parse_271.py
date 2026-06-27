@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
 
-from network_probe.benefits import BenefitCategory, BenefitLine, CoverageLevel, EligibilityResult, Network
-from network_probe.models import NetworkStatus
+from network_probe.domain.benefits import BenefitCategory, BenefitLine, CoverageLevel, EligibilityResult, Network
+from network_probe.domain.models import NetworkStatus
 
 _CATEGORY = {"B": BenefitCategory.COPAY, "A": BenefitCategory.COINSURANCE,
              "C": BenefitCategory.DEDUCTIBLE, "G": BenefitCategory.OOP_MAX, "F": BenefitCategory.LIMITATION}

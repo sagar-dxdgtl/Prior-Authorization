@@ -9,7 +9,7 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
 
 from network_probe import api as api_mod  # noqa: E402
-from network_probe.models import NetworkStatus, NetworkVerdict, ProviderQuery  # noqa: E402
+from network_probe.domain.models import NetworkStatus, NetworkVerdict, ProviderQuery  # noqa: E402
 
 client = TestClient(api_mod.app)
 

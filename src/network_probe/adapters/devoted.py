@@ -31,7 +31,7 @@ from urllib.parse import urlencode
 
 from network_probe.base import PayerAdapter
 from network_probe.core._http import CachedClient
-from network_probe.models import NetworkStatus, NetworkVerdict, ProviderQuery
+from network_probe.domain.models import NetworkStatus, NetworkVerdict, ProviderQuery
 
 # Public InstantSearch credentials (embedded in the page by design — not secrets).
 # Overridable via env in case Devoted rotates them. See DISCOVERY.md.

@@ -2,9 +2,9 @@
 (pre-finalize) plus the per-source display signals."""
 from __future__ import annotations
 
-from network_probe import service as svc
-from network_probe.corroboration import Signal
-from network_probe.models import NetworkStatus, NetworkVerdict, ProviderQuery
+from network_probe.domain import service as svc
+from network_probe.domain.corroboration import Signal
+from network_probe.domain.models import NetworkStatus, NetworkVerdict, ProviderQuery
 
 
 class _FakeAdapter:
@@ -25,7 +25,7 @@ class _FakeStedi:
 def _patch(monkeypatch):
     monkeypatch.setattr(svc, "get_adapter", lambda payer, **kw: _FakeAdapter())
     # keep it offline: replace the source set used inside check_network
-    monkeypatch.setattr("network_probe.corroboration.default_sources", lambda client=None: [_FakeStedi()])
+    monkeypatch.setattr("network_probe.domain.corroboration.default_sources", lambda client=None: [_FakeStedi()])
 
 
 def test_evidence_has_raw_directory_snapshot(monkeypatch):

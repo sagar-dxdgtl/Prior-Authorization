@@ -6,8 +6,8 @@ import pytest
 
 @pytest.mark.db
 def test_db_override_store_add_lookup_and_isolation(demo_tenant):
-    from network_probe.models import ProviderQuery
-    from network_probe.overrides import DbOverrideStore, Override
+    from network_probe.domain.models import ProviderQuery
+    from network_probe.domain.overrides import DbOverrideStore, Override
     DbOverrideStore(demo_tenant).add(Override(payer="devoted", npi="1629339312",
         status="OUT_OF_NETWORK", verified_by="Availity", verified_at="2026-05-21"))
     q = ProviderQuery(payer="devoted", plan_hint="PPO", npi="1629339312")
@@ -26,8 +26,8 @@ def test_db_override_store_add_lookup_and_isolation(demo_tenant):
 
 @pytest.mark.db
 def test_migrate_json_to_db_idempotent(tmp_path, demo_tenant):
-    from network_probe.models import ProviderQuery
-    from network_probe.overrides import DbOverrideStore
+    from network_probe.domain.models import ProviderQuery
+    from network_probe.domain.overrides import DbOverrideStore
     from scripts.migrate_overrides import migrate
     p = tmp_path / "overrides.json"
     p.write_text(json.dumps([{"payer": "devoted", "npi": "1629339312", "status": "OUT_OF_NETWORK",
@@ -39,13 +39,13 @@ def test_migrate_json_to_db_idempotent(tmp_path, demo_tenant):
 
 @pytest.mark.db
 def test_check_eligibility_applies_tenant_override(demo_tenant):
-    from network_probe.models import NetworkStatus, ProviderQuery
-    from network_probe.overrides import DbOverrideStore, Override
+    from network_probe.domain.models import NetworkStatus, ProviderQuery
+    from network_probe.domain.overrides import DbOverrideStore, Override
     class FakeCat:
         def resolve(self, k): return None
     class FakeStedi:
         def check(self, q):
-            from network_probe.benefits import EligibilityResult
+            from network_probe.domain.benefits import EligibilityResult
             return EligibilityResult(coverage_active=True, plan_name=None, group=None, coverage_dates={},
                 network_status=NetworkStatus.UNKNOWN, benefits=[], pcp_required=None, prior_auth_required=None,
                 referral_required=None, cob=None, network_verdict=None, corroboration=[], source_audit={})
@@ -54,7 +54,7 @@ def test_check_eligibility_applies_tenant_override(demo_tenant):
     # no directory adapter for 'devoted'? there is — avoid live call by monkeypatching check_network to raise
     import pytest as _p
 
-    import network_probe.eligibility as e
+    import network_probe.domain.eligibility as e
     monkey = _p.MonkeyPatch()
     monkey.setattr(e, "check_network", lambda q, **k: (_ for _ in ()).throw(ValueError("skip")))
     try:

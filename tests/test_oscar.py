@@ -26,7 +26,7 @@ import pytest
 
 from network_probe.adapters.oscar import OscarAdapter
 from network_probe.core._http import CachedClient
-from network_probe.models import NetworkStatus, ProviderQuery
+from network_probe.domain.models import NetworkStatus, ProviderQuery
 
 FIX = Path(__file__).parent / "fixtures"
 

@@ -1,6 +1,6 @@
-from network_probe import eligibility as elig
-from network_probe.benefits import EligibilityResult
-from network_probe.models import NetworkStatus, NetworkVerdict, ProviderQuery
+from network_probe.domain import eligibility as elig
+from network_probe.domain.benefits import EligibilityResult
+from network_probe.domain.models import NetworkStatus, NetworkVerdict, ProviderQuery
 
 
 class FakeCat:

@@ -6,9 +6,16 @@ import httpx
 import pytest
 
 from network_probe.core._http import CachedClient
-from network_probe.corroboration import FreshnessSource, NppesSource, Signal, StediSource, TinScopeSource, finalize
-from network_probe.models import NetworkStatus, NetworkVerdict, ProviderQuery
-from network_probe.overrides import Override, OverrideStore
+from network_probe.domain.corroboration import (
+    FreshnessSource,
+    NppesSource,
+    Signal,
+    StediSource,
+    TinScopeSource,
+    finalize,
+)
+from network_probe.domain.models import NetworkStatus, NetworkVerdict, ProviderQuery
+from network_probe.domain.overrides import Override, OverrideStore
 
 
 class _NoOverrides:
@@ -233,7 +240,7 @@ def test_stedi_check_corroborates(monkeypatch):
 
 # ---- Stedi fixture / mock source -------------------------------------------
 
-from network_probe.corroboration import StediMockSource, default_sources, run_display_signals  # noqa: E402
+from network_probe.domain.corroboration import StediMockSource, default_sources, run_display_signals  # noqa: E402
 
 
 def test_stedi_mock_contradicts_for_rodriguez():

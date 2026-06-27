@@ -16,7 +16,7 @@ import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from network_probe.models import NetworkStatus, NetworkVerdict, ProviderQuery
+from network_probe.domain.models import NetworkStatus, NetworkVerdict, ProviderQuery
 
 DEFAULT_PATH = Path(".overrides/overrides.json")
 
