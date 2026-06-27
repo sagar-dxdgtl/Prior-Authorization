@@ -28,8 +28,10 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from network_probe.api.admin import router as admin_router
 from network_probe.api.netutil import assert_safe_url
 from network_probe.api.ratelimit import RateLimitHeadersMiddleware
+from network_probe.api.review import router as review_router
 from network_probe.api.validation import normalize_dob, valid_npi
 from network_probe.auth.deps import get_context
 from network_probe.auth.routes import router as auth_router
@@ -265,6 +267,8 @@ app.add_middleware(
 app.add_middleware(RateLimitHeadersMiddleware)
 app.add_middleware(BodySizeLimitMiddleware)
 app.include_router(auth_router)
+app.include_router(admin_router)
+app.include_router(review_router)
 
 
 @app.exception_handler(HTTPException)

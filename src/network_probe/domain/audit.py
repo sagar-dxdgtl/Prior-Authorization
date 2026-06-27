@@ -5,10 +5,10 @@ import logging
 from network_probe.core.config import get_settings
 from network_probe.core.context import RequestContext
 from network_probe.core.crypto import FernetCrypto, hash_member_id
-from network_probe.db.repo import EligibilityCheckRepo
+from network_probe.db.repo import EligibilityCheckRepo, ReviewCaseRepo
 from network_probe.db.session import tenant_session
 from network_probe.domain.benefits import EligibilityResult
-from network_probe.domain.models import ProviderQuery
+from network_probe.domain.models import NetworkStatus, ProviderQuery
 
 log = logging.getLogger("preauth.audit")
 
@@ -29,7 +29,7 @@ def write_audit(ctx: RequestContext, action: str, q: ProviderQuery, result: Elig
     crypto = _crypto() if has_phi else None
     mid_hash = hash_member_id(q.member_id, s.member_id_pepper) if q.member_id else None
     with tenant_session(ctx.tenant_id) as sess:
-        EligibilityCheckRepo(sess, ctx.tenant_id).record(
+        check = EligibilityCheckRepo(sess, ctx.tenant_id).record(
             actor_id=ctx.actor_id,
             action=action,
             payer_key=q.payer,
@@ -43,6 +43,17 @@ def write_audit(ctx: RequestContext, action: str, q: ProviderQuery, result: Elig
             source_audit=result.source_audit,
             request_id=request_id,
         )
+        # A REVIEW verdict on an eligibility/network check auto-opens a tenant-scoped
+        # review case linked to this check. Only the keyed member-id hash is stored
+        # here; the encrypted PHI stays in eligibility_checks.
+        if result.network_status == NetworkStatus.REVIEW and action in ("eligibility", "network"):
+            ReviewCaseRepo(sess, ctx.tenant_id).add(
+                eligibility_check_id=check.id,
+                payer_key=q.payer,
+                npi=q.npi,
+                member_id_hash=mid_hash,
+                status="open",
+            )
     log.info(
         "audit action=%s tenant=%s actor=%s payer=%s npi=%s member=%s status=%s req=%s",
         action,
