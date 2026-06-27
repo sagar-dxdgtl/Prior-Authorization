@@ -20,14 +20,31 @@ from pathlib import Path
 from typing import Optional
 
 import io
+import logging
+import uuid
 
-from fastapi import FastAPI, File, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
+from starlette.middleware.base import BaseHTTPMiddleware
 
-from .models import ProviderQuery
+from .models import ProviderQuery, NetworkStatus
 from .report_ingest import parse_report, report_to_query
 from .service import check_network
+from .config import get_settings
+from .auth.routes import router as auth_router
+from .auth.deps import get_context
+from .context import RequestContext
+from .eligibility import check_eligibility
+from .audit import write_audit
+from .netutil import assert_safe_url
+from .validation import valid_npi, normalize_dob
+from .ratelimit import RateLimitHeadersMiddleware
+from .benefits import EligibilityResult
+
+log = logging.getLogger("preauth.api")
 
 _STATIC = Path(__file__).parent / "static"
 
@@ -142,6 +159,52 @@ BENCHMARK = [
 app = FastAPI(title="Network-Status Verification Probe", version="1.0")
 
 
+class BodySizeLimitMiddleware(BaseHTTPMiddleware):
+    MAX = 12 * 1024 * 1024   # 12 MB global ceiling (report ingest enforces its own 10 MB)
+    async def dispatch(self, request: Request, call_next):
+        cl = request.headers.get("content-length")
+        if cl and cl.isdigit() and int(cl) > self.MAX:
+            return JSONResponse(status_code=413, content={"message": "request body too large"})
+        return await call_next(request)
+
+
+app.add_middleware(CORSMiddleware, allow_origins=get_settings().cors_origins,
+                   allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(RateLimitHeadersMiddleware)
+app.add_middleware(BodySizeLimitMiddleware)
+app.include_router(auth_router)
+
+
+@app.exception_handler(HTTPException)
+def _http_exc(request: Request, exc: HTTPException):
+    d = exc.detail
+    return JSONResponse(status_code=exc.status_code, content=d if isinstance(d, dict) else {"message": str(d)})
+
+
+@app.exception_handler(RequestValidationError)
+def _validation_exc(request: Request, exc: RequestValidationError):
+    rid = uuid.uuid4().hex[:12]
+    log.info("request validation failed req=%s", rid)   # do NOT log exc (may contain PHI input)
+    return JSONResponse(status_code=422, content={"message": "invalid request", "request_id": rid})
+
+
+@app.exception_handler(Exception)
+def _unhandled(request: Request, exc: Exception):
+    rid = uuid.uuid4().hex[:12]
+    log.exception("unhandled error req=%s", rid)            # full detail server-side ONLY
+    return JSONResponse(status_code=500, content={"message": "internal error", "request_id": rid})
+
+
+def _result_from_verdict(verdict) -> EligibilityResult:
+    """Wrap a directory NetworkVerdict as an EligibilityResult for auditing the network-only routes."""
+    return EligibilityResult(
+        coverage_active=None, plan_name=None, group=None, coverage_dates={},
+        network_status=verdict.status, benefits=[], pcp_required=None, prior_auth_required=None,
+        referral_required=None, cob=None, network_verdict=verdict,
+        corroboration=verdict.corroboration or [],
+        source_audit={"source": "directory", "url": verdict.source_url})
+
+
 class CheckRequest(BaseModel):
     payer: str
     plan: str = ""
@@ -153,6 +216,8 @@ class CheckRequest(BaseModel):
     tin: Optional[str] = None
     year: Optional[int] = None
     base_url: Optional[str] = None
+    member_id: Optional[str] = None
+    dob: Optional[str] = None
 
 
 class OverrideRequest(BaseModel):
@@ -187,9 +252,39 @@ def benchmark() -> list[dict]:
     return BENCHMARK
 
 
+@app.get("/api/eligibility/ping")
+def eligibility_ping(ctx: RequestContext = Depends(get_context)):
+    return {"ok": True, "tenant": str(ctx.tenant_id)}
+
+
+@app.post("/api/eligibility")
+def eligibility(req: CheckRequest, ctx: RequestContext = Depends(get_context)):
+    if req.base_url:
+        try:
+            assert_safe_url(req.base_url)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail={"message": str(e)})
+    if req.npi and not valid_npi(req.npi):
+        raise HTTPException(status_code=400, detail={"message": "invalid NPI"})
+    dob = None
+    if req.dob:
+        try:
+            dob = normalize_dob(req.dob)
+        except ValueError:
+            raise HTTPException(status_code=400, detail={"message": "invalid DOB"})
+    q = ProviderQuery(payer=req.payer, plan_hint=req.plan or "", npi=req.npi or None,
+                      first_name=req.first_name or None, last_name=req.last_name or None,
+                      state=req.state or None, zip_code=req.zip or None, tin=req.tin or None,
+                      member_id=req.member_id or None, dob=dob)
+    rid = uuid.uuid4().hex[:12]
+    result = check_eligibility(q, base_url=(req.base_url or None), tenant_id=ctx.tenant_id)
+    write_audit(ctx, "eligibility", q, result, rid)
+    return {"payer": req.payer, "request_id": rid, **result.to_dict()}
+
+
 # sync `def` so FastAPI runs the blocking httpx calls in a threadpool
 @app.post("/api/check")
-def check(req: CheckRequest):
+def check(req: CheckRequest, ctx: RequestContext = Depends(get_context)):
     q = ProviderQuery(
         payer=req.payer,
         plan_hint=req.plan or "",
@@ -204,45 +299,78 @@ def check(req: CheckRequest):
     if req.year:
         kwargs["year"] = req.year
     if req.base_url:
+        try:
+            assert_safe_url(req.base_url)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail={"message": str(e)})
         kwargs["base_url"] = req.base_url
     try:
         verdict = check_network(q, **kwargs)
     except Exception as exc:  # bad payer, missing base_url, network error
-        return JSONResponse(status_code=400, content={"error": str(exc)})
+        rid = uuid.uuid4().hex[:12]
+        log.warning("check failed req=%s: %s", rid, exc)
+        return JSONResponse(status_code=400,
+                            content={"message": "could not complete check", "request_id": rid})
+    write_audit(ctx, "network", q, _result_from_verdict(verdict), uuid.uuid4().hex[:12])
     gt = GROUND_TRUTH.get((req.payer, req.npi or ""))
     return {"payer": req.payer, "ground_truth": gt, **verdict.to_dict()}
 
 
 @app.post("/api/check-from-report")
-def check_from_report(file: UploadFile = File(...)):
+def check_from_report(file: UploadFile = File(...), ctx: RequestContext = Depends(get_context)):
     """Phase 1 — upload a pVerify 271 PDF; we parse payer/plan/provider/NPI and return the network
     verdict that fills the report's 'Provider Network: Unknown' field."""
+    raw = file.file.read(10 * 1024 * 1024 + 1)
+    if len(raw) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail={"message": "file too large"})
+    rid = uuid.uuid4().hex[:12]
     try:
-        parsed = parse_report(io.BytesIO(file.file.read()))
+        parsed = parse_report(io.BytesIO(raw))
     except Exception as exc:
-        return JSONResponse(status_code=400, content={"error": f"could not parse report: {exc}"})
+        log.warning("report parse failed req=%s: %s", rid, exc)
+        return JSONResponse(status_code=400,
+                            content={"message": "could not parse report", "request_id": rid})
     if not parsed.get("payer_key"):
-        return JSONResponse(status_code=400, content={"error": f"unmapped payer {parsed.get('payer_name')!r}"})
+        return JSONResponse(status_code=400,
+                            content={"message": "unmapped payer in report", "request_id": rid})
     if not parsed.get("npi"):
-        return JSONResponse(status_code=400, content={"error": "no provider NPI found in report"})
+        return JSONResponse(status_code=400,
+                            content={"message": "no provider NPI found in report", "request_id": rid})
     q = report_to_query(parsed)
     try:
         verdict = check_network(q)
     except Exception as exc:
-        return JSONResponse(status_code=400, content={"error": str(exc)})
-    return {"payer": q.payer, "parsed": parsed, **verdict.to_dict()}
+        log.warning("report check failed req=%s: %s", rid, exc)
+        return JSONResponse(status_code=400,
+                            content={"message": "could not complete check", "request_id": rid})
+    write_audit(ctx, "report_ingest", q, _result_from_verdict(verdict), rid)
+    return {"payer": q.payer, "parsed": parsed, "request_id": rid, **verdict.to_dict()}
 
 
 @app.post("/api/override")
-def add_override(req: OverrideRequest):
+def add_override(req: OverrideRequest, ctx: RequestContext = Depends(get_context)):
     """Record a human/authoritative-confirmed status (golden record). Wins over the directory."""
-    from .overrides import OverrideStore, Override
+    from .overrides import DbOverrideStore, Override
+    rid = uuid.uuid4().hex[:12]
     try:
-        OverrideStore().add(Override(
+        DbOverrideStore(ctx.tenant_id).add(Override(
             payer=req.payer, npi=req.npi, status=req.status, verified_by=req.verified_by,
             verified_at=req.verified_at, network=req.network, plan=req.plan, tin=req.tin, note=req.note))
     except Exception as exc:
-        return JSONResponse(status_code=400, content={"error": str(exc)})
+        log.warning("override failed req=%s: %s", rid, exc)
+        return JSONResponse(status_code=400,
+                            content={"message": "could not record override", "request_id": rid})
+    try:
+        status = NetworkStatus(req.status)
+    except ValueError:
+        status = NetworkStatus.UNKNOWN
+    q = ProviderQuery(payer=req.payer, plan_hint=req.plan or "", npi=req.npi, tin=req.tin)
+    result = EligibilityResult(
+        coverage_active=None, plan_name=None, group=None, coverage_dates={},
+        network_status=status, benefits=[], pcp_required=None, prior_auth_required=None,
+        referral_required=None, cob=None, network_verdict=None, corroboration=[],
+        source_audit={"source": "override", "verified_by": req.verified_by})
+    write_audit(ctx, "override", q, result, rid)
     return {"ok": True}
 
 
