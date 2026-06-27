@@ -14,12 +14,19 @@ class EnvSecrets:
 
 
 class AwsSecrets:
-    """Reads from AWS Secrets Manager under prefix preauth/. Used only when AWS creds present."""
+    """Reads from AWS Secrets Manager under prefix preauth/. Used only when AWS creds present.
 
-    def __init__(self, prefix: str = "preauth/", region: str | None = None):
-        import boto3
+    Pass ``client`` to inject a fake/stub Secrets Manager client for unit tests so no real
+    boto3 session or AWS credentials are needed.
+    """
 
-        self._c = boto3.client("secretsmanager", region_name=region or os.environ.get("AWS_DEFAULT_REGION"))
+    def __init__(self, prefix: str = "preauth/", region: str | None = None, *, client=None):
+        if client is not None:
+            self._c = client
+        else:
+            import boto3
+
+            self._c = boto3.client("secretsmanager", region_name=region or os.environ.get("AWS_DEFAULT_REGION"))
         self._prefix = prefix
 
     def get_secret(self, name: str) -> str | None:

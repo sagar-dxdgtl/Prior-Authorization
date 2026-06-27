@@ -49,10 +49,21 @@ class RateLimitHeadersMiddleware(BaseHTTPMiddleware):
         h = response.headers
         h["x-ratelimit-limit"] = str(RATE_LIMIT_PER_MIN)
         h["x-ratelimit-remaining"] = str(RATE_LIMIT_PER_MIN)  # advisory; per-minute enforcement is Slice B
-        h["x-quota-daily-limit"] = str(DAILY_QUOTA)
-        h["x-quota-daily-used"] = str(daily)
-        h["x-quota-daily-remaining"] = str(max(0, DAILY_QUOTA - daily))
-        h["x-quota-monthly-limit"] = str(MONTHLY_QUOTA)
-        h["x-quota-monthly-used"] = str(monthly)
-        h["x-quota-monthly-remaining"] = str(max(0, MONTHLY_QUOTA - monthly))
+        # Metered routes set request.state.quota with the REAL DB-backed counts (Slice B/B3 enforcement);
+        # emit those when present, else fall back to the in-memory advisory counters.
+        q = getattr(request.state, "quota", None)
+        if q is not None:
+            h["x-quota-daily-limit"] = str(q["daily_limit"])
+            h["x-quota-daily-used"] = str(q["daily_used"])
+            h["x-quota-daily-remaining"] = str(q["daily_remaining"])
+            h["x-quota-monthly-limit"] = str(q["monthly_limit"])
+            h["x-quota-monthly-used"] = str(q["monthly_used"])
+            h["x-quota-monthly-remaining"] = str(q["monthly_remaining"])
+        else:
+            h["x-quota-daily-limit"] = str(DAILY_QUOTA)
+            h["x-quota-daily-used"] = str(daily)
+            h["x-quota-daily-remaining"] = str(max(0, DAILY_QUOTA - daily))
+            h["x-quota-monthly-limit"] = str(MONTHLY_QUOTA)
+            h["x-quota-monthly-used"] = str(monthly)
+            h["x-quota-monthly-remaining"] = str(max(0, MONTHLY_QUOTA - monthly))
         return response

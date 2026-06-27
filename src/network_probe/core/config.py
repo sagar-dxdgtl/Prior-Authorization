@@ -19,7 +19,10 @@ class Settings(BaseSettings):
     jwt_secret: str
     jwt_access_ttl: int = 1800
     jwt_refresh_ttl: int = 1209600
+    quota_daily: int = 1000
+    quota_monthly: int = 20000
     fernet_keys: str = ""
+    fernet_keys_kms: bool = False
     member_id_pepper: str = "dev-pepper"
     stedi_api_key: str | None = None
     stedi_eligibility_url: str = "https://healthcare.us.stedi.com/2024-04-01/change/medicalnetwork/eligibility/v3"
