@@ -1,7 +1,9 @@
 import httpx
-from network_probe.stedi.client import StediEligibilityClient, _dob
+
+from network_probe.core._http import CachedClient
 from network_probe.models import ProviderQuery
-from network_probe._http import CachedClient
+from network_probe.stedi.client import StediEligibilityClient, _dob
+
 
 def _mock(json_body):
     def handler(req):

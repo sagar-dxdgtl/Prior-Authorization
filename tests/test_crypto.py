@@ -1,5 +1,7 @@
 from cryptography.fernet import Fernet
-from network_probe.crypto import FernetCrypto, hash_member_id
+
+from network_probe.core.crypto import FernetCrypto, hash_member_id
+
 
 def test_encrypt_roundtrip():
     c = FernetCrypto([Fernet.generate_key().decode()])

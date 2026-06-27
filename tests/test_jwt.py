@@ -1,5 +1,9 @@
-import uuid, pytest
+import uuid
+
+import pytest
+
 from network_probe.auth import jwt_tokens as jt
+
 
 def _claims():
     return dict(user_id=uuid.uuid4(), tenant_id=uuid.uuid4(), role="user", token_version=3)

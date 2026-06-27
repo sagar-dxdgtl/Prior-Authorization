@@ -5,7 +5,7 @@ import uuid
 from fastapi import Header, HTTPException
 
 from network_probe.auth.jwt_tokens import TokenError, decode_token
-from network_probe.context import RequestContext
+from network_probe.core.context import RequestContext
 from network_probe.db.models import User
 from network_probe.db.session import tenant_session
 

@@ -1,9 +1,11 @@
 import pytest
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
-from network_probe.auth.routes import router
+
 from network_probe.auth.deps import get_context
+from network_probe.auth.routes import router
+
 
 def _app():
     app = FastAPI()

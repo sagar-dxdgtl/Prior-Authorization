@@ -1,6 +1,10 @@
-import uuid, pytest
+import uuid
+
+import pytest
+
+from network_probe.db.repo import EligibilityCheckRepo, OverrideRepo
 from network_probe.db.session import tenant_session
-from network_probe.db.repo import OverrideRepo, EligibilityCheckRepo
+
 
 @pytest.mark.db
 def test_override_repo_add_and_lookup(demo_tenant):

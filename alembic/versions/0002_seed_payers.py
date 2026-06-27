@@ -1,7 +1,9 @@
 """seed payer catalogue"""
-from alembic import op
-from sqlalchemy import text
 import uuid
+
+from sqlalchemy import text
+
+from alembic import op
 from network_probe.payers.roster_seed import payer_rows
 
 revision = "0002_seed_payers"

@@ -4,11 +4,11 @@ import json
 import re
 from typing import Protocol
 
-from network_probe._http import CachedClient
 from network_probe.benefits import EligibilityResult
-from network_probe.config import get_settings
+from network_probe.core._http import CachedClient
+from network_probe.core.config import get_settings
+from network_probe.core.secrets_provider import get_secret
 from network_probe.models import NetworkStatus, ProviderQuery
-from network_probe.secrets_provider import get_secret
 from network_probe.stedi.parse_271 import parse_271_benefits
 
 

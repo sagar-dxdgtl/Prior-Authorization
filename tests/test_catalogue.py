@@ -1,5 +1,7 @@
 import pytest
+
 from network_probe.payers.roster_seed import ROSTER, payer_rows
+
 
 def test_roster_includes_verified_payers():
     triples = {(l, b, s): (sid, e) for (l, b, s, sid, e) in ROSTER}
@@ -18,6 +20,7 @@ def test_payer_rows_well_formed():
 @pytest.mark.db
 def test_resolve_against_seeded_roster():
     from sqlalchemy.orm import Session
+
     from network_probe.db.base import owner_engine
     from network_probe.db.models import Payer
     from network_probe.payers.catalogue import DbPayerCatalogue

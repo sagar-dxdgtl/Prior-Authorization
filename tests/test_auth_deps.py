@@ -1,7 +1,11 @@
-import uuid, pytest
+import uuid
+
+import pytest
 from fastapi import HTTPException
+
 from network_probe.auth import jwt_tokens as jt
 from network_probe.auth.deps import context_from_token
+
 
 class FakeUser:
     def __init__(self, tv=0, mcp=False):

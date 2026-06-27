@@ -18,8 +18,8 @@ import sys
 
 from sqlalchemy import text
 
-from network_probe._http import CachedClient
-from network_probe.secrets_provider import get_secret
+from network_probe.core._http import CachedClient
+from network_probe.core.secrets_provider import get_secret
 from network_probe.db.base import owner_engine
 
 PAYERS_URL = os.environ.get("STEDI_PAYERS_URL", "https://healthcare.us.stedi.com/2024-04-01/payers")

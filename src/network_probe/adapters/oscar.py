@@ -20,8 +20,8 @@ import re
 from datetime import date
 from urllib.parse import quote, urlencode
 
-from network_probe._http import CachedClient
 from network_probe.base import PayerAdapter
+from network_probe.core._http import CachedClient
 from network_probe.models import NetworkStatus, NetworkVerdict, ProviderQuery
 
 BASE = "https://www.hioscar.com"

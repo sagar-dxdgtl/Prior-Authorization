@@ -1,5 +1,6 @@
 import pytest
-from network_probe.config import Settings
+
+from network_probe.core.config import Settings
 
 BASE = dict(DATABASE_URL="postgresql+psycopg://u:p@localhost/db", JWT_SECRET="x"*32,
             FERNET_KEYS="", MEMBER_ID_PEPPER="p"*32, APP_ENV="dev")

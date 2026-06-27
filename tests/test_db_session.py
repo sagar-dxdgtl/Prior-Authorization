@@ -1,6 +1,10 @@
-import uuid, pytest
+import uuid
+
+import pytest
 from sqlalchemy import text
+
 from network_probe.db.session import tenant_session
+
 
 @pytest.mark.db
 def test_set_config_is_transaction_local():

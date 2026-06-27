@@ -24,8 +24,8 @@ from urllib.parse import parse_qs, urlsplit
 import httpx
 import pytest
 
-from network_probe._http import CachedClient
 from network_probe.adapters.oscar import OscarAdapter
+from network_probe.core._http import CachedClient
 from network_probe.models import NetworkStatus, ProviderQuery
 
 FIX = Path(__file__).parent / "fixtures"

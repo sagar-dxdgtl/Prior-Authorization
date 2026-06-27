@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import jwt
 
-from network_probe.config import get_settings
+from network_probe.core.config import get_settings
 
 ALG = "HS256"
 

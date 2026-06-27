@@ -6,7 +6,8 @@ def test_resolver_noop_without_key(monkeypatch):
 
 def test_search_payer_picks_id_on_name_match():
     import httpx
-    from network_probe._http import CachedClient
+
+    from network_probe.core._http import CachedClient
     from scripts.resolve_payer_ids import search_payer
     def handler(req):
         return httpx.Response(200, json={"items": [
@@ -18,7 +19,8 @@ def test_search_payer_picks_id_on_name_match():
 
 def test_search_payer_no_match_returns_none():
     import httpx
-    from network_probe._http import CachedClient
+
+    from network_probe.core._http import CachedClient
     from scripts.resolve_payer_ids import search_payer
     def handler(req):
         return httpx.Response(200, json={"items": [{"displayName": "Totally Different Co", "primaryPayerId": "999"}]})

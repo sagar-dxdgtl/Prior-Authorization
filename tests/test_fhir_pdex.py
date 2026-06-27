@@ -13,13 +13,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from urllib.parse import urlsplit, parse_qs
+from urllib.parse import parse_qs, urlsplit
 
 import httpx
 import pytest
 
-from network_probe._http import CachedClient
 from network_probe.adapters.fhir_pdex import FhirPdexAdapter
+from network_probe.core._http import CachedClient
 from network_probe.models import NetworkStatus, ProviderQuery
 from network_probe.plan_aliases import network_aliases
 

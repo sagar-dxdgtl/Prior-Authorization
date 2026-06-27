@@ -1,6 +1,7 @@
 """seed demo tenant + admin"""
-from alembic import op
 from sqlalchemy import text
+
+from alembic import op
 from network_probe.db.seed import ensure_demo_tenant_admin
 
 revision = "0003_seed_admin"

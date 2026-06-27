@@ -1,9 +1,12 @@
 import uuid
+
 import pytest
 from sqlalchemy.orm import Session
+
 from network_probe.db.base import owner_engine
-from network_probe.db.models import Tenant, OverrideRow
+from network_probe.db.models import OverrideRow, Tenant
 from network_probe.db.session import tenant_session
+
 
 @pytest.mark.db
 def test_tenant_cannot_read_other_tenants_rows():

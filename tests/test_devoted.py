@@ -19,8 +19,8 @@ from urllib.parse import parse_qs
 import httpx
 import pytest
 
-from network_probe._http import CachedClient
 from network_probe.adapters.devoted import DevotedAdapter
+from network_probe.core._http import CachedClient
 from network_probe.models import NetworkStatus, ProviderQuery
 
 FIX = Path(__file__).parent / "fixtures"

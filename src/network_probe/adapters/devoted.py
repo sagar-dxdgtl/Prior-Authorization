@@ -29,8 +29,8 @@ import re
 from datetime import date
 from urllib.parse import urlencode
 
-from network_probe._http import CachedClient
 from network_probe.base import PayerAdapter
+from network_probe.core._http import CachedClient
 from network_probe.models import NetworkStatus, NetworkVerdict, ProviderQuery
 
 # Public InstantSearch credentials (embedded in the page by design — not secrets).

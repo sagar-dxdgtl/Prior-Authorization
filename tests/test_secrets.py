@@ -1,4 +1,5 @@
-from network_probe.secrets_provider import EnvSecrets, get_secret
+from network_probe.core.secrets_provider import EnvSecrets, get_secret
+
 
 def test_env_secret(monkeypatch):
     monkeypatch.setenv("FOO_KEY", "bar")

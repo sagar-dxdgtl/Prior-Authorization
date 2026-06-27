@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+
 from network_probe.ratelimit import RateLimitHeadersMiddleware
+
 
 def _client():
     app = FastAPI()

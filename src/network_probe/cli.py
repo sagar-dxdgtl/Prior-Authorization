@@ -64,7 +64,7 @@ def main(argv=None) -> int:
     if args.base_url:
         adapter_kwargs["base_url"] = args.base_url
     if args.no_cache:
-        from network_probe._http import CachedClient
+        from network_probe.core._http import CachedClient
         adapter_kwargs["client"] = CachedClient(cache_dir=None)
 
     try:

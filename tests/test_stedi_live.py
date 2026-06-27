@@ -26,7 +26,7 @@ import os
 import httpx
 import pytest
 
-from network_probe.config import get_settings
+from network_probe.core.config import get_settings
 from network_probe.models import NetworkStatus
 from network_probe.stedi.parse_271 import parse_271_benefits
 

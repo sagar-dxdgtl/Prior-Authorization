@@ -1,4 +1,6 @@
-import os, uuid
+import os
+import uuid
+
 import pytest
 
 # Required settings — set BEFORE importing network_probe so the cached Settings picks them up.
@@ -8,6 +10,7 @@ os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://postgres:sagar@local
 os.environ.setdefault("APP_DB_URL", "postgresql+psycopg://preauth_app:sagar@localhost:5432/preauth_test")
 os.environ.setdefault("JWT_SECRET", "test-secret-key-at-least-32-bytes-long!!")
 from cryptography.fernet import Fernet
+
 os.environ.setdefault("FERNET_KEYS", Fernet.generate_key().decode())
 os.environ.setdefault("MEMBER_ID_PEPPER", "t" * 40)
 
@@ -32,6 +35,7 @@ def _clean_db(request):
 @pytest.fixture
 def demo_tenant():
     from sqlalchemy.orm import Session
+
     from network_probe.db.models import Tenant
     tid = uuid.uuid4()
     with Session(_owner()) as s:
@@ -41,8 +45,9 @@ def demo_tenant():
 @pytest.fixture
 def seed_admin(demo_tenant):
     from sqlalchemy.orm import Session
-    from network_probe.db.models import User
+
     from network_probe.auth.passwords import hash_password
+    from network_probe.db.models import User
     with Session(_owner()) as s:
         s.add(User(tenant_id=demo_tenant, username="admin",
                    password_hash=hash_password("Initial-pw-1234"), role="admin",
@@ -52,9 +57,10 @@ def seed_admin(demo_tenant):
 @pytest.fixture
 def auth_header(demo_tenant):
     from sqlalchemy.orm import Session
-    from network_probe.db.models import User
-    from network_probe.auth.passwords import hash_password
+
     from network_probe.auth import jwt_tokens as jt
+    from network_probe.auth.passwords import hash_password
+    from network_probe.db.models import User
     uid = uuid.uuid4()
     with Session(_owner()) as s:
         s.add(User(id=uid, tenant_id=demo_tenant, username=f"u-{uid.hex[:6]}",
@@ -66,6 +72,7 @@ def auth_header(demo_tenant):
 @pytest.fixture
 def seed_payers():
     from sqlalchemy.orm import Session
+
     from network_probe.db.models import Payer
     with Session(_owner()) as s:
         s.add(Payer(key="oscar", label="Oscar", stedi_payer_id="OSCAR",

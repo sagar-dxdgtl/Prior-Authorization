@@ -1,7 +1,7 @@
-import pytest
-from network_probe.models import ProviderQuery, NetworkStatus, NetworkVerdict
-from network_probe.benefits import EligibilityResult
 from network_probe import eligibility as elig
+from network_probe.benefits import EligibilityResult
+from network_probe.models import NetworkStatus, NetworkVerdict, ProviderQuery
+
 
 class FakeCat:
     def __init__(self, pid): self._pid = pid

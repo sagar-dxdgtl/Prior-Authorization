@@ -1,5 +1,7 @@
 import pytest
-from network_probe.validation import valid_npi, normalize_dob
+
+from network_probe.validation import normalize_dob, valid_npi
+
 
 def test_npi_luhn():
     assert valid_npi("1679766943") is True     # real NPI (Dr Herron) — Luhn-valid

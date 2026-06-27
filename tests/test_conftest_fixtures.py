@@ -1,8 +1,10 @@
 import pytest
 
+
 @pytest.mark.db
 def test_seed_admin(seed_admin):
     from sqlalchemy.orm import Session
+
     from network_probe.db.base import owner_engine
     from network_probe.db.models import User
     with Session(owner_engine()) as s:
@@ -18,6 +20,7 @@ def test_auth_header_is_valid_access_token(auth_header):
 @pytest.mark.db
 def test_seed_payers(seed_payers):
     from sqlalchemy.orm import Session
+
     from network_probe.db.base import owner_engine
     from network_probe.db.models import Payer
     with Session(owner_engine()) as s:

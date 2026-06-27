@@ -1,5 +1,7 @@
 import pytest
-from network_probe.auth.passwords import hash_password, verify_password, check_policy, DUMMY_HASH
+
+from network_probe.auth.passwords import DUMMY_HASH, check_policy, hash_password, verify_password
+
 
 def test_hash_verify():
     h = hash_password("Sup3r-secret!-pw")

@@ -12,7 +12,7 @@ import glob
 import json
 import sys
 
-from network_probe._http import CachedClient
+from network_probe.core._http import CachedClient
 from network_probe.report_ingest import parse_report, report_to_query
 from network_probe.service import check_network
 

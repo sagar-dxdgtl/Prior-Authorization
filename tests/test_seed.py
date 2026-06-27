@@ -1,11 +1,12 @@
 import pytest
 from sqlalchemy import text
 
+
 @pytest.mark.db
 def test_ensure_demo_admin_idempotent():
+    from network_probe.auth.passwords import verify_password
     from network_probe.db.base import owner_engine
     from network_probe.db.seed import ensure_demo_tenant_admin
-    from network_probe.auth.passwords import verify_password
     with owner_engine().begin() as c:
         ensure_demo_tenant_admin(c, "ChangeMe-Admin-2026")
         ensure_demo_tenant_admin(c, "ChangeMe-Admin-2026")   # repeat = no-op

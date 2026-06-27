@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import re
 
-from network_probe._http import CachedClient
+from network_probe.core._http import CachedClient
 from network_probe.models import ProviderQuery
 
 # payer string (lowercased, substring) -> adapter key

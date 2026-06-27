@@ -1,8 +1,13 @@
-import uuid, json, pytest
-from network_probe.context import RequestContext
-from network_probe.models import ProviderQuery, NetworkStatus
-from network_probe.benefits import EligibilityResult
+import json
+import uuid
+
+import pytest
+
 from network_probe.audit import write_audit
+from network_probe.benefits import EligibilityResult
+from network_probe.core.context import RequestContext
+from network_probe.models import NetworkStatus, ProviderQuery
+
 
 def _res():
     return EligibilityResult(coverage_active=True, plan_name=None, group=None, coverage_dates={},
@@ -13,10 +18,11 @@ def _res():
 @pytest.mark.db
 def test_audit_hashes_and_encrypts_phi(demo_tenant):
     from sqlalchemy.orm import Session
+
+    from network_probe.core.config import get_settings
+    from network_probe.core.crypto import hash_member_id
     from network_probe.db.base import owner_engine
     from network_probe.db.models import EligibilityCheck
-    from network_probe.crypto import hash_member_id
-    from network_probe.config import get_settings
     ctx = RequestContext(tenant_id=demo_tenant, actor_id=uuid.uuid4(), role="user")
     q = ProviderQuery(payer="oscar", plan_hint="", npi="1679766943", member_id="MBR-123",
                       dob="1980-01-02", first_name="Jane", last_name="Doe")
@@ -34,6 +40,7 @@ def test_audit_hashes_and_encrypts_phi(demo_tenant):
 @pytest.mark.db
 def test_audit_without_phi_skips_crypto(demo_tenant):
     from sqlalchemy.orm import Session
+
     from network_probe.db.base import owner_engine
     from network_probe.db.models import EligibilityCheck
     ctx = RequestContext(tenant_id=demo_tenant, actor_id=uuid.uuid4(), role="user")

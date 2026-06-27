@@ -32,8 +32,8 @@ from network_probe.audit import write_audit
 from network_probe.auth.deps import get_context
 from network_probe.auth.routes import router as auth_router
 from network_probe.benefits import EligibilityResult
-from network_probe.config import get_settings
-from network_probe.context import RequestContext
+from network_probe.core.config import get_settings
+from network_probe.core.context import RequestContext
 from network_probe.eligibility import check_eligibility
 from network_probe.models import NetworkStatus, ProviderQuery
 from network_probe.netutil import assert_safe_url

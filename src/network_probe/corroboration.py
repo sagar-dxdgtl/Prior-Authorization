@@ -24,7 +24,7 @@ import re
 from dataclasses import dataclass
 from typing import Protocol
 
-from network_probe._http import CachedClient
+from network_probe.core._http import CachedClient
 from network_probe.models import NetworkStatus, NetworkVerdict, ProviderQuery
 
 # what counts as "high error rate" framing in the caveat

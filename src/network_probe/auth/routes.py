@@ -11,7 +11,7 @@ from sqlalchemy import text
 from network_probe.auth import jwt_tokens as jt
 from network_probe.auth.deps import get_context_pwchange
 from network_probe.auth.passwords import DUMMY_HASH, check_policy, hash_password, verify_password
-from network_probe.context import RequestContext
+from network_probe.core.context import RequestContext
 from network_probe.db.base import app_engine
 from network_probe.db.models import User
 from network_probe.db.session import tenant_session
