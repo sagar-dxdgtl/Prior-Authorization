@@ -22,11 +22,10 @@ import csv
 import json
 import os
 from pathlib import Path
-from typing import Optional
 
 
 class TinCrosswalk:
-    def __init__(self, path: Optional[str] = None, records: Optional[list] = None):
+    def __init__(self, path: str | None = None, records: list | None = None):
         self.path = str(path) if path else os.environ.get("TIN_CROSSWALK_PATH")
         self._index: dict[tuple[str, str], set[str]] = {}
         if records is not None:
@@ -60,7 +59,7 @@ class TinCrosswalk:
             for r in data:
                 self._add(r.get("payer"), r.get("npi"), r.get("tin"), r.get("tins"))
 
-    def tins_for(self, payer: Optional[str], npi: Optional[str]) -> list[str]:
+    def tins_for(self, payer: str | None, npi: str | None) -> list[str]:
         if not npi:
             return []
         npi = str(npi).strip()
@@ -84,7 +83,7 @@ _SEED = [
 
 
 # module-level singleton so the file is read once, not per check
-_DEFAULT: Optional[TinCrosswalk] = None
+_DEFAULT: TinCrosswalk | None = None
 _LOADED = False
 
 

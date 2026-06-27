@@ -1,13 +1,16 @@
 from __future__ import annotations
+
 import json
 import re
-from typing import Optional, Protocol
-from .._http import CachedClient
-from ..config import get_settings
-from ..secrets_provider import get_secret
-from ..models import ProviderQuery, NetworkStatus
-from ..benefits import EligibilityResult
-from .parse_271 import parse_271_benefits
+from typing import Protocol
+
+from network_probe._http import CachedClient
+from network_probe.benefits import EligibilityResult
+from network_probe.config import get_settings
+from network_probe.models import NetworkStatus, ProviderQuery
+from network_probe.secrets_provider import get_secret
+from network_probe.stedi.parse_271 import parse_271_benefits
+
 
 class EligibilitySource(Protocol):
     def check(self, q: ProviderQuery) -> EligibilityResult: ...
@@ -19,7 +22,7 @@ def _unknown(reason: str) -> EligibilityResult:
         prior_auth_required=None, referral_required=None, cob=None,
         network_verdict=None, corroboration=[], source_audit={"source": "stedi", "note": reason})
 
-def _dob(dob: Optional[str]) -> Optional[str]:
+def _dob(dob: str | None) -> str | None:
     """Normalize MM/DD/YYYY or YYYY-MM-DD to Stedi's YYYYMMDD."""
     if not dob:
         return None
@@ -35,8 +38,8 @@ def _dob(dob: Optional[str]) -> Optional[str]:
 class StediEligibilityClient:
     DEFAULT_STC = ["30", "98"]
 
-    def __init__(self, api_key: Optional[str] = None, client: Optional[CachedClient] = None,
-                 payer_id: Optional[str] = None, service_type_codes: Optional[list] = None):
+    def __init__(self, api_key: str | None = None, client: CachedClient | None = None,
+                 payer_id: str | None = None, service_type_codes: list | None = None):
         self.api_key = api_key if api_key is not None else get_secret("STEDI_API_KEY")
         # PHI must never hit disk: force cache_dir=None.
         self.client = client or CachedClient(cache_dir=None, delay_seconds=0.2)

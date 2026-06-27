@@ -1,16 +1,20 @@
 from __future__ import annotations
+
 import uuid
-from datetime import datetime, timezone
-from sqlalchemy import String, Boolean, ForeignKey, DateTime, Integer
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from datetime import UTC, datetime
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
-from .base import Base
+
+from network_probe.db.base import Base
+
 
 def _uuid() -> uuid.UUID:
     return uuid.uuid4()
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 class Tenant(Base):
     __tablename__ = "tenants"

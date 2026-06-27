@@ -24,7 +24,6 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 
 def _norm(t) -> str:
@@ -37,9 +36,9 @@ class TinStatus:
     npi: str
     tin: str
     status: str                  # IN_NETWORK | OUT_OF_NETWORK
-    group: Optional[str] = None  # billing group / org name shown by the portal
-    source: Optional[str] = None
-    verified_at: Optional[str] = None
+    group: str | None = None  # billing group / org name shown by the portal
+    source: str | None = None
+    verified_at: str | None = None
 
 
 # Verified from Cigna's Network Status portal (pVerify OON examples PDF, p.3):
@@ -52,14 +51,14 @@ _SEED = [
 
 
 class TinStatusBook:
-    def __init__(self, records: Optional[list] = None, path: Optional[str] = None):
+    def __init__(self, records: list | None = None, path: str | None = None):
         self._items: list[TinStatus] = list(records) if records is not None else list(_SEED)
         p = path or os.environ.get("TIN_STATUS_PATH")
         if p and Path(p).exists():
             for r in json.loads(Path(p).read_text(encoding="utf-8")):
                 self._items.append(TinStatus(**r))
 
-    def lookup(self, payer, npi, tin) -> Optional[TinStatus]:
+    def lookup(self, payer, npi, tin) -> TinStatus | None:
         for s in self._items:
             if (s.payer.lower() == (payer or "").lower()
                     and s.npi == (npi or "")
@@ -71,7 +70,7 @@ class TinStatusBook:
         return bool(self._items)
 
 
-_DEFAULT: Optional[TinStatusBook] = None
+_DEFAULT: TinStatusBook | None = None
 
 
 def default_tin_status() -> TinStatusBook:

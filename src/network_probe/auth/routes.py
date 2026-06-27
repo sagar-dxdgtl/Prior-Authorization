@@ -1,17 +1,20 @@
 from __future__ import annotations
+
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from sqlalchemy import text
-from ..db.base import app_engine
-from ..db.session import tenant_session
-from ..db.models import User
-from .passwords import verify_password, hash_password, check_policy, DUMMY_HASH
-from . import jwt_tokens as jt
-from .deps import get_context_pwchange
-from ..context import RequestContext
+
+from network_probe.auth import jwt_tokens as jt
+from network_probe.auth.deps import get_context_pwchange
+from network_probe.auth.passwords import DUMMY_HASH, check_policy, hash_password, verify_password
+from network_probe.context import RequestContext
+from network_probe.db.base import app_engine
+from network_probe.db.models import User
+from network_probe.db.session import tenant_session
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 LOCK_THRESHOLD, LOCK_MINUTES = 5, 15
@@ -27,7 +30,7 @@ def _user_payload(row, username: str = "") -> dict:
 
 @router.post("/login")
 def login(form: OAuth2PasswordRequestForm = Depends()):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     row = _lookup(form.username)
     if row and row["locked_until"] and row["locked_until"] > now:
         raise HTTPException(status_code=429, detail={"message": "account temporarily locked"})

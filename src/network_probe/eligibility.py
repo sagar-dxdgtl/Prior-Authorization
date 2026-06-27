@@ -1,14 +1,15 @@
 from __future__ import annotations
-from typing import Optional
-from .models import ProviderQuery, NetworkStatus
-from .benefits import EligibilityResult
-from .stedi.client import StediEligibilityClient, EligibilitySource
-from .payers.catalogue import DbPayerCatalogue, PayerCatalogue
-from .service import check_network
 
-def check_eligibility(q: ProviderQuery, base_url: Optional[str] = None,
-                      catalogue: Optional[PayerCatalogue] = None,
-                      stedi: Optional[EligibilitySource] = None,
+from network_probe.benefits import EligibilityResult
+from network_probe.models import NetworkStatus, ProviderQuery
+from network_probe.payers.catalogue import DbPayerCatalogue, PayerCatalogue
+from network_probe.service import check_network
+from network_probe.stedi.client import EligibilitySource, StediEligibilityClient
+
+
+def check_eligibility(q: ProviderQuery, base_url: str | None = None,
+                      catalogue: PayerCatalogue | None = None,
+                      stedi: EligibilitySource | None = None,
                       tenant_id=None,
                       override_store=None) -> EligibilityResult:
     cat = catalogue or DbPayerCatalogue()
@@ -32,7 +33,7 @@ def check_eligibility(q: ProviderQuery, base_url: Optional[str] = None,
     # Apply tenant-scoped golden-record override as the authoritative last word.
     store = override_store
     if store is None and tenant_id is not None:
-        from .overrides import DbOverrideStore
+        from network_probe.overrides import DbOverrideStore
         store = DbOverrideStore(tenant_id)
     if store is not None:
         ov = store.lookup(q)

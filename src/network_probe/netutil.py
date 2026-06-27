@@ -1,6 +1,9 @@
 from __future__ import annotations
-import ipaddress, socket
+
+import ipaddress
+import socket
 from urllib.parse import urlparse
+
 
 def assert_safe_url(url: str) -> str:
     """Reject URLs that resolve to a non-public address (SSRF guard for user-supplied base_url).

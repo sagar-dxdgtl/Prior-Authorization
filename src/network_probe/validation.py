@@ -1,6 +1,8 @@
 from __future__ import annotations
+
 import re
 from datetime import datetime
+
 
 def valid_npi(npi: str) -> bool:
     if not npi or not re.fullmatch(r"\d{10}", npi):

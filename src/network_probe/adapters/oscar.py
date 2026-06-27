@@ -18,12 +18,11 @@ from __future__ import annotations
 
 import re
 from datetime import date
-from typing import Optional
 from urllib.parse import quote, urlencode
 
-from .._http import CachedClient
-from ..base import PayerAdapter
-from ..models import NetworkStatus, NetworkVerdict, ProviderQuery
+from network_probe._http import CachedClient
+from network_probe.base import PayerAdapter
+from network_probe.models import NetworkStatus, NetworkVerdict, ProviderQuery
 
 BASE = "https://www.hioscar.com"
 
@@ -65,7 +64,7 @@ def _plan_match_score(hint: str, candidate: str) -> tuple[float, float]:
     return (cand_recall + hint_recall, cand_recall)
 
 
-def _to_date(d: Optional[dict]) -> Optional[date]:
+def _to_date(d: dict | None) -> date | None:
     if not d:
         return None
     try:
@@ -79,9 +78,9 @@ class OscarAdapter(PayerAdapter):
 
     def __init__(
         self,
-        year: Optional[int] = None,
-        client: Optional[CachedClient] = None,
-        today: Optional[date] = None,
+        year: int | None = None,
+        client: CachedClient | None = None,
+        today: date | None = None,
     ):
         # year defaults to the current calendar year (the coverage year to check).
         self._today = today or date.today()
@@ -160,7 +159,7 @@ class OscarAdapter(PayerAdapter):
                     )
         return out
 
-    def resolve_network(self, plan_hint: str, state: str) -> Optional[dict]:
+    def resolve_network(self, plan_hint: str, state: str) -> dict | None:
         """Map a free-text plan_hint to exactly one network for `state`/year.
 
         Returns {network_id, network_name, matched_plan, policy_id, score, source_url}

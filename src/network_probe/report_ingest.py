@@ -11,10 +11,9 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Optional
 
-from ._http import CachedClient
-from .models import ProviderQuery
+from network_probe._http import CachedClient
+from network_probe.models import ProviderQuery
 
 # payer string (lowercased, substring) -> adapter key
 _PAYER_MAP = [
@@ -37,7 +36,7 @@ def _extract_text(source) -> str:
     return "\n".join((p.extract_text() or "") for p in reader.pages)
 
 
-def _first(pattern: str, text: str, flags=0) -> Optional[str]:
+def _first(pattern: str, text: str, flags=0) -> str | None:
     m = re.search(pattern, text, flags)
     return m.group(1).strip() if m else None
 
@@ -76,7 +75,7 @@ def parse_report(source) -> dict:
     }
 
 
-def _nppes_name(npi: str, client: CachedClient) -> tuple[Optional[str], Optional[str]]:
+def _nppes_name(npi: str, client: CachedClient) -> tuple[str | None, str | None]:
     """(first, last) from NPPES by NPI, or (None, None) if unavailable."""
     try:
         data = client.post_json(
@@ -92,7 +91,7 @@ def _nppes_name(npi: str, client: CachedClient) -> tuple[Optional[str], Optional
         return (None, None)
 
 
-def report_to_query(parsed: dict, client: Optional[CachedClient] = None) -> ProviderQuery:
+def report_to_query(parsed: dict, client: CachedClient | None = None) -> ProviderQuery:
     """Turn parsed fields into a ProviderQuery. Plan hint = the report's plan name (our alias map
     and the adapters resolve metal/HMO/PPO from it). Resolves the provider name from NPPES."""
     first, last = parsed.get("provider_first"), parsed.get("provider_last")

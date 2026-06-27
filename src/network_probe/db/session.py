@@ -1,8 +1,12 @@
 from __future__ import annotations
+
 import uuid
 from contextlib import contextmanager
+
 from sqlalchemy import text
-from .base import SessionLocal, app_engine
+
+from network_probe.db.base import SessionLocal, app_engine
+
 
 @contextmanager
 def tenant_session(tenant_id):

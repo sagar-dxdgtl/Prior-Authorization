@@ -1,9 +1,11 @@
 from __future__ import annotations
+
 import json
 from functools import lru_cache
+
+from cryptography.fernet import Fernet
 from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from cryptography.fernet import Fernet
 
 _DEV = {"dev", "test", "local"}
 _DEFAULT_PEPPERS = {"dev-pepper", "dev-only-pepper-change-me-to-32plus-bytes"}

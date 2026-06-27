@@ -9,9 +9,8 @@ import argparse
 import json
 import sys
 
-from .models import ProviderQuery, NetworkStatus
-from .service import check_network
-
+from network_probe.models import NetworkStatus, ProviderQuery
+from network_probe.service import check_network
 
 _STATUS_GLYPH = {
     NetworkStatus.IN_NETWORK: "✓ IN-NETWORK",
@@ -65,7 +64,7 @@ def main(argv=None) -> int:
     if args.base_url:
         adapter_kwargs["base_url"] = args.base_url
     if args.no_cache:
-        from ._http import CachedClient
+        from network_probe._http import CachedClient
         adapter_kwargs["client"] = CachedClient(cache_dir=None)
 
     try:

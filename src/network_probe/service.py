@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
-from .base import PayerAdapter
-from .models import ProviderQuery, NetworkVerdict
-from .adapters.oscar import OscarAdapter
-from .adapters.devoted import DevotedAdapter
-from .adapters.fhir_pdex import FhirPdexAdapter, KNOWN_ENDPOINTS as _FHIR_ENDPOINTS
+from network_probe.adapters.devoted import DevotedAdapter
+from network_probe.adapters.fhir_pdex import KNOWN_ENDPOINTS as _FHIR_ENDPOINTS
+from network_probe.adapters.fhir_pdex import FhirPdexAdapter
+from network_probe.adapters.oscar import OscarAdapter
+from network_probe.base import PayerAdapter
+from network_probe.models import NetworkVerdict, ProviderQuery
 
 
 def _fhir_factory(payer_key: str):
@@ -55,7 +54,7 @@ def check_network(q: ProviderQuery, corroborate: bool = True, **adapter_kwargs) 
     final = raw
     signals: list = []
     if corroborate:
-        from .corroboration import finalize, default_sources, run_display_signals
+        from network_probe.corroboration import default_sources, finalize, run_display_signals
         client = getattr(adapter, "client", None)
         sources = default_sources(client)
         # signals are computed once against the raw directory verdict so they are available for

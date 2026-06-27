@@ -1,8 +1,10 @@
 from __future__ import annotations
-import uuid
-from datetime import datetime, timedelta, timezone
+
+from datetime import UTC, datetime, timedelta
+
 import jwt
-from ..config import get_settings
+
+from network_probe.config import get_settings
 
 ALG = "HS256"
 
@@ -10,7 +12,7 @@ class TokenError(Exception): ...
 
 def _issue(typ: str, ttl: int, user_id, tenant_id, role, token_version):
     s = get_settings()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload = {"sub": str(user_id), "tid": str(tenant_id), "role": role,
                "typ": typ, "tv": token_version,
                "iat": now, "exp": now + timedelta(seconds=ttl)}

@@ -5,7 +5,7 @@ Keep this payer-agnostic. Anything Oscar-specific belongs in adapters/oscar.py.
 
 from abc import ABC, abstractmethod
 
-from .models import ProviderQuery, NetworkVerdict
+from network_probe.models import NetworkVerdict, ProviderQuery
 
 
 class PayerAdapter(ABC):

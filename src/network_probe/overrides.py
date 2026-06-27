@@ -13,11 +13,10 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Optional
 
-from .models import NetworkStatus, NetworkVerdict, ProviderQuery
+from network_probe.models import NetworkStatus, NetworkVerdict, ProviderQuery
 
 DEFAULT_PATH = Path(".overrides/overrides.json")
 
@@ -33,9 +32,9 @@ class Override:
     status: str                  # IN_NETWORK | OUT_OF_NETWORK | REVIEW
     verified_by: str             # e.g. "Availity 2026-05-21" or "ops:jdoe"
     verified_at: str             # ISO date the human/source confirmed it
-    network: Optional[str] = None
-    plan: Optional[str] = None
-    tin: Optional[str] = None
+    network: str | None = None
+    plan: str | None = None
+    tin: str | None = None
     note: str = ""
 
     def specificity(self) -> int:
@@ -43,7 +42,7 @@ class Override:
 
 
 class OverrideStore:
-    def __init__(self, path: Optional[Path] = None):
+    def __init__(self, path: Path | None = None):
         self.path = Path(path) if path else DEFAULT_PATH
         self._items: list[Override] = []
         if self.path.exists():
@@ -68,14 +67,14 @@ class OverrideStore:
         return True
 
     @staticmethod
-    def best_match(items, q: ProviderQuery) -> Optional[Override]:
+    def best_match(items, q: ProviderQuery) -> Override | None:
         cands = [o for o in items if OverrideStore._matches(o, q)]
         if not cands:
             return None
         cands.sort(key=lambda o: (o.specificity(), o.verified_at), reverse=True)
         return cands[0]
 
-    def lookup(self, q: ProviderQuery) -> Optional[Override]:
+    def lookup(self, q: ProviderQuery) -> Override | None:
         return self.best_match(self._items, q)
 
     def add(self, override: Override) -> None:
@@ -91,8 +90,8 @@ class DbOverrideStore:
         self.tenant_id = tenant_id
 
     def _items(self) -> list[Override]:
-        from .db.session import tenant_session
-        from .db.models import OverrideRow
+        from network_probe.db.models import OverrideRow
+        from network_probe.db.session import tenant_session
         with tenant_session(self.tenant_id) as s:
             rows = s.query(OverrideRow).all()   # RLS scopes to this tenant
             return [Override(payer=r.payer, npi=r.npi, status=r.status,
@@ -100,12 +99,12 @@ class DbOverrideStore:
                              network=r.network, plan=r.plan, tin=r.tin,
                              note=r.note or "") for r in rows]
 
-    def lookup(self, q: ProviderQuery) -> Optional[Override]:
+    def lookup(self, q: ProviderQuery) -> Override | None:
         return OverrideStore.best_match(self._items(), q)
 
     def add(self, override: Override) -> None:
-        from .db.session import tenant_session
-        from .db.models import OverrideRow
+        from network_probe.db.models import OverrideRow
+        from network_probe.db.session import tenant_session
         with tenant_session(self.tenant_id) as s:
             s.add(OverrideRow(tenant_id=self.tenant_id, payer=override.payer, npi=override.npi,
                               status=override.status, verified_by=override.verified_by,

@@ -1,8 +1,11 @@
 from __future__ import annotations
+
 import threading
 from collections import defaultdict
+
 from starlette.middleware.base import BaseHTTPMiddleware
-from .auth.jwt_tokens import decode_token, TokenError
+
+from network_probe.auth.jwt_tokens import TokenError, decode_token
 
 # Slice A: in-memory, per-process, advisory. Real (persistent, distributed, enforced) limits = Slice B.
 RATE_LIMIT_PER_MIN = 120

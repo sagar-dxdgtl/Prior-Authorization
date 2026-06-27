@@ -15,3 +15,8 @@ test-data/
 __MACOSX/
 web/node_modules/
 web/dist/
+
+# Python build artifacts
+*.egg-info/
+build/
+dist/

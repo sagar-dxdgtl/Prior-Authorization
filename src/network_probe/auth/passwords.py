@@ -1,6 +1,10 @@
 from __future__ import annotations
-import base64, hashlib
+
+import base64
+import hashlib
+
 import bcrypt
+
 
 def _prepare(pw: str) -> bytes:
     # bcrypt only uses the first 72 bytes (5.x raises on longer). Pre-hash longer

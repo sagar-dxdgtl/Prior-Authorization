@@ -16,12 +16,10 @@ stays in the adapters, single source of truth.
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Optional
-
 import io
 import logging
 import uuid
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
@@ -30,19 +28,19 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from .models import ProviderQuery, NetworkStatus
-from .report_ingest import parse_report, report_to_query
-from .service import check_network
-from .config import get_settings
-from .auth.routes import router as auth_router
-from .auth.deps import get_context
-from .context import RequestContext
-from .eligibility import check_eligibility
-from .audit import write_audit
-from .netutil import assert_safe_url
-from .validation import valid_npi, normalize_dob
-from .ratelimit import RateLimitHeadersMiddleware
-from .benefits import EligibilityResult
+from network_probe.audit import write_audit
+from network_probe.auth.deps import get_context
+from network_probe.auth.routes import router as auth_router
+from network_probe.benefits import EligibilityResult
+from network_probe.config import get_settings
+from network_probe.context import RequestContext
+from network_probe.eligibility import check_eligibility
+from network_probe.models import NetworkStatus, ProviderQuery
+from network_probe.netutil import assert_safe_url
+from network_probe.ratelimit import RateLimitHeadersMiddleware
+from network_probe.report_ingest import parse_report, report_to_query
+from network_probe.service import check_network
+from network_probe.validation import normalize_dob, valid_npi
 
 log = logging.getLogger("preauth.api")
 
@@ -208,16 +206,16 @@ def _result_from_verdict(verdict) -> EligibilityResult:
 class CheckRequest(BaseModel):
     payer: str
     plan: str = ""
-    npi: Optional[str] = None
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    state: Optional[str] = None
-    zip: Optional[str] = None
-    tin: Optional[str] = None
-    year: Optional[int] = None
-    base_url: Optional[str] = None
-    member_id: Optional[str] = None
-    dob: Optional[str] = None
+    npi: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    state: str | None = None
+    zip: str | None = None
+    tin: str | None = None
+    year: int | None = None
+    base_url: str | None = None
+    member_id: str | None = None
+    dob: str | None = None
 
 
 class OverrideRequest(BaseModel):
@@ -226,9 +224,9 @@ class OverrideRequest(BaseModel):
     status: str                 # IN_NETWORK | OUT_OF_NETWORK | REVIEW
     verified_by: str
     verified_at: str            # ISO date
-    network: Optional[str] = None
-    plan: Optional[str] = None
-    tin: Optional[str] = None
+    network: str | None = None
+    plan: str | None = None
+    tin: str | None = None
     note: str = ""
 
 
@@ -350,7 +348,7 @@ def check_from_report(file: UploadFile = File(...), ctx: RequestContext = Depend
 @app.post("/api/override")
 def add_override(req: OverrideRequest, ctx: RequestContext = Depends(get_context)):
     """Record a human/authoritative-confirmed status (golden record). Wins over the directory."""
-    from .overrides import DbOverrideStore, Override
+    from network_probe.overrides import DbOverrideStore, Override
     rid = uuid.uuid4().hex[:12]
     try:
         DbOverrideStore(ctx.tenant_id).add(Override(

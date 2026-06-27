@@ -22,10 +22,10 @@ import json
 import os
 import re
 from dataclasses import dataclass
-from typing import Optional, Protocol
+from typing import Protocol
 
-from ._http import CachedClient
-from .models import NetworkStatus, NetworkVerdict, ProviderQuery
+from network_probe._http import CachedClient
+from network_probe.models import NetworkStatus, NetworkVerdict, ProviderQuery
 
 # what counts as "high error rate" framing in the caveat
 _DIRECTORY_CAVEAT = ("Single payer-directory source; directories are frequently stale "
@@ -44,7 +44,7 @@ class Signal:
 
 class CorroborationSource(Protocol):
     name: str
-    def check(self, q: ProviderQuery, verdict: NetworkVerdict) -> Optional[Signal]: ...
+    def check(self, q: ProviderQuery, verdict: NetworkVerdict) -> Signal | None: ...
 
 
 def _name_tokens(name: str) -> set[str]:
@@ -64,10 +64,10 @@ class NppesSource:
     name = "NPPES"
     BASE = "https://npiregistry.cms.hhs.gov/RegistryBack/npiDetails"
 
-    def __init__(self, client: Optional[CachedClient] = None):
+    def __init__(self, client: CachedClient | None = None):
         self.client = client or CachedClient()
 
-    def check(self, q: ProviderQuery, verdict: NetworkVerdict) -> Optional[Signal]:
+    def check(self, q: ProviderQuery, verdict: NetworkVerdict) -> Signal | None:
         if not q.npi:
             return None
         body = json.dumps({"number": q.npi, "skip": 0, "exactMatch": False})
@@ -120,14 +120,14 @@ class TinScopeSource:
         self.crosswalk = crosswalk
         self.status_book = status_book
 
-    def check(self, q: ProviderQuery, verdict: NetworkVerdict) -> Optional[Signal]:
+    def check(self, q: ProviderQuery, verdict: NetworkVerdict) -> Signal | None:
         if not q.tin:
             return None
 
         # (a) Verified payer TIN-level network status (e.g. Cigna's Network Status portal or an
         # Availity TIN check). Authoritative for the specific (provider, TIN) and works even when
         # the directory didn't list the provider — this is a real group-level answer, not a guess.
-        from .tin_status import default_tin_status
+        from network_probe.tin_status import default_tin_status
         book = self.status_book or default_tin_status()
         vs = book.lookup(q.payer, q.npi, q.tin) if book else None
         if vs:
@@ -151,7 +151,7 @@ class TinScopeSource:
         tins = (verdict.matched_provider or {}).get("in_network_tins")
         src = "payer directory"
         if not tins:  # directory had none → try the NPI→TIN crosswalk (TiC-derived)
-            from .tin_crosswalk import default_crosswalk
+            from network_probe.tin_crosswalk import default_crosswalk
             cw = self.crosswalk or default_crosswalk()
             tins = cw.tins_for(q.payer, q.npi) if cw else []
             src = "contracted-TIN crosswalk (TiC)"
@@ -171,7 +171,7 @@ class FreshnessSource:
     last-verified date, shouldn't be asserted at full confidence (NSA requires 90-day verification)."""
     name = "Freshness"
 
-    def check(self, q: ProviderQuery, verdict: NetworkVerdict) -> Optional[Signal]:
+    def check(self, q: ProviderQuery, verdict: NetworkVerdict) -> Signal | None:
         mp = verdict.matched_provider or {}
         if verdict.status != NetworkStatus.IN_NETWORK:
             return None
@@ -211,18 +211,18 @@ class StediSource:
         "uhc": "87726",
     }
 
-    def __init__(self, api_key: Optional[str] = None, client: Optional[CachedClient] = None):
+    def __init__(self, api_key: str | None = None, client: CachedClient | None = None):
         self.api_key = api_key or os.environ.get("STEDI_API_KEY")
         self.client = client or CachedClient()
 
     @staticmethod
-    def _to_stedi_dob(dob: Optional[str]) -> Optional[str]:
+    def _to_stedi_dob(dob: str | None) -> str | None:
         if not dob:
             return None
         m = re.match(r"(\d{1,2})/(\d{1,2})/(\d{4})", dob)
         return f"{m.group(3)}{int(m.group(1)):02d}{int(m.group(2)):02d}" if m else dob
 
-    def check(self, q: ProviderQuery, verdict: NetworkVerdict) -> Optional[Signal]:
+    def check(self, q: ProviderQuery, verdict: NetworkVerdict) -> Signal | None:
         if not self.api_key:
             return None  # not configured — stay silent
         payer_id = self.PAYER_IDS.get(q.payer)
@@ -276,7 +276,7 @@ class StediMockSource:
     """
     name = "Stedi"
 
-    def check(self, q: ProviderQuery, verdict: NetworkVerdict) -> Optional[Signal]:
+    def check(self, q: ProviderQuery, verdict: NetworkVerdict) -> Signal | None:
         data = _STEDI_FIXTURE_271.get(q.npi or "")
         if data is None:
             return Signal(self.name, "inconclusive",
@@ -284,7 +284,7 @@ class StediMockSource:
         return StediSource._interpret(data)
 
 
-def default_sources(client: Optional[CachedClient] = None) -> list:
+def default_sources(client: CachedClient | None = None) -> list:
     sources: list = [NppesSource(client), TinScopeSource(), FreshnessSource()]
     if os.environ.get("STEDI_API_KEY"):
         sources.append(StediSource(client=client))   # real clearinghouse
@@ -306,15 +306,15 @@ def run_display_signals(verdict: NetworkVerdict, q: ProviderQuery, sources: list
     return out
 
 
-def finalize(verdict: NetworkVerdict, q: ProviderQuery, sources: Optional[list] = None,
-             override_store=None, signals: Optional[list] = None) -> NetworkVerdict:
+def finalize(verdict: NetworkVerdict, q: ProviderQuery, sources: list | None = None,
+             override_store=None, signals: list | None = None) -> NetworkVerdict:
     """Golden-record override (#5), then corroboration (#2) + confidence/asymmetry (#1 + #4).
 
     `signals` may carry pre-computed Signal objects (e.g. from `run_display_signals`) so the
     caller can run the sources once and reuse them; when None they are computed here.
     """
     # #5 — a confirmed override wins over the live directory.
-    from .overrides import OverrideStore, verdict_from_override
+    from network_probe.overrides import OverrideStore, verdict_from_override
     store = OverrideStore() if override_store is None else override_store
     ov = store.lookup(q)
     if ov:

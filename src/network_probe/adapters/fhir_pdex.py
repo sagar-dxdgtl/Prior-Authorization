@@ -26,15 +26,14 @@ networks, we return UNKNOWN with the real list for a human to map.
 from __future__ import annotations
 
 import re
-from typing import Optional
 from urllib.parse import quote, urlencode
 
 import httpx
 
-from .._http import CachedClient
-from ..base import PayerAdapter
-from ..models import NetworkStatus, NetworkVerdict, ProviderQuery
-from ..plan_aliases import network_aliases
+from network_probe._http import CachedClient
+from network_probe.base import PayerAdapter
+from network_probe.models import NetworkStatus, NetworkVerdict, ProviderQuery
+from network_probe.plan_aliases import network_aliases
 
 NETWORK_EXT_URL = "http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/network-reference"
 FHIR_ACCEPT = {"accept": "application/fhir+json"}
@@ -84,10 +83,10 @@ def _match_score(hint: str, network: str) -> float:
 class FhirPdexAdapter(PayerAdapter):
     def __init__(
         self,
-        base_url: Optional[str] = None,
+        base_url: str | None = None,
         payer_name: str = "fhir",
-        year: Optional[int] = None,
-        client: Optional[CachedClient] = None,
+        year: int | None = None,
+        client: CachedClient | None = None,
     ):
         if not base_url:
             base_url = KNOWN_ENDPOINTS.get(payer_name)
@@ -105,7 +104,7 @@ class FhirPdexAdapter(PayerAdapter):
         return self.client.get_json(url, headers=FHIR_ACCEPT)
 
     @staticmethod
-    def _next_link(bundle: dict) -> Optional[str]:
+    def _next_link(bundle: dict) -> str | None:
         for ln in bundle.get("link") or []:
             if ln.get("relation") == "next" and ln.get("url"):
                 return ln["url"]
@@ -115,7 +114,7 @@ class FhirPdexAdapter(PayerAdapter):
     def _npis(resource: dict) -> list[str]:
         return [i.get("value") for i in (resource.get("identifier") or []) if i.get("value")]
 
-    def _match_practitioner(self, bundle: dict, npi: str, strict: bool) -> Optional[tuple[str, dict]]:
+    def _match_practitioner(self, bundle: dict, npi: str, strict: bool) -> tuple[str, dict] | None:
         first_prac = None
         for e in bundle.get("entry") or []:
             r = e.get("resource") or {}
@@ -129,7 +128,7 @@ class FhirPdexAdapter(PayerAdapter):
             return first_prac.get("id"), first_prac
         return None
 
-    def _find_practitioner(self, npi: str, first: Optional[str], last: Optional[str]):
+    def _find_practitioner(self, npi: str, first: str | None, last: str | None):
         """Resolve a Practitioner by NPI. Tries identifier search (Humana-style); falls
         back to name search + NPI match (Cigna-style servers don't support identifier)."""
         try:
@@ -147,7 +146,7 @@ class FhirPdexAdapter(PayerAdapter):
             return self._match_practitioner(b2, npi, strict=True)
         return None
 
-    def _org_name(self, reference: str) -> Optional[str]:
+    def _org_name(self, reference: str) -> str | None:
         rid = reference.rsplit("/Organization/", 1)[-1].rsplit("/", 1)[-1]
         try:
             org = self._get(f"{self.base_url}/Organization/{quote(rid)}")

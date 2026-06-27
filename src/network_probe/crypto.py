@@ -1,7 +1,12 @@
 from __future__ import annotations
-import hashlib, hmac, re
+
+import hashlib
+import hmac
+import re
 from typing import Protocol
+
 from cryptography.fernet import Fernet, MultiFernet
+
 
 class CryptoProvider(Protocol):
     def encrypt(self, plaintext: str) -> str: ...

@@ -1,9 +1,13 @@
 from __future__ import annotations
+
 import re
-from typing import Optional, Protocol
+from typing import Protocol
+
 from sqlalchemy import select
-from ..db.base import SessionLocal, app_engine
-from ..db.models import Payer
+
+from network_probe.db.base import SessionLocal, app_engine
+from network_probe.db.models import Payer
+
 
 def _slug(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", (s or "").lower()).strip("-")
@@ -15,13 +19,13 @@ ADAPTER_ALIASES = {
 }
 
 class PayerCatalogue(Protocol):
-    def resolve(self, payer_key: str) -> Optional[Payer]: ...
+    def resolve(self, payer_key: str) -> Payer | None: ...
 
 class DbPayerCatalogue:
     """Resolves a payer identifier (adapter key, roster key, or label) to a global Payer row.
     Reads global rows (tenant_id IS NULL) as the app role with no tenant context — the payers RLS
     policy permits that. Returns the first match (stedi_payer_id is consistent per payer)."""
-    def resolve(self, payer_key: str) -> Optional[Payer]:
+    def resolve(self, payer_key: str) -> Payer | None:
         if not payer_key:
             return None
         want = ADAPTER_ALIASES.get(payer_key.lower().strip(), _slug(payer_key))

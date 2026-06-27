@@ -1,8 +1,9 @@
 from __future__ import annotations
+
 from decimal import Decimal, InvalidOperation
-from typing import Optional
-from ..benefits import BenefitLine, EligibilityResult, Network, BenefitCategory, CoverageLevel
-from ..models import NetworkStatus
+
+from network_probe.benefits import BenefitCategory, BenefitLine, CoverageLevel, EligibilityResult, Network
+from network_probe.models import NetworkStatus
 
 _CATEGORY = {"B": BenefitCategory.COPAY, "A": BenefitCategory.COINSURANCE,
              "C": BenefitCategory.DEDUCTIBLE, "G": BenefitCategory.OOP_MAX, "F": BenefitCategory.LIMITATION}
@@ -12,7 +13,7 @@ _TIME = {"23": "calendar year", "29": "remaining", "27": "visit", "22": "service
 _COB_ALLOW = {"primaryPayer", "secondaryPayer", "planSponsor", "ipa", "sequence",
               "payerResponsibilitySequenceNumberCode"}
 
-def _dec(v) -> Optional[Decimal]:
+def _dec(v) -> Decimal | None:
     try:
         return Decimal(str(v)) if v not in (None, "") else None
     except (InvalidOperation, ValueError):

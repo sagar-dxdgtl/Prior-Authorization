@@ -12,9 +12,9 @@ import glob
 import json
 import sys
 
-from ._http import CachedClient
-from .report_ingest import parse_report, report_to_query
-from .service import check_network
+from network_probe._http import CachedClient
+from network_probe.report_ingest import parse_report, report_to_query
+from network_probe.service import check_network
 
 
 def verify_report(path: str, client: CachedClient) -> dict:

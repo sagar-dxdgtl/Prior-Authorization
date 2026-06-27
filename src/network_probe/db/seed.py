@@ -1,7 +1,10 @@
 from __future__ import annotations
+
 import uuid
+
 from sqlalchemy import text
-from ..auth.passwords import hash_password
+
+from network_probe.auth.passwords import hash_password
 
 DEMO_SLUG = "demo"
 DEMO_ADMIN_USERNAME = "admin"

@@ -12,10 +12,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import time
 from pathlib import Path
-from typing import Optional
 
 import httpx
 
@@ -30,11 +28,11 @@ class CachedClient:
 
     def __init__(
         self,
-        cache_dir: Optional[str] = ".cache",
+        cache_dir: str | None = ".cache",
         delay_seconds: float = 0.4,
         timeout: float = 20.0,
         user_agent: str = DEFAULT_UA,
-        client: Optional[httpx.Client] = None,
+        client: httpx.Client | None = None,
     ):
         self.cache_dir = Path(cache_dir) if cache_dir else None
         if self.cache_dir:
@@ -48,13 +46,13 @@ class CachedClient:
         )
         self._owns_client = client is None
 
-    def _cache_path(self, url: str) -> Optional[Path]:
+    def _cache_path(self, url: str) -> Path | None:
         if not self.cache_dir:
             return None
         digest = hashlib.sha256(url.encode("utf-8")).hexdigest()[:24]
         return self.cache_dir / f"{digest}.json"
 
-    def get_json(self, url: str, headers: Optional[dict] = None) -> dict:
+    def get_json(self, url: str, headers: dict | None = None) -> dict:
         cp = self._cache_path(url)
         if cp and cp.exists():
             with cp.open("r", encoding="utf-8") as fh:
@@ -72,7 +70,7 @@ class CachedClient:
                 json.dump(data, fh)
         return data
 
-    def post_json(self, url: str, content: str, headers: Optional[dict] = None) -> dict:
+    def post_json(self, url: str, content: str, headers: dict | None = None) -> dict:
         """POST a body and parse JSON. Cache key includes the body (for Algolia)."""
         cp = self._cache_path(url + "\n" + content)
         if cp and cp.exists():
@@ -94,7 +92,7 @@ class CachedClient:
         if self._owns_client:
             self._client.close()
 
-    def __enter__(self) -> "CachedClient":
+    def __enter__(self) -> CachedClient:
         return self
 
     def __exit__(self, *exc) -> None:

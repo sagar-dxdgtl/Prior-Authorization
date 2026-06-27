@@ -1,9 +1,11 @@
 from __future__ import annotations
+
 from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import Enum
-from typing import Optional
-from .models import NetworkStatus, NetworkVerdict
+
+from network_probe.models import NetworkStatus, NetworkVerdict
+
 
 class Network(str, Enum):
     IN = "IN"; OON = "OON"; UNKNOWN = "UNKNOWN"
@@ -22,11 +24,11 @@ class BenefitLine:
     network: Network
     category: BenefitCategory
     level: CoverageLevel
-    amount: Optional[Decimal]
-    percent: Optional[Decimal]
-    time_period: Optional[str]
-    met: Optional[Decimal]
-    remaining: Optional[Decimal]
+    amount: Decimal | None
+    percent: Decimal | None
+    time_period: str | None
+    met: Decimal | None
+    remaining: Decimal | None
     raw_codes: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
@@ -43,17 +45,17 @@ class BenefitLine:
 
 @dataclass
 class EligibilityResult:
-    coverage_active: Optional[bool]
-    plan_name: Optional[str]
-    group: Optional[str]
+    coverage_active: bool | None
+    plan_name: str | None
+    group: str | None
     coverage_dates: dict
     network_status: NetworkStatus
     benefits: list[BenefitLine]
-    pcp_required: Optional[bool]
-    prior_auth_required: Optional[bool]
-    referral_required: Optional[bool]
-    cob: Optional[dict]
-    network_verdict: Optional[NetworkVerdict]
+    pcp_required: bool | None
+    prior_auth_required: bool | None
+    referral_required: bool | None
+    cob: dict | None
+    network_verdict: NetworkVerdict | None
     corroboration: list
     source_audit: dict
 

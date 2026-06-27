@@ -13,7 +13,6 @@ seen in a report is a one-line entry — auditable and reliable, no fuzzy guessi
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 
 def _norm(s: str) -> str:
@@ -39,8 +38,8 @@ PLAN_NETWORK_ALIASES: dict[str, list[dict]] = {
 }
 
 
-def network_aliases(payer: Optional[str], plan_hint: Optional[str],
-                    state: Optional[str] = None) -> list[str]:
+def network_aliases(payer: str | None, plan_hint: str | None,
+                    state: str | None = None) -> list[str]:
     """Canonical network names to also try for this payer + plan hint (+ state)."""
     hint = _norm(plan_hint)
     st = (state or "").upper()

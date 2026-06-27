@@ -1,20 +1,21 @@
 from __future__ import annotations
+
 import logging
-from typing import Optional
-from .crypto import FernetCrypto, hash_member_id
-from .config import get_settings
-from .db.session import tenant_session
-from .db.repo import EligibilityCheckRepo
-from .context import RequestContext
-from .benefits import EligibilityResult
-from .models import ProviderQuery
+
+from network_probe.benefits import EligibilityResult
+from network_probe.config import get_settings
+from network_probe.context import RequestContext
+from network_probe.crypto import FernetCrypto, hash_member_id
+from network_probe.db.repo import EligibilityCheckRepo
+from network_probe.db.session import tenant_session
+from network_probe.models import ProviderQuery
 
 log = logging.getLogger("preauth.audit")
 
 def _crypto() -> FernetCrypto:
     return FernetCrypto(get_settings().fernet_key_list)
 
-def _full_name(q: ProviderQuery) -> Optional[str]:
+def _full_name(q: ProviderQuery) -> str | None:
     name = " ".join(p for p in (q.first_name, q.last_name) if p).strip()
     return name or None
 

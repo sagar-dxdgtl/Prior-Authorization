@@ -27,12 +27,11 @@ import json
 import os
 import re
 from datetime import date
-from typing import Optional
 from urllib.parse import urlencode
 
-from .._http import CachedClient
-from ..base import PayerAdapter
-from ..models import NetworkStatus, NetworkVerdict, ProviderQuery
+from network_probe._http import CachedClient
+from network_probe.base import PayerAdapter
+from network_probe.models import NetworkStatus, NetworkVerdict, ProviderQuery
 
 # Public InstantSearch credentials (embedded in the page by design — not secrets).
 # Overridable via env in case Devoted rotates them. See DISCOVERY.md.
@@ -60,11 +59,11 @@ class DevotedAdapter(PayerAdapter):
 
     def __init__(
         self,
-        year: Optional[int] = None,
-        client: Optional[CachedClient] = None,
-        app_id: Optional[str] = None,
-        api_key: Optional[str] = None,
-        today: Optional[date] = None,
+        year: int | None = None,
+        client: CachedClient | None = None,
+        app_id: str | None = None,
+        api_key: str | None = None,
+        today: date | None = None,
     ):
         self._today = today or date.today()
         self.year = year or self._today.year
@@ -105,7 +104,7 @@ class DevotedAdapter(PayerAdapter):
         prefix = f"{state.upper()} "
         return {name for name in facet if name.upper().startswith(prefix)}
 
-    def _search_npi(self, npi: str, network_name: Optional[str]) -> list[dict]:
+    def _search_npi(self, npi: str, network_name: str | None) -> list[dict]:
         """query=<npi>, filtered to year (+ network if given). Returns exact-NPI hits."""
         filt = [f'DirectoryYear:"{self.year}"']
         if network_name:
@@ -126,7 +125,7 @@ class DevotedAdapter(PayerAdapter):
 
     # ---- network resolution -------------------------------------------------
 
-    def resolve_network(self, plan_hint: str, state: str) -> Optional[str]:
+    def resolve_network(self, plan_hint: str, state: str) -> str | None:
         """Map state + plan_hint -> a valid NetworkNames value, or None.
 
         Devoted's 'network' is "<STATE> <PLANTYPE>[ CSNP|DSNP]". We detect the plan
