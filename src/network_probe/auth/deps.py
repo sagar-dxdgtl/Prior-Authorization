@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import Header, HTTPException
+from fastapi import Depends, Header, HTTPException
 
 from network_probe.auth.jwt_tokens import TokenError, decode_token
 from network_probe.core.context import RequestContext
@@ -41,3 +41,11 @@ def get_context(authorization: str | None = Header(default=None)) -> RequestCont
 
 def get_context_pwchange(authorization: str | None = Header(default=None)) -> RequestContext:
     return context_from_token(_bearer(authorization), allow_password_change=True)
+
+
+def require_role(*roles: str):
+    def dep(ctx: RequestContext = Depends(get_context)) -> RequestContext:
+        if roles and ctx.role not in roles:
+            raise HTTPException(status_code=403, detail={"message": "forbidden"})
+        return ctx
+    return dep

@@ -71,30 +71,45 @@ def seed_admin(demo_tenant):
     return {"tenant_id": demo_tenant, "username": "admin", "password": "Initial-pw-1234"}
 
 
-@pytest.fixture
-def auth_header(demo_tenant):
+def _make_user_header(tenant_id, role):
+    import uuid as _uuid
     from sqlalchemy.orm import Session
 
     from network_probe.auth import jwt_tokens as jt
     from network_probe.auth.passwords import hash_password
     from network_probe.db.models import User
 
-    uid = uuid.uuid4()
+    uid = _uuid.uuid4()
     with Session(_owner()) as s:
         s.add(
             User(
                 id=uid,
-                tenant_id=demo_tenant,
-                username=f"u-{uid.hex[:6]}",
+                tenant_id=tenant_id,
+                username=f"{role}-{uid.hex[:6]}",
                 password_hash=hash_password("x" * 12),
-                role="user",
+                role=role,
                 must_change_password=False,
                 token_version=0,
             )
         )
         s.commit()
-    tok, _ = jt.issue_access(uid, demo_tenant, "user", 0)
+    tok, _ = jt.issue_access(uid, tenant_id, role, 0)
     return {"Authorization": f"Bearer {tok}"}
+
+
+@pytest.fixture
+def auth_header(demo_tenant):
+    return _make_user_header(demo_tenant, "user")
+
+
+@pytest.fixture
+def admin_header(demo_tenant):
+    return _make_user_header(demo_tenant, "admin")
+
+
+@pytest.fixture
+def reviewer_header(demo_tenant):
+    return _make_user_header(demo_tenant, "reviewer")
 
 
 @pytest.fixture
