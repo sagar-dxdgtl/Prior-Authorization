@@ -86,3 +86,28 @@ class OverrideRow(Base):
     plan: Mapped[str | None] = mapped_column(String(120), nullable=True)
     tin: Mapped[str | None] = mapped_column(String(20), nullable=True)
     note: Mapped[str] = mapped_column(String, default="")
+
+
+class ReviewCase(Base):
+    __tablename__ = "review_cases"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
+    eligibility_check_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    payer_key: Mapped[str] = mapped_column(String(120))
+    npi: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    member_id_hash: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="open", index=True)
+    assignee_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    resolution: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+
+class ReviewNote(Base):
+    __tablename__ = "review_notes"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
+    case_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("review_cases.id"), index=True)
+    author_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    text: Mapped[str] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)

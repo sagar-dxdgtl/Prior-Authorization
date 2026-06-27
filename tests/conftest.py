@@ -14,7 +14,7 @@ from cryptography.fernet import Fernet
 os.environ.setdefault("FERNET_KEYS", Fernet.generate_key().decode())
 os.environ.setdefault("MEMBER_ID_PEPPER", "t" * 40)
 
-_DATA_TABLES = "tenants, users, payers, eligibility_checks, overrides"
+_DATA_TABLES = "tenants, users, payers, eligibility_checks, overrides, review_cases, review_notes"
 
 
 def _owner():
