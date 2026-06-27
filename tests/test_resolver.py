@@ -1,0 +1,15 @@
+def test_resolver_noop_without_key(monkeypatch):
+    monkeypatch.delenv("STEDI_API_KEY", raising=False)
+    monkeypatch.setattr("scripts.resolve_payer_ids.get_secret", lambda k: None)
+    from scripts.resolve_payer_ids import resolve_all
+    assert resolve_all() == 0
+
+def test_search_payer_picks_id():
+    import httpx
+    from network_probe._http import CachedClient
+    from scripts.resolve_payer_ids import search_payer
+    def handler(req):
+        return httpx.Response(200, json={"items": [{"primaryPayerId": "12345"}]})
+    client = CachedClient(cache_dir=None, delay_seconds=0,
+                          client=httpx.Client(transport=httpx.MockTransport(handler)))
+    assert search_payer(client, "k", "Some Payer") == "12345"
