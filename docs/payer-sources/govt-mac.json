@@ -1,0 +1,57 @@
+[
+  {
+    "payer": "Arizona Health Care Cost Containment System",
+    "brand": "AHCCCS (AZ Medicaid)",
+    "fhir_pdex_base_url": null,
+    "fhir_verified": false,
+    "tic_index_url": null,
+    "directory_url": "https://www.azahcccs.gov/Members/ProgramsAndCoveredServices/ProviderListings/",
+    "directory_access": "public (no login for lookup; updated daily from APEP). Contractor directory: https://www.azahcccs.gov/PlansProviders/CurrentProviders/State/directory.html. Provider enrollment (APEP) at azahcccs.gov/APEP requires ID.me login.",
+    "stedi_hint": "BEUZA (AHCCCS / AZ Medicaid). Supports 270/271, 837P/I/D, 835 ERA.",
+    "notes": "State Medicaid program: no PDEX/Plan-Net FHIR directory and no TiC MRF (TiC applies to commercial/group health plans only). Network IS the AHCCCS program. Authorized source = AHCCCS public provider registry. Eligibility via Stedi 271 or AHCCCS Online portal. 270/271 companion guide: https://www.azahcccs.gov/Resources/Downloads/EDIchanges/AZ270_271_CG.pdf. Contracted MCOs (Mercy Care, UHCCP, Molina, Arizona Complete Health, Health Choice AZ) may publish their own directories under CMS Managed Care Rule."
+  },
+  {
+    "payer": "Arizona DES / Division of Developmental Disabilities",
+    "brand": "AZ DES/DDD",
+    "fhir_pdex_base_url": null,
+    "fhir_verified": false,
+    "tic_index_url": null,
+    "directory_url": "https://des.az.gov/services/disabilities/developmental-disabilities/vendors-providers/current",
+    "directory_access": "public qualified-vendor list (HTML only, no API). FocusDDD portal at https://ddd.azdes.gov/ requires login.",
+    "stedi_hint": "No separate EDI payer id. DDD provides ALTCS coverage through AHCCCS; eligibility queries go to AHCCCS (BEUZA). For a DDD member's health plan, the contracted MCOs are Mercy Care and UnitedHealthcare Community Plan (each has its own Stedi payer id).",
+    "notes": "DDD is a state agency division, not an independent payer/health plan: no FHIR directory, no TiC. Does not operate as a standalone EDI payer; ALTCS billing/eligibility routes through AHCCCS Online (+ Wellsky for post-2022 claims). Authorized source = DES qualified vendor list / AHCCCS."
+  },
+  {
+    "payer": "Colorado Department of Health Care Policy & Financing",
+    "brand": "Health First Colorado (CO Medicaid)",
+    "fhir_pdex_base_url": null,
+    "fhir_verified": false,
+    "tic_index_url": null,
+    "directory_url": "https://hcpf.colorado.gov/provider-enrollment",
+    "directory_access": "public info page. Provider Web Portal (Gainwell): https://colorado-hcp-portal.coxix.gainwelltechnologies.com/hcp/provider/Home/tabid/135/Default.aspx requires login for enrolled providers. EDI support: https://hcpf.colorado.gov/edi-support.",
+    "stedi_hint": "SKCO0 (CO Medicaid). Supports 270/271, 837P/I, ERA. EDI migrated from Gainwell MMIS to Edifecs/Cotiviti.",
+    "notes": "State Medicaid program: no PDEX/Plan-Net FHIR directory and no TiC MRF. Network IS the Health First Colorado program. Authorized source = HCPF / Gainwell provider portal. Eligibility via Stedi 271 or HCPF Provider Web Portal (required before each encounter). 270/271 companion guide via HCPF EDI support page."
+  },
+  {
+    "payer": "Noridian Healthcare Solutions",
+    "brand": "Medicare Administrative Contractor (JE/JF, DME JA/JD)",
+    "fhir_pdex_base_url": null,
+    "fhir_verified": false,
+    "tic_index_url": null,
+    "directory_url": "https://npiregistry.cms.hhs.gov",
+    "directory_access": "CMS-owned and fully public: NPPES (npiregistry.cms.hhs.gov, no login) and Care Compare (https://www.medicare.gov/care-compare). Noridian Medicare Portal (https://www.noridianmedicareportal.com/) requires login; public info site: https://med.noridianmedicare.com/web/medicare.",
+    "stedi_hint": "No single payer id — Traditional Medicare uses state-level ids represented in Stedi as 'Medicare [State] Part A/B'. Examples: Medicare Montana Part B = FVZBQ (legacy 03202); Medicare Southern California Part B ~ 01182; DME Jurisdiction D = 19003. Search Stedi payer network per state. JE = CA/HI/NV/AS/GU/CNMI; JF = AK/AZ/ID/MT/ND/OR/SD/UT/WA/WY.",
+    "notes": "MAC is a CMS contractor and does NOT own/publish provider directory data — Traditional Medicare provider/enrollment data belongs to CMS (NPPES, PECOS, Care Compare). No PDEX, no TiC (Traditional Medicare not subject to TiC MRF). Authorized source = CMS data. EDI via EDISS; 270/271 supported per-jurisdiction."
+  },
+  {
+    "payer": "Novitas Solutions",
+    "brand": "Medicare Administrative Contractor (JH/JL)",
+    "fhir_pdex_base_url": null,
+    "fhir_verified": false,
+    "tic_index_url": null,
+    "directory_url": "https://npiregistry.cms.hhs.gov",
+    "directory_access": "CMS-owned and fully public: NPPES (npiregistry.cms.hhs.gov, no login) and Care Compare (https://www.medicare.gov/care-compare). Novitasphere portals (https://www.novitas-solutions.com/webcenter/portal/MedicareJH and /MedicareJL) require login.",
+    "stedi_hint": "No single payer id — state-level ids represented in Stedi as 'Medicare [State] Part A/B'. Known: AR Part B = 07102, LA Part B = 07202, TX Part B = 04412; search Stedi for 'Medicare Colorado Part B' (JH) etc. JH = AR/CO/LA/MS/NM/OK/TX; JL = DC/DE/MD/NJ/PA.",
+    "notes": "MAC is a CMS contractor and does NOT own/publish provider directory data — Traditional Medicare provider/enrollment data belongs to CMS (NPPES, PECOS, Care Compare). No PDEX, no TiC. Authorized source = CMS data. Eligibility via Novitasphere or clearinghouse; 270/271 per-jurisdiction."
+  }
+]

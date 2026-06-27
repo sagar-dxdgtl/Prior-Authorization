@@ -1,0 +1,112 @@
+[
+  {
+    "payer": "Ambetter (Centene)",
+    "brand": "Ambetter",
+    "fhir_pdex_base_url": null,
+    "fhir_verified": false,
+    "tic_index_url": "https://www.centene.com/price-transparency-files.html",
+    "directory_url": "https://www.ambetterhealth.com/find-a-doctor.html",
+    "directory_access": "public",
+    "stedi_hint": "IMJGY (primary payer ID: 68069; aliases include 68069MA, AZHNT, CNTENE, etc.)",
+    "notes": "FHIR PDEX documented at partners.centene.com/apiDetail/8122bc9c (FHIR – Provider Directory). Actual base URL gated behind Centene Partner Portal login — not extractable without account. TiC index JSON verified: https://www.centene.com/content/dam/centene/Centene%20Corporate/json/DOCUMENT/2026-06-01_ambetter_index.json (schema v2.0.0, reporting entity: Centene Management Company LLC). Interoperability docs: ambetterhealth.com/en/*/interoperability."
+  },
+  {
+    "payer": "Wellcare (Centene)",
+    "brand": "WellCare",
+    "fhir_pdex_base_url": null,
+    "fhir_verified": false,
+    "tic_index_url": "https://www.centene.com/price-transparency-files.html",
+    "directory_url": "https://www.wellcare.com/en/find-a-doctor",
+    "directory_access": "public",
+    "stedi_hint": "KFNLV (primary payer ID: 4032; aliases: 4032, 8760, MM) — labeled 'Wellcare (MM) - JVHL' on Stedi",
+    "notes": "Same Centene Partner Portal FHIR infrastructure. TiC centralized at centene.com/price-transparency-files.html. Interoperability/developer entry at wellcare.com/en/interoperability-and-patient-access. Individual state WellCare plans may have distinct EDI payer IDs. Centene umbrella Stedi ID IMJGY (68069) also covers WellCare."
+  },
+  {
+    "payer": "Arizona Complete Health (Centene)",
+    "brand": "Arizona Complete Health",
+    "fhir_pdex_base_url": null,
+    "fhir_verified": false,
+    "tic_index_url": "https://www.centene.com/price-transparency-files.html",
+    "directory_url": "https://www.azcompletehealth.com/find-a-provider",
+    "directory_access": "public",
+    "stedi_hint": "IMJGY / 68069 (Centene umbrella; AZ alias AZHNT on Stedi); EDI payer ID 68069 confirmed on azcompletehealth.com EDI page for all claim types",
+    "notes": "Same Centene Partner Portal FHIR infrastructure. Interoperability page: azcompletehealth.com/members/medicaid/helpful-links/interoperability-and-patient-access.html. Approved clearinghouses: Availity, Emdeon, Trizetto, and 20+ others — all use payer ID 68069."
+  },
+  {
+    "payer": "Molina Healthcare",
+    "brand": "Molina Healthcare",
+    "fhir_pdex_base_url": null,
+    "fhir_verified": false,
+    "tic_index_url": "https://www.molinahealthcare.com/members/common/mrf.aspx",
+    "directory_url": "https://www.molinahealthcare.com/members/az/en-us/mem/medicaid/helpful-resources/provider.aspx",
+    "directory_access": "bot-protected",
+    "stedi_hint": "SGMGC is dental/SKYGEN only; medical AZ Medicaid routes via Availity or Emdeon — no unified Stedi medical ID confirmed",
+    "notes": "FHIR PDex Plan-Net documented at developer.interop.molinahealthcare.com; API base URL requires account registration — not publicly crawlable. TiC MRF page returned HTTP 403 (bot-protection). AZ Medicaid directory URL bot-protected. Note: developer portal powered by Azure API Management / Cognizant TriZetto."
+  },
+  {
+    "payer": "Wellpoint / Amerigroup (Elevance)",
+    "brand": "Wellpoint",
+    "fhir_pdex_base_url": "https://totalview.healthos.elevancehealth.com/resources/registered/Wellpoint/api/v1/fhir",
+    "fhir_verified": true,
+    "tic_index_url": "https://www.wellpoint.com/machine-readable-files",
+    "directory_url": "https://findcaresecure.wellpoint.com/",
+    "directory_access": "public",
+    "stedi_hint": "RUWTL (primary payer ID: WLPNT; aliases: 14427, 1775, 2448, 2560, WLPNT, WLPNTMA)",
+    "notes": "FHIR R4.0.1 VERIFIED — /metadata returned valid CapabilityStatement published by 'Elevance Health, Inc.', software 'hos-fhir-server' v1.0.0; 40+ supported resources including InsurancePlan, Practitioner, PractitionerRole, Organization. Amerigroup rebranded as Wellpoint in AZ (and IA, NJ, TN, TX, WA) effective Jan 2024. Developer docs at wellpoint.com/developers."
+  },
+  {
+    "payer": "Aetna Better Health",
+    "brand": "Aetna Better Health",
+    "fhir_pdex_base_url": null,
+    "fhir_verified": false,
+    "tic_index_url": "https://www.aetna.com/insurance-producer/transparency-in-coverage.html",
+    "directory_url": "https://www.aetnabetterhealth.com/find-provider.html",
+    "directory_access": "bot-protected",
+    "stedi_hint": "HCUQB (primary payer ID: ABH01; aliases: 12, 3061, ABH01)",
+    "notes": "FHIR developer portal: developerportal.aetna.com. OAuth2 token endpoint: https://apif1.aetna.com/fhir/v1/fhirserver_auth/oauth2/token. Demo OIDC config: https://vteapif1.aetna.com/fhirdemo/.well-known/openid-configuration. Production FHIR base URL not publicly exposed — requires client credentials from Aetna dev portal. Directory page returned HTTP 403. Product name: 'public-medicare-providerdirectory-fhir-apigw' (Medicare) — Medicaid-specific product name TBD."
+  },
+  {
+    "payer": "AmeriHealth Caritas",
+    "brand": "AmeriHealth Caritas",
+    "fhir_pdex_base_url": "https://api-ext.amerihealthcaritas.com/NCEX/provider-api",
+    "fhir_verified": true,
+    "tic_index_url": "https://amerihealthcaritas.com/transparency-in-coverage-rule.aspx",
+    "directory_url": "https://www.amerihealthcaritas.com",
+    "directory_access": "public",
+    "stedi_hint": "NANCR / 81671 (NC); CRQTA (PA); payer IDs vary by state",
+    "notes": "FHIR R4.0.1 VERIFIED — /metadata returned valid CapabilityStatement for 'AmeriHealth Caritas' v1.0.0; supported resources: InsurancePlan, Location, Organization, OrganizationAffiliation, Practitioner, PractitionerRole. NCEX path segment = North Carolina External; other state paths likely follow same pattern (PAEX, DCEX, etc.). Auth: OAuth2 at https://eapics.amerihealthcaritas.com/oauth2/v1/token. TiC MRFs for AHPA/KHPE/QCC entities at amerihealth.com/transparency-in-coverage/1151137."
+  },
+  {
+    "payer": "Community Care Plan (FL)",
+    "brand": "Community Care Plan",
+    "fhir_pdex_base_url": null,
+    "fhir_verified": false,
+    "tic_index_url": null,
+    "directory_url": "https://providerdirectory.ccpcares.org/mma",
+    "directory_access": "public",
+    "stedi_hint": null,
+    "notes": "No public FHIR PDEX Plan-Net API found. Provider directories are PDF-only at providerdirectory.ccpcares.org (county-level PDFs: Saint Lucie, Lee, Osceola, Indian River, etc.). No TiC MRF page found on ccpcares.org. CMS Medicaid managed care FHIR mandate (effective 2026) applies but implementation not yet publicly documented. Owned by Broward Health + Memorial Healthcare System; serves ~19 FL counties."
+  },
+  {
+    "payer": "Mercy Care (AZ)",
+    "brand": "Mercy Care",
+    "fhir_pdex_base_url": null,
+    "fhir_verified": false,
+    "tic_index_url": null,
+    "directory_url": "https://www.mercycareaz.org/find-a-provider",
+    "directory_access": "bot-protected",
+    "stedi_hint": null,
+    "notes": "mercycareaz.org blocks crawlers (HTTP 403 on all tested sub-pages). No public FHIR PDEX endpoint found via web search or direct fetch. No TiC MRF page found on mercycareaz.org. CAUTION: mercycarehealthplans.com is an unrelated Wisconsin plan. Mercy Care AZ is a not-for-profit AHCCCS-only MCO; CMS PDex mandate applies — contact provider portal or interoperability team for API access. EviCore handles prior auth at evicore.com/resources/healthplan/mercy-care-plan-abh-az."
+  },
+  {
+    "payer": "Health Choice Arizona",
+    "brand": "Health Choice Arizona",
+    "fhir_pdex_base_url": "https://azblue.innovaccer.com/fhir",
+    "fhir_verified": false,
+    "tic_index_url": "https://www.healthchoiceaz.com/providers/machine-readable-formats/",
+    "directory_url": "https://providerdirectory.healthchoiceaz.com/",
+    "directory_access": "public",
+    "stedi_hint": null,
+    "notes": "FHIR endpoint documented via BCBSAZ (AZ Blue) Innovaccer platform: azblue.innovaccer.com/fhir; /metadata returned HTTP 403 — likely requires API key or registration. Health Choice AZ is BCBSAZ-administered AHCCCS Medicaid plan. TiC MRF page returned HTTP 403 when fetched. Stedi routing likely via BCBSAZ payer IDs (not separately listed). Interoperability portal: azblue.com/interoperability."
+  }
+]

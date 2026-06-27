@@ -23,6 +23,10 @@ def test_payer_rows_well_formed():
         "stedi_payer_id",
         "enrollment_status",
         "network_indicator_supported",
+        "fhir_base_url",
+        "tic_url",
+        "directory_url",
+        "directory_access",
     }
     assert r0["tenant_id"] is None
 

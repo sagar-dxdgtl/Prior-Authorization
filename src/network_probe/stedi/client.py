@@ -58,7 +58,12 @@ class StediEligibilityClient:
         payer_id: str | None = None,
         service_type_codes: list | None = None,
     ):
-        self.api_key = api_key if api_key is not None else get_secret("STEDI_API_KEY")
+        # Settings reads the .env file (pydantic); get_secret reads os.environ → AWS Secrets Manager.
+        # Prefer the configured setting (.env/env var), then fall back to the secrets provider (prod/AWS).
+        self.api_key = (
+            api_key if api_key is not None
+            else (get_settings().stedi_api_key or get_secret("STEDI_API_KEY"))
+        )
         # PHI must never hit disk: force cache_dir=None.
         self.client = client or CachedClient(cache_dir=None, delay_seconds=0.2)
         self.payer_id = payer_id
