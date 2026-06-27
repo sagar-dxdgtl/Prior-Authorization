@@ -1,0 +1,202 @@
+# Architecture — Pre-Auth Network-Status Verification Probe
+
+## 1. What this system is
+
+A **pre-service / pre-authorization** probe that answers one question, honestly:
+
+> *Given a provider (NPI/name) and a payer + plan, is that provider **in-network** for that plan?*
+
+It returns a structured verdict — **IN_NETWORK / OUT_OF_NETWORK / UNKNOWN / REVIEW** — with a
+confidence level, the exact source it came from (audit trail), and cross-check signals. It runs
+**before** the encounter, so there is **no claim/835 yet** — every input must be available at pre-auth.
+
+It is the **network-accuracy module**, not a full eligibility platform. It's designed to fill the
+"`Provider Network: Unknown`" field that a pVerify-style 271 leaves blank (see §10).
+
+---
+
+## 2. Core principles (non-negotiable)
+
+1. **Discover endpoints empirically** — never hardcode payer APIs from memory.
+2. **Never default ambiguity to OUT_OF_NETWORK** — `UNKNOWN` is the honest answer when we can't tell.
+3. **Always populate `source_url`** — every verdict cites the exact endpoint(s) queried.
+4. **A directory is one signal, not ground truth** — corroborate, weight confidence, escalate to REVIEW.
+5. **Respect the sites** — real User-Agent, low volume, delays, dev cache; **never** bypass
+   CAPTCHA / WAF / bot-protection / auth. Blocked → document and report, don't circumvent.
+
+---
+
+## 3. The pre-auth determination pipeline
+
+```
+  Input (NPI/name + payer + plan [+ TIN, member_id, dob, state/zip])
+        │   from CLI · API · UI · or a parsed 271 report
+        ▼
+  ┌──────────────────────────────────────────────────────────────┐
+  │ service.check_network(q)                                       │
+  └──────────────────────────────────────────────────────────────┘
+        │
+        ▼
+  (A) Golden-record override?  ── yes ─▶  return human-verified verdict (confidence: high)
+        │ no
+        ▼
+  (B) Adapter for this payer  ──▶  live directory query (the PRIMARY signal)
+        │                          · resolve plan → network (alias map)
+        │                          · find provider by NPI (or name) in that network
+        │                          · build verdict + source_url  (IN / OUT / UNKNOWN)
+        ▼
+  (C) Corroboration (finalize)  ──▶  run cross-check sources, then:
+        │      · IN + a contradiction      →  REVIEW (confidence: conflict)
+        │      · IN single-source          →  demote high → medium  (+ directory caveat)
+        │      · IN + stale signal         →  confidence → low
+        │      · ambiguous                 →  UNKNOWN (never guessed OON)
+        ▼
+  NetworkVerdict { status, confidence, plan_or_network_checked,
+                   source_url, notes, matched_provider, corroboration[] }
+```
+
+The pipeline lives in `service.check_network()` → `corroboration.finalize()`.
+
+---
+
+## 4. How we make the pre-auth answer trustworthy
+
+These are the mechanisms layered on top of the raw directory lookup:
+
+| # | Mechanism | Where | What it guards against |
+|---|---|---|---|
+| 1 | **Empirical discovery** | per-adapter | stale/guessed endpoints |
+| 2 | **Plan → network resolution** | `plan_aliases.py` | checking the *wrong* network for a plan |
+| 3 | **UNKNOWN, never guessed OON** | adapters + `finalize` | false "out of network" denials |
+| 4 | **Audit trail (`source_url`)** | every verdict | unverifiable claims |
+| 5 | **Identity cross-check (NPPES)** | `NppesSource` | wrong/inactive provider, name mismatch |
+| 6 | **TIN-scope (group-level)** | `TinScopeSource` | "individual listed, but billing TIN is OON" |
+| 7 | **Freshness** | `FreshnessSource` | stale listings (`going_oon_soon`, `last_inn_date`) |
+| 8 | **Eligibility cross-check** | `StediSource` (env-gated) | directory disagreeing with the payer's 271 |
+| 9 | **Confidence asymmetry** | `finalize` | over-trusting a single source (high → medium) |
+| 10 | **Conflict → REVIEW** | `finalize` | asserting when sources disagree |
+| 11 | **Golden-record override (MDM)** | `overrides.py` | re-deriving a known-wrong directory answer |
+| 12 | **Respectful access** | `_http.py` | site abuse / bans (UA, delays, cache, no bypass) |
+
+**Verdict states:** `IN_NETWORK` · `OUT_OF_NETWORK` · `UNKNOWN` (can't tell) · `REVIEW` (sources conflict).
+**Confidence:** `high` · `medium` · `low` · `conflict`.
+
+---
+
+## 5. Corroboration / signal model
+
+Each source returns a `Signal(source, result, detail)` where `result` ∈
+`corroborates · contradicts · stale · inconclusive`. `finalize()` combines them with the directory verdict.
+
+- **NppesSource** — POSTs to NPPES (`npiregistry.cms.hhs.gov/.../npiDetails`): provider exists, active,
+  name/state match. *No TIN — NPPES doesn't publish it.*
+- **TinScopeSource** — is the provider's **billing TIN** among the in-network TINs? In-network TINs come
+  from the adapter (Oscar exposes them) or the **NPI→TIN crosswalk** (`tin_crosswalk.py`) when the
+  directory doesn't. A mismatch → contradicts → REVIEW.
+- **FreshnessSource** — `going_oon_soon` / `last_inn_date` → stale → confidence drops to low.
+- **StediSource** — independent 270/271 eligibility cross-check via Stedi (only active when
+  `STEDI_API_KEY` set; `PAYER_IDS` mapped for all 5). *Caveat: a 271's network indicator is benefit-tier,
+  so it's payer-dependent / often inconclusive.*
+
+---
+
+## 6. Payer adapters (the primary signal)
+
+All implement `base.PayerAdapter.check_network(q) -> NetworkVerdict`. Registered in
+`service._ADAPTER_FACTORIES`.
+
+| Key | Source | Method |
+|---|---|---|
+| `oscar` | Oscar private JSON API | autocomplete + per-network resolution; **exposes per-TIN data**, `going_oon_soon`, `last_inn_date` |
+| `devoted` | Algolia search index | NetworkNames facet, contracting-group keys |
+| `humana-fhir` / `cigna-fhir` / `uhc` | FHIR Da Vinci **PDEX Plan-Net** (public, CMS-mandated, no auth) | `Practitioner?identifier=NPI` → `PractitionerRole` → network reference |
+| `fhir` (generic) | any PDEX endpoint via `base_url=` | same FHIR flow |
+
+**Documented blockers:** Humana's & BCBS-TX's *web* directories are bot-protected (Akamai/Imperva). We
+do **not** bypass them — we use Humana's compliant **FHIR** endpoint instead; BCBS-TX is reported blocked.
+
+---
+
+## 7. Inputs / entry points
+
+- **271 ingest** (`report_ingest.py`, `ingest.py`) — drop in a pVerify eligibility PDF → parse payer,
+  plan, provider NPI+name, member id/dob, state/zip → run the probe. *This is the member-keyed intake.*
+- **API** (`api.py`, FastAPI) — `POST /api/check`, `POST /api/check-from-report` (PDF upload),
+  `GET /api/payers`, `GET /api/samples`, `POST /api/override`.
+- **UI** (`static/index.html`) — single-page form, report upload, verdict + cross-checks + audit trail.
+- **CLI** (`cli.py`) — single check; `python -m network_probe.ingest *.pdf` for batch.
+
+---
+
+## 8. Module map
+
+```
+network_probe/
+  models.py          ProviderQuery, NetworkVerdict, NetworkStatus
+  service.py         check_network() — adapter dispatch + finalize
+  base.py            PayerAdapter interface
+  adapters/
+    oscar.py         Oscar (per-TIN, freshness)
+    devoted.py       Devoted (Algolia)
+    fhir_pdex.py     Humana / Cigna / UHC / generic PDEX
+  plan_aliases.py    plan name → network resolution
+  corroboration.py   Signal, sources (NPPES/TIN/Freshness/Stedi), finalize()
+  overrides.py       golden-record override store (MDM)
+  tin_crosswalk.py   NPI→TIN loader (staged; needs a data file)
+  report_ingest.py   271 PDF → ProviderQuery
+  ingest.py          batch CLI
+  api.py             FastAPI app
+  cli.py             CLI
+  _http.py           CachedClient (UA, delays, cache)
+  static/index.html  UI
+```
+
+---
+
+## 9. Where we already beat pVerify (protect these)
+
+- **Automated** network-status determination — pVerify does this manually (phone / portal / Availity + notes).
+- **Multi-source corroboration + REVIEW + golden-record** — pVerify resolves conflicts by hand.
+- **Per-verdict audit trail** of the exact endpoint queried.
+
+---
+
+## 10. What pVerify does that we don't
+
+pVerify is a full **eligibility + benefits + RCM-workflow** platform; we are the network-accuracy slice.
+
+### Within the pre-auth / eligibility moment
+| Capability | pVerify | Us |
+|---|---|---|
+| 270/271 eligibility (active?, eff/term dates) | ✅ | ❌ (we read it from an ingested 271, don't transact it) |
+| Benefits & cost-share (copay / coins / deductible / OOP) | ✅ | ❌ |
+| PCP / prior-auth / referral requirements | ✅ | ⚠️ partial (Oscar) |
+| COB / secondary / plan sponsor / IPA | ✅ | ❌ |
+| Broad payer reach via EDI/clearinghouse | ✅ (~all payers) | ⚠️ 5 payers (2 web-blocked, used via FHIR) |
+| Member-keyed lookup (member ID + DOB → plan) | ✅ | ✅ via 271 ingest |
+| **Provider network status** | ⚠️ often "Unknown", manual, error-prone | ✅ **our core** |
+
+### Beyond pre-auth (the wider platform)
+| Capability | pVerify | Us |
+|---|---|---|
+| Live claims-grade network truth (Availity / TIN portal / phone) | ✅ (manual) | 🟡 `StediSource` built; needs prod key |
+| Case-management workflow (notes, PEC, reschedule, retention) | ✅ | 🟡 seed (override store) |
+| Batch / scale / queue / retry hardening | ✅ | ⚠️ per-call + dev cache (batch CLI only) |
+| Persistence / datastore / member files | ✅ | ⚠️ JSON cache + JSON overrides |
+| Compliance (HIPAA BAA, encryption, audit, multilingual) | ✅ | ❌ demo only |
+
+> **The key inversion:** the one thing pVerify is *weakest* at — provider network status (its 271 returns
+> "Unknown", and its automated field was wrong in 4/4 of its own OON examples) — is exactly what we do
+> well and automatically. We're complementary: feed us pVerify's 271, we fill the network answer.
+
+---
+
+## 11. Staged / deferred (not code gaps)
+
+- **Stedi eligibility source** — built, `PAYER_IDS` mapped; needs a **production key + payer enrollment**.
+- **NPI→TIN crosswalk** — loader built; needs a **data file** (TiC parse / vendor crosswalk). No free API
+  exists; TiC files are per-payer and huge. See `TODO-unblock-phase2-3.md`.
+- **Phases 5–7** (scale/persistence, full benefits parity, compliance/ops) — deferred (demo scope).
+
+See `TODO-pverify-parity.md` for the sequential roadmap and `TODO-network-accuracy.md` for the
+accuracy mechanisms in depth.

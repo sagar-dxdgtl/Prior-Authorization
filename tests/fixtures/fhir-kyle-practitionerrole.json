@@ -1,0 +1,1159 @@
+{
+  "resourceType": "Bundle",
+  "type": "searchset",
+  "timestamp": "2026-06-22T18:12:44.779+00:00",
+  "meta": {
+    "lastUpdated": "2026-06-22T18:12:44.779+00:00",
+    "versionId": "f4698717-3fb3-4322-9fcf-2064463d6d92"
+  },
+  "entry": [
+    {
+      "fullUrl": "https://fhir.humana.com/api/PractitionerRole/c57be34edeae20b832d0923641fdcc04313d84785348730e764315103b822d37",
+      "search": {
+        "mode": "match"
+      },
+      "resource": {
+        "resourceType": "PractitionerRole",
+        "id": "c57be34edeae20b832d0923641fdcc04313d84785348730e764315103b822d37",
+        "extension": [
+          {
+            "extension": [
+              {
+                "url": "ratingType",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "system": "https://fhir.humana.com/documentation/glossary/ProviderRatings",
+                      "code": "efficiencyDescription"
+                    }
+                  ]
+                }
+              },
+              {
+                "url": "ratingValue",
+                "valueString": "3 badges"
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/directory-query/StructureDefinition/rating"
+          },
+          {
+            "url": "http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/network-reference",
+            "valueReference": {
+              "reference": "https://fhir.humana.com/api/Organization/c3a4fb61d18f07155aacdcdbc006ad4c9e0fd7ef34ccdadcb2781da408c6b5ae",
+              "display": "HumanaGoldChoice Ntwk PFFS"
+            }
+          },
+          {
+            "extension": [
+              {
+                "url": "acceptingPatients",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "system": "http://hl7.org/fhir/us/davinci-pdex-plan-net/CodeSystem/AcceptingPatientsCS",
+                      "code": "newpt",
+                      "display": "Accepting"
+                    }
+                  ]
+                }
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/newpatients"
+          }
+        ],
+        "active": true,
+        "practitioner": {
+          "reference": "https://fhir.humana.com/api/Practitioner/121019814f05e529b5361d8f73ad779dc73f8ac1a56b30a86461234a543db35a"
+        },
+        "organization": {
+          "reference": "https://fhir.humana.com/api/Organization/0c6adf013d89e438099b97308930f26873474fb930144586d0e7e9f899a94c5e",
+          "display": "Georgia UVC Medical LLC"
+        },
+        "specialty": [
+          {
+            "coding": [
+              {
+                "system": "http://nucc.org/provider-taxonomy",
+                "code": "208600000X",
+                "display": "Surgery Physician"
+              }
+            ]
+          }
+        ],
+        "location": [
+          {
+            "reference": "https://fhir.humana.com/api/Location/8c1ba654cae7147af2a4416209657fe96b1652a37b118e88fbce9f15edec44a9",
+            "display": "Georgia UVC Medical LLC, Atlanta"
+          },
+          {
+            "reference": "https://fhir.humana.com/api/Location/6839aaa77c5e54dea12375ba40ba82ba857cab9bc5ad8c23461a308d2350400f",
+            "display": "Georgia UVC Medical LLC, Kennesaw"
+          },
+          {
+            "reference": "https://fhir.humana.com/api/Location/17c0c39780dfd71a56fead8cb3babb5536faeda9b11ec1d9de2a9c5143d7b50b",
+            "display": "Georgia UVC Medical LLC, Duluth"
+          },
+          {
+            "reference": "https://fhir.humana.com/api/Location/89cd6360dce8a159a224dbb372bf0400fe4c7674af7c320b5249ee3fb6ca35d4",
+            "display": "Georgia UVC Medical LLC, Newnan"
+          }
+        ],
+        "telecom": [
+          {
+            "system": "phone",
+            "value": "8009916117",
+            "use": "work"
+          },
+          {
+            "system": "fax",
+            "value": "8888128191",
+            "use": "work"
+          },
+          {
+            "system": "phone",
+            "value": "8009116117",
+            "use": "work"
+          }
+        ],
+        "meta": {
+          "versionId": "f16a3c16-419e-4dbb-be4e-e9f649d1effc",
+          "lastUpdated": "2026-06-18T10:57:14.167+00:00"
+        }
+      }
+    },
+    {
+      "fullUrl": "https://fhir.humana.com/api/PractitionerRole/eaaa5c558e8fbce5bf9ca595090e15c6311da443c339de052de3038d44078e6b",
+      "search": {
+        "mode": "match"
+      },
+      "resource": {
+        "resourceType": "PractitionerRole",
+        "id": "eaaa5c558e8fbce5bf9ca595090e15c6311da443c339de052de3038d44078e6b",
+        "extension": [
+          {
+            "extension": [
+              {
+                "url": "ratingType",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "system": "https://fhir.humana.com/documentation/glossary/ProviderRatings",
+                      "code": "efficiencyDescription"
+                    }
+                  ]
+                }
+              },
+              {
+                "url": "ratingValue",
+                "valueString": "3 badges"
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/directory-query/StructureDefinition/rating"
+          },
+          {
+            "url": "http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/network-reference",
+            "valueReference": {
+              "reference": "https://fhir.humana.com/api/Organization/08debbaaea60d87ef1c300c904f8640b9ab7feb2fad166f73486b4193dbdef8f",
+              "display": "Natl Medicare HMO/SNP-Travel27"
+            }
+          },
+          {
+            "extension": [
+              {
+                "url": "acceptingPatients",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "system": "http://hl7.org/fhir/us/davinci-pdex-plan-net/CodeSystem/AcceptingPatientsCS",
+                      "code": "newpt",
+                      "display": "Accepting"
+                    }
+                  ]
+                }
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/newpatients"
+          }
+        ],
+        "active": true,
+        "practitioner": {
+          "reference": "https://fhir.humana.com/api/Practitioner/121019814f05e529b5361d8f73ad779dc73f8ac1a56b30a86461234a543db35a"
+        },
+        "organization": {
+          "reference": "https://fhir.humana.com/api/Organization/0c6adf013d89e438099b97308930f26873474fb930144586d0e7e9f899a94c5e",
+          "display": "Georgia UVC Medical LLC"
+        },
+        "specialty": [
+          {
+            "coding": [
+              {
+                "system": "http://nucc.org/provider-taxonomy",
+                "code": "208600000X",
+                "display": "Surgery Physician"
+              }
+            ]
+          }
+        ],
+        "location": [
+          {
+            "reference": "https://fhir.humana.com/api/Location/8c1ba654cae7147af2a4416209657fe96b1652a37b118e88fbce9f15edec44a9",
+            "display": "Georgia UVC Medical LLC, Atlanta"
+          },
+          {
+            "reference": "https://fhir.humana.com/api/Location/6839aaa77c5e54dea12375ba40ba82ba857cab9bc5ad8c23461a308d2350400f",
+            "display": "Georgia UVC Medical LLC, Kennesaw"
+          },
+          {
+            "reference": "https://fhir.humana.com/api/Location/17c0c39780dfd71a56fead8cb3babb5536faeda9b11ec1d9de2a9c5143d7b50b",
+            "display": "Georgia UVC Medical LLC, Duluth"
+          },
+          {
+            "reference": "https://fhir.humana.com/api/Location/89cd6360dce8a159a224dbb372bf0400fe4c7674af7c320b5249ee3fb6ca35d4",
+            "display": "Georgia UVC Medical LLC, Newnan"
+          }
+        ],
+        "telecom": [
+          {
+            "system": "phone",
+            "value": "8009916117",
+            "use": "work"
+          },
+          {
+            "system": "fax",
+            "value": "8888128191",
+            "use": "work"
+          },
+          {
+            "system": "phone",
+            "value": "8009116117",
+            "use": "work"
+          }
+        ],
+        "meta": {
+          "versionId": "85d2907f-5756-4f51-8f46-7ee70c6edc5d",
+          "lastUpdated": "2026-06-18T10:57:14.167+00:00"
+        }
+      }
+    },
+    {
+      "fullUrl": "https://fhir.humana.com/api/PractitionerRole/91029ccc0c72a6c2bd337c07717bc1e39a5ee95e4c0a5133aa3dc85e1a71176a",
+      "search": {
+        "mode": "match"
+      },
+      "resource": {
+        "resourceType": "PractitionerRole",
+        "id": "91029ccc0c72a6c2bd337c07717bc1e39a5ee95e4c0a5133aa3dc85e1a71176a",
+        "extension": [
+          {
+            "extension": [
+              {
+                "url": "ratingType",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "system": "https://fhir.humana.com/documentation/glossary/ProviderRatings",
+                      "code": "efficiencyDescription"
+                    }
+                  ]
+                }
+              },
+              {
+                "url": "ratingValue",
+                "valueString": "3 badges"
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/directory-query/StructureDefinition/rating"
+          },
+          {
+            "url": "http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/network-reference",
+            "valueReference": {
+              "reference": "https://fhir.humana.com/api/Organization/03cd033222113e73b7486b78eebf3c4b63c3723229527c508b42baa26535a297",
+              "display": "Medicare PPO27"
+            }
+          },
+          {
+            "extension": [
+              {
+                "url": "acceptingPatients",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "system": "http://hl7.org/fhir/us/davinci-pdex-plan-net/CodeSystem/AcceptingPatientsCS",
+                      "code": "newpt",
+                      "display": "Accepting"
+                    }
+                  ]
+                }
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/newpatients"
+          }
+        ],
+        "active": true,
+        "practitioner": {
+          "reference": "https://fhir.humana.com/api/Practitioner/121019814f05e529b5361d8f73ad779dc73f8ac1a56b30a86461234a543db35a"
+        },
+        "organization": {
+          "reference": "https://fhir.humana.com/api/Organization/0c6adf013d89e438099b97308930f26873474fb930144586d0e7e9f899a94c5e",
+          "display": "Georgia UVC Medical LLC"
+        },
+        "specialty": [
+          {
+            "coding": [
+              {
+                "system": "http://nucc.org/provider-taxonomy",
+                "code": "208600000X",
+                "display": "Surgery Physician"
+              }
+            ]
+          }
+        ],
+        "location": [
+          {
+            "reference": "https://fhir.humana.com/api/Location/8c1ba654cae7147af2a4416209657fe96b1652a37b118e88fbce9f15edec44a9",
+            "display": "Georgia UVC Medical LLC, Atlanta"
+          },
+          {
+            "reference": "https://fhir.humana.com/api/Location/6839aaa77c5e54dea12375ba40ba82ba857cab9bc5ad8c23461a308d2350400f",
+            "display": "Georgia UVC Medical LLC, Kennesaw"
+          },
+          {
+            "reference": "https://fhir.humana.com/api/Location/17c0c39780dfd71a56fead8cb3babb5536faeda9b11ec1d9de2a9c5143d7b50b",
+            "display": "Georgia UVC Medical LLC, Duluth"
+          },
+          {
+            "reference": "https://fhir.humana.com/api/Location/89cd6360dce8a159a224dbb372bf0400fe4c7674af7c320b5249ee3fb6ca35d4",
+            "display": "Georgia UVC Medical LLC, Newnan"
+          }
+        ],
+        "telecom": [
+          {
+            "system": "phone",
+            "value": "8009916117",
+            "use": "work"
+          },
+          {
+            "system": "fax",
+            "value": "8888128191",
+            "use": "work"
+          },
+          {
+            "system": "phone",
+            "value": "8009116117",
+            "use": "work"
+          }
+        ],
+        "meta": {
+          "versionId": "ab28fde8-234c-4f1f-9e07-32127395b0b5",
+          "lastUpdated": "2026-06-18T10:57:14.167+00:00"
+        }
+      }
+    },
+    {
+      "fullUrl": "https://fhir.humana.com/api/PractitionerRole/bf04461796d8f60f72896217547c47157130ce3763967eb1b9a5b0956a250ac9",
+      "search": {
+        "mode": "match"
+      },
+      "resource": {
+        "resourceType": "PractitionerRole",
+        "id": "bf04461796d8f60f72896217547c47157130ce3763967eb1b9a5b0956a250ac9",
+        "extension": [
+          {
+            "extension": [
+              {
+                "url": "ratingType",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "system": "https://fhir.humana.com/documentation/glossary/ProviderRatings",
+                      "code": "efficiencyDescription"
+                    }
+                  ]
+                }
+              },
+              {
+                "url": "ratingValue",
+                "valueString": "3 badges"
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/directory-query/StructureDefinition/rating"
+          },
+          {
+            "url": "http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/network-reference",
+            "valueReference": {
+              "reference": "https://fhir.humana.com/api/Organization/814b7b35ebc70ae235dc9a165e146af19c7c6ca4cbb7beb16b39b4f351e2f35a",
+              "display": "National Employer HMO-Home27"
+            }
+          },
+          {
+            "extension": [
+              {
+                "url": "acceptingPatients",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "system": "http://hl7.org/fhir/us/davinci-pdex-plan-net/CodeSystem/AcceptingPatientsCS",
+                      "code": "newpt",
+                      "display": "Accepting"
+                    }
+                  ]
+                }
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/newpatients"
+          }
+        ],
+        "active": true,
+        "practitioner": {
+          "reference": "https://fhir.humana.com/api/Practitioner/121019814f05e529b5361d8f73ad779dc73f8ac1a56b30a86461234a543db35a"
+        },
+        "organization": {
+          "reference": "https://fhir.humana.com/api/Organization/0c6adf013d89e438099b97308930f26873474fb930144586d0e7e9f899a94c5e",
+          "display": "Georgia UVC Medical LLC"
+        },
+        "specialty": [
+          {
+            "coding": [
+              {
+                "system": "http://nucc.org/provider-taxonomy",
+                "code": "208600000X",
+                "display": "Surgery Physician"
+              }
+            ]
+          }
+        ],
+        "location": [
+          {
+            "reference": "https://fhir.humana.com/api/Location/8c1ba654cae7147af2a4416209657fe96b1652a37b118e88fbce9f15edec44a9",
+            "display": "Georgia UVC Medical LLC, Atlanta"
+          },
+          {
+            "reference": "https://fhir.humana.com/api/Location/6839aaa77c5e54dea12375ba40ba82ba857cab9bc5ad8c23461a308d2350400f",
+            "display": "Georgia UVC Medical LLC, Kennesaw"
+          },
+          {
+            "reference": "https://fhir.humana.com/api/Location/17c0c39780dfd71a56fead8cb3babb5536faeda9b11ec1d9de2a9c5143d7b50b",
+            "display": "Georgia UVC Medical LLC, Duluth"
+          },
+          {
+            "reference": "https://fhir.humana.com/api/Location/89cd6360dce8a159a224dbb372bf0400fe4c7674af7c320b5249ee3fb6ca35d4",
+            "display": "Georgia UVC Medical LLC, Newnan"
+          }
+        ],
+        "telecom": [
+          {
+            "system": "phone",
+            "value": "8009916117",
+            "use": "work"
+          },
+          {
+            "system": "fax",
+            "value": "8888128191",
+            "use": "work"
+          },
+          {
+            "system": "phone",
+            "value": "8009116117",
+            "use": "work"
+          }
+        ],
+        "meta": {
+          "versionId": "b0b17013-f538-4ee9-98b2-cba87c102b6d",
+          "lastUpdated": "2026-06-18T10:57:14.168+00:00"
+        }
+      }
+    },
+    {
+      "fullUrl": "https://fhir.humana.com/api/PractitionerRole/630c12f77e17f5d2f8e7eb2d754053505cd524b7bab048aad27a6d730a215a21",
+      "search": {
+        "mode": "match"
+      },
+      "resource": {
+        "resourceType": "PractitionerRole",
+        "id": "630c12f77e17f5d2f8e7eb2d754053505cd524b7bab048aad27a6d730a215a21",
+        "extension": [
+          {
+            "extension": [
+              {
+                "url": "ratingType",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "system": "https://fhir.humana.com/documentation/glossary/ProviderRatings",
+                      "code": "efficiencyDescription"
+                    }
+                  ]
+                }
+              },
+              {
+                "url": "ratingValue",
+                "valueString": "3 badges"
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/directory-query/StructureDefinition/rating"
+          },
+          {
+            "url": "http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/network-reference",
+            "valueReference": {
+              "reference": "https://fhir.humana.com/api/Organization/e415c8070b87155de1019fb86d90e01beed27a7a901b3155254b848b9a4821b1",
+              "display": "HumanaGoldChoice Ntwk PFFS27"
+            }
+          },
+          {
+            "extension": [
+              {
+                "url": "acceptingPatients",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "system": "http://hl7.org/fhir/us/davinci-pdex-plan-net/CodeSystem/AcceptingPatientsCS",
+                      "code": "newpt",
+                      "display": "Accepting"
+                    }
+                  ]
+                }
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/newpatients"
+          }
+        ],
+        "active": true,
+        "practitioner": {
+          "reference": "https://fhir.humana.com/api/Practitioner/121019814f05e529b5361d8f73ad779dc73f8ac1a56b30a86461234a543db35a"
+        },
+        "organization": {
+          "reference": "https://fhir.humana.com/api/Organization/0c6adf013d89e438099b97308930f26873474fb930144586d0e7e9f899a94c5e",
+          "display": "Georgia UVC Medical LLC"
+        },
+        "specialty": [
+          {
+            "coding": [
+              {
+                "system": "http://nucc.org/provider-taxonomy",
+                "code": "208600000X",
+                "display": "Surgery Physician"
+              }
+            ]
+          }
+        ],
+        "location": [
+          {
+            "reference": "https://fhir.humana.com/api/Location/8c1ba654cae7147af2a4416209657fe96b1652a37b118e88fbce9f15edec44a9",
+            "display": "Georgia UVC Medical LLC, Atlanta"
+          },
+          {
+            "reference": "https://fhir.humana.com/api/Location/6839aaa77c5e54dea12375ba40ba82ba857cab9bc5ad8c23461a308d2350400f",
+            "display": "Georgia UVC Medical LLC, Kennesaw"
+          },
+          {
+            "reference": "https://fhir.humana.com/api/Location/17c0c39780dfd71a56fead8cb3babb5536faeda9b11ec1d9de2a9c5143d7b50b",
+            "display": "Georgia UVC Medical LLC, Duluth"
+          },
+          {
+            "reference": "https://fhir.humana.com/api/Location/89cd6360dce8a159a224dbb372bf0400fe4c7674af7c320b5249ee3fb6ca35d4",
+            "display": "Georgia UVC Medical LLC, Newnan"
+          }
+        ],
+        "telecom": [
+          {
+            "system": "phone",
+            "value": "8009916117",
+            "use": "work"
+          },
+          {
+            "system": "fax",
+            "value": "8888128191",
+            "use": "work"
+          },
+          {
+            "system": "phone",
+            "value": "8009116117",
+            "use": "work"
+          }
+        ],
+        "meta": {
+          "versionId": "6e87d41e-3f14-4df2-84f2-d21db34153f7",
+          "lastUpdated": "2026-06-18T10:57:14.175+00:00"
+        }
+      }
+    },
+    {
+      "fullUrl": "https://fhir.humana.com/api/PractitionerRole/b4390834573e030f025ecc6c6efdd963a70a1fec61895e1e9be09c6b3790cb11",
+      "search": {
+        "mode": "match"
+      },
+      "resource": {
+        "resourceType": "PractitionerRole",
+        "id": "b4390834573e030f025ecc6c6efdd963a70a1fec61895e1e9be09c6b3790cb11",
+        "extension": [
+          {
+            "extension": [
+              {
+                "url": "ratingType",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "system": "https://fhir.humana.com/documentation/glossary/ProviderRatings",
+                      "code": "efficiencyDescription"
+                    }
+                  ]
+                }
+              },
+              {
+                "url": "ratingValue",
+                "valueString": "3 badges"
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/directory-query/StructureDefinition/rating"
+          },
+          {
+            "url": "http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/network-reference",
+            "valueReference": {
+              "reference": "https://fhir.humana.com/api/Organization/97b53f1e95afbba195d3d765ecbd676193a0ad68a87ea64729e0b588b424f972",
+              "display": "National Employer HMO-Home"
+            }
+          },
+          {
+            "extension": [
+              {
+                "url": "acceptingPatients",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "system": "http://hl7.org/fhir/us/davinci-pdex-plan-net/CodeSystem/AcceptingPatientsCS",
+                      "code": "newpt",
+                      "display": "Accepting"
+                    }
+                  ]
+                }
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/newpatients"
+          }
+        ],
+        "active": true,
+        "practitioner": {
+          "reference": "https://fhir.humana.com/api/Practitioner/121019814f05e529b5361d8f73ad779dc73f8ac1a56b30a86461234a543db35a"
+        },
+        "organization": {
+          "reference": "https://fhir.humana.com/api/Organization/0c6adf013d89e438099b97308930f26873474fb930144586d0e7e9f899a94c5e",
+          "display": "Georgia UVC Medical LLC"
+        },
+        "specialty": [
+          {
+            "coding": [
+              {
+                "system": "http://nucc.org/provider-taxonomy",
+                "code": "208600000X",
+                "display": "Surgery Physician"
+              }
+            ]
+          }
+        ],
+        "location": [
+          {
+            "reference": "https://fhir.humana.com/api/Location/8c1ba654cae7147af2a4416209657fe96b1652a37b118e88fbce9f15edec44a9",
+            "display": "Georgia UVC Medical LLC, Atlanta"
+          },
+          {
+            "reference": "https://fhir.humana.com/api/Location/6839aaa77c5e54dea12375ba40ba82ba857cab9bc5ad8c23461a308d2350400f",
+            "display": "Georgia UVC Medical LLC, Kennesaw"
+          },
+          {
+            "reference": "https://fhir.humana.com/api/Location/17c0c39780dfd71a56fead8cb3babb5536faeda9b11ec1d9de2a9c5143d7b50b",
+            "display": "Georgia UVC Medical LLC, Duluth"
+          },
+          {
+            "reference": "https://fhir.humana.com/api/Location/89cd6360dce8a159a224dbb372bf0400fe4c7674af7c320b5249ee3fb6ca35d4",
+            "display": "Georgia UVC Medical LLC, Newnan"
+          }
+        ],
+        "telecom": [
+          {
+            "system": "phone",
+            "value": "8009916117",
+            "use": "work"
+          },
+          {
+            "system": "fax",
+            "value": "8888128191",
+            "use": "work"
+          },
+          {
+            "system": "phone",
+            "value": "8009116117",
+            "use": "work"
+          }
+        ],
+        "meta": {
+          "versionId": "821e9a66-485f-4221-889f-cc97e367bd7a",
+          "lastUpdated": "2026-06-18T10:57:14.231+00:00"
+        }
+      }
+    },
+    {
+      "fullUrl": "https://fhir.humana.com/api/PractitionerRole/23ceb95234258bb18f2d344e2c269a30043afb7cff25e68357cf0569557682d4",
+      "search": {
+        "mode": "match"
+      },
+      "resource": {
+        "resourceType": "PractitionerRole",
+        "id": "23ceb95234258bb18f2d344e2c269a30043afb7cff25e68357cf0569557682d4",
+        "extension": [
+          {
+            "extension": [
+              {
+                "url": "ratingType",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "system": "https://fhir.humana.com/documentation/glossary/ProviderRatings",
+                      "code": "efficiencyDescription"
+                    }
+                  ]
+                }
+              },
+              {
+                "url": "ratingValue",
+                "valueString": "3 badges"
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/directory-query/StructureDefinition/rating"
+          },
+          {
+            "url": "http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/network-reference",
+            "valueReference": {
+              "reference": "https://fhir.humana.com/api/Organization/f8d3bbe174ecae019d3d0f1c9ba7b9653e31f49e30b2f66795e77c119b51ba14",
+              "display": "Medicare PPO"
+            }
+          },
+          {
+            "extension": [
+              {
+                "url": "acceptingPatients",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "system": "http://hl7.org/fhir/us/davinci-pdex-plan-net/CodeSystem/AcceptingPatientsCS",
+                      "code": "newpt",
+                      "display": "Accepting"
+                    }
+                  ]
+                }
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/newpatients"
+          }
+        ],
+        "active": true,
+        "practitioner": {
+          "reference": "https://fhir.humana.com/api/Practitioner/121019814f05e529b5361d8f73ad779dc73f8ac1a56b30a86461234a543db35a"
+        },
+        "organization": {
+          "reference": "https://fhir.humana.com/api/Organization/0c6adf013d89e438099b97308930f26873474fb930144586d0e7e9f899a94c5e",
+          "display": "Georgia UVC Medical LLC"
+        },
+        "specialty": [
+          {
+            "coding": [
+              {
+                "system": "http://nucc.org/provider-taxonomy",
+                "code": "208600000X",
+                "display": "Surgery Physician"
+              }
+            ]
+          }
+        ],
+        "location": [
+          {
+            "reference": "https://fhir.humana.com/api/Location/8c1ba654cae7147af2a4416209657fe96b1652a37b118e88fbce9f15edec44a9",
+            "display": "Georgia UVC Medical LLC, Atlanta"
+          },
+          {
+            "reference": "https://fhir.humana.com/api/Location/6839aaa77c5e54dea12375ba40ba82ba857cab9bc5ad8c23461a308d2350400f",
+            "display": "Georgia UVC Medical LLC, Kennesaw"
+          },
+          {
+            "reference": "https://fhir.humana.com/api/Location/17c0c39780dfd71a56fead8cb3babb5536faeda9b11ec1d9de2a9c5143d7b50b",
+            "display": "Georgia UVC Medical LLC, Duluth"
+          },
+          {
+            "reference": "https://fhir.humana.com/api/Location/89cd6360dce8a159a224dbb372bf0400fe4c7674af7c320b5249ee3fb6ca35d4",
+            "display": "Georgia UVC Medical LLC, Newnan"
+          }
+        ],
+        "telecom": [
+          {
+            "system": "phone",
+            "value": "8009916117",
+            "use": "work"
+          },
+          {
+            "system": "fax",
+            "value": "8888128191",
+            "use": "work"
+          },
+          {
+            "system": "phone",
+            "value": "8009116117",
+            "use": "work"
+          }
+        ],
+        "meta": {
+          "versionId": "593b3fb0-d6be-440c-b0c7-6eb670b83e27",
+          "lastUpdated": "2026-06-18T10:57:14.233+00:00"
+        }
+      }
+    },
+    {
+      "fullUrl": "https://fhir.humana.com/api/PractitionerRole/99efbf899c8a8d3b584f219062d93677051895a418342698885e61fee0d30043",
+      "search": {
+        "mode": "match"
+      },
+      "resource": {
+        "resourceType": "PractitionerRole",
+        "id": "99efbf899c8a8d3b584f219062d93677051895a418342698885e61fee0d30043",
+        "extension": [
+          {
+            "extension": [
+              {
+                "url": "ratingType",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "system": "https://fhir.humana.com/documentation/glossary/ProviderRatings",
+                      "code": "efficiencyDescription"
+                    }
+                  ]
+                }
+              },
+              {
+                "url": "ratingValue",
+                "valueString": "3 badges"
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/directory-query/StructureDefinition/rating"
+          },
+          {
+            "url": "http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/network-reference",
+            "valueReference": {
+              "reference": "https://fhir.humana.com/api/Organization/0a609147cc7d87902af003803df3afdca9785f9cc391962a3d7c0eff6c1d490f",
+              "display": "Medicare PPO/Employer PPO Plus"
+            }
+          },
+          {
+            "extension": [
+              {
+                "url": "acceptingPatients",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "system": "http://hl7.org/fhir/us/davinci-pdex-plan-net/CodeSystem/AcceptingPatientsCS",
+                      "code": "newpt",
+                      "display": "Accepting"
+                    }
+                  ]
+                }
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/newpatients"
+          }
+        ],
+        "active": true,
+        "practitioner": {
+          "reference": "https://fhir.humana.com/api/Practitioner/121019814f05e529b5361d8f73ad779dc73f8ac1a56b30a86461234a543db35a"
+        },
+        "organization": {
+          "reference": "https://fhir.humana.com/api/Organization/0c6adf013d89e438099b97308930f26873474fb930144586d0e7e9f899a94c5e",
+          "display": "Georgia UVC Medical LLC"
+        },
+        "specialty": [
+          {
+            "coding": [
+              {
+                "system": "http://nucc.org/provider-taxonomy",
+                "code": "208600000X",
+                "display": "Surgery Physician"
+              }
+            ]
+          }
+        ],
+        "location": [
+          {
+            "reference": "https://fhir.humana.com/api/Location/8c1ba654cae7147af2a4416209657fe96b1652a37b118e88fbce9f15edec44a9",
+            "display": "Georgia UVC Medical LLC, Atlanta"
+          },
+          {
+            "reference": "https://fhir.humana.com/api/Location/6839aaa77c5e54dea12375ba40ba82ba857cab9bc5ad8c23461a308d2350400f",
+            "display": "Georgia UVC Medical LLC, Kennesaw"
+          },
+          {
+            "reference": "https://fhir.humana.com/api/Location/17c0c39780dfd71a56fead8cb3babb5536faeda9b11ec1d9de2a9c5143d7b50b",
+            "display": "Georgia UVC Medical LLC, Duluth"
+          },
+          {
+            "reference": "https://fhir.humana.com/api/Location/89cd6360dce8a159a224dbb372bf0400fe4c7674af7c320b5249ee3fb6ca35d4",
+            "display": "Georgia UVC Medical LLC, Newnan"
+          }
+        ],
+        "telecom": [
+          {
+            "system": "phone",
+            "value": "8009916117",
+            "use": "work"
+          },
+          {
+            "system": "fax",
+            "value": "8888128191",
+            "use": "work"
+          },
+          {
+            "system": "phone",
+            "value": "8009116117",
+            "use": "work"
+          }
+        ],
+        "meta": {
+          "versionId": "fb325d9d-a68a-4910-8c06-1894a2759ae4",
+          "lastUpdated": "2026-06-18T10:57:14.251+00:00"
+        }
+      }
+    },
+    {
+      "fullUrl": "https://fhir.humana.com/api/PractitionerRole/630bd4ffea2cf54bed2d54a59973a4a40ff279a9a6aa05e96c8b265eb8f17a90",
+      "search": {
+        "mode": "match"
+      },
+      "resource": {
+        "resourceType": "PractitionerRole",
+        "id": "630bd4ffea2cf54bed2d54a59973a4a40ff279a9a6aa05e96c8b265eb8f17a90",
+        "extension": [
+          {
+            "extension": [
+              {
+                "url": "ratingType",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "system": "https://fhir.humana.com/documentation/glossary/ProviderRatings",
+                      "code": "efficiencyDescription"
+                    }
+                  ]
+                }
+              },
+              {
+                "url": "ratingValue",
+                "valueString": "3 badges"
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/directory-query/StructureDefinition/rating"
+          },
+          {
+            "url": "http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/network-reference",
+            "valueReference": {
+              "reference": "https://fhir.humana.com/api/Organization/5d626ffed77edf02baec65eb1803acff508bd70bf6a0d695c3f112ca1f4bc4de",
+              "display": "Natl Medicare HMO/SNP-Travel"
+            }
+          },
+          {
+            "extension": [
+              {
+                "url": "acceptingPatients",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "system": "http://hl7.org/fhir/us/davinci-pdex-plan-net/CodeSystem/AcceptingPatientsCS",
+                      "code": "newpt",
+                      "display": "Accepting"
+                    }
+                  ]
+                }
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/newpatients"
+          }
+        ],
+        "active": true,
+        "practitioner": {
+          "reference": "https://fhir.humana.com/api/Practitioner/121019814f05e529b5361d8f73ad779dc73f8ac1a56b30a86461234a543db35a"
+        },
+        "organization": {
+          "reference": "https://fhir.humana.com/api/Organization/0c6adf013d89e438099b97308930f26873474fb930144586d0e7e9f899a94c5e",
+          "display": "Georgia UVC Medical LLC"
+        },
+        "specialty": [
+          {
+            "coding": [
+              {
+                "system": "http://nucc.org/provider-taxonomy",
+                "code": "208600000X",
+                "display": "Surgery Physician"
+              }
+            ]
+          }
+        ],
+        "location": [
+          {
+            "reference": "https://fhir.humana.com/api/Location/8c1ba654cae7147af2a4416209657fe96b1652a37b118e88fbce9f15edec44a9",
+            "display": "Georgia UVC Medical LLC, Atlanta"
+          },
+          {
+            "reference": "https://fhir.humana.com/api/Location/6839aaa77c5e54dea12375ba40ba82ba857cab9bc5ad8c23461a308d2350400f",
+            "display": "Georgia UVC Medical LLC, Kennesaw"
+          },
+          {
+            "reference": "https://fhir.humana.com/api/Location/17c0c39780dfd71a56fead8cb3babb5536faeda9b11ec1d9de2a9c5143d7b50b",
+            "display": "Georgia UVC Medical LLC, Duluth"
+          },
+          {
+            "reference": "https://fhir.humana.com/api/Location/89cd6360dce8a159a224dbb372bf0400fe4c7674af7c320b5249ee3fb6ca35d4",
+            "display": "Georgia UVC Medical LLC, Newnan"
+          }
+        ],
+        "telecom": [
+          {
+            "system": "phone",
+            "value": "8009916117",
+            "use": "work"
+          },
+          {
+            "system": "fax",
+            "value": "8888128191",
+            "use": "work"
+          },
+          {
+            "system": "phone",
+            "value": "8009116117",
+            "use": "work"
+          }
+        ],
+        "meta": {
+          "versionId": "9b4a750e-881a-4485-ab3b-3405c1bb34bf",
+          "lastUpdated": "2026-06-18T10:57:14.251+00:00"
+        }
+      }
+    },
+    {
+      "fullUrl": "https://fhir.humana.com/api/PractitionerRole/d19c8efc081d57d8f1fc9392b9d371c9669a545ecd7f2ded1b6ffd70c08690b9",
+      "search": {
+        "mode": "match"
+      },
+      "resource": {
+        "resourceType": "PractitionerRole",
+        "id": "d19c8efc081d57d8f1fc9392b9d371c9669a545ecd7f2ded1b6ffd70c08690b9",
+        "extension": [
+          {
+            "extension": [
+              {
+                "url": "ratingType",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "system": "https://fhir.humana.com/documentation/glossary/ProviderRatings",
+                      "code": "efficiencyDescription"
+                    }
+                  ]
+                }
+              },
+              {
+                "url": "ratingValue",
+                "valueString": "3 badges"
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/directory-query/StructureDefinition/rating"
+          },
+          {
+            "url": "http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/network-reference",
+            "valueReference": {
+              "reference": "https://fhir.humana.com/api/Organization/641c11efc915cb3a7a1065d7674e49bcdf33e94ec25305211050eca96b3c9377",
+              "display": "Natl Med HMO/SNP H4141-Home"
+            }
+          },
+          {
+            "extension": [
+              {
+                "url": "acceptingPatients",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "system": "http://hl7.org/fhir/us/davinci-pdex-plan-net/CodeSystem/AcceptingPatientsCS",
+                      "code": "newpt",
+                      "display": "Accepting"
+                    }
+                  ]
+                }
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/newpatients"
+          }
+        ],
+        "active": true,
+        "practitioner": {
+          "reference": "https://fhir.humana.com/api/Practitioner/121019814f05e529b5361d8f73ad779dc73f8ac1a56b30a86461234a543db35a"
+        },
+        "organization": {
+          "reference": "https://fhir.humana.com/api/Organization/0c6adf013d89e438099b97308930f26873474fb930144586d0e7e9f899a94c5e",
+          "display": "Georgia UVC Medical LLC"
+        },
+        "specialty": [
+          {
+            "coding": [
+              {
+                "system": "http://nucc.org/provider-taxonomy",
+                "code": "208600000X",
+                "display": "Surgery Physician"
+              }
+            ]
+          }
+        ],
+        "location": [
+          {
+            "reference": "https://fhir.humana.com/api/Location/8c1ba654cae7147af2a4416209657fe96b1652a37b118e88fbce9f15edec44a9",
+            "display": "Georgia UVC Medical LLC, Atlanta"
+          },
+          {
+            "reference": "https://fhir.humana.com/api/Location/6839aaa77c5e54dea12375ba40ba82ba857cab9bc5ad8c23461a308d2350400f",
+            "display": "Georgia UVC Medical LLC, Kennesaw"
+          },
+          {
+            "reference": "https://fhir.humana.com/api/Location/17c0c39780dfd71a56fead8cb3babb5536faeda9b11ec1d9de2a9c5143d7b50b",
+            "display": "Georgia UVC Medical LLC, Duluth"
+          },
+          {
+            "reference": "https://fhir.humana.com/api/Location/89cd6360dce8a159a224dbb372bf0400fe4c7674af7c320b5249ee3fb6ca35d4",
+            "display": "Georgia UVC Medical LLC, Newnan"
+          }
+        ],
+        "telecom": [
+          {
+            "system": "phone",
+            "value": "8009916117",
+            "use": "work"
+          },
+          {
+            "system": "fax",
+            "value": "8888128191",
+            "use": "work"
+          },
+          {
+            "system": "phone",
+            "value": "8009116117",
+            "use": "work"
+          }
+        ],
+        "meta": {
+          "versionId": "1ae713aa-0cb6-4bf3-94b7-663fecc7ca39",
+          "lastUpdated": "2026-06-18T10:57:14.234+00:00"
+        }
+      }
+    }
+  ],
+  "total": 10,
+  "link": [
+    {
+      "relation": "self",
+      "url": "https://fhir.humana.com/api/PractitionerRole?practitioner=121019814f05e529b5361d8f73ad779dc73f8ac1a56b30a86461234a543db35a&_total=estimate&_count=50&_skip=0"
+    }
+  ],
+  "id": "85d71cd1-657d-4ccc-a878-2f3754333237"
+}

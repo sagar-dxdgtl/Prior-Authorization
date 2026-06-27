@@ -1,0 +1,17 @@
+{
+  "resourceType": "Bundle",
+  "type": "searchset",
+  "timestamp": "2026-06-22T18:12:21.875+00:00",
+  "meta": {
+    "lastUpdated": "2026-06-22T18:12:21.875+00:00",
+    "versionId": "87710b59-b990-4c22-802e-7e6695c5a229"
+  },
+  "total": 0,
+  "link": [
+    {
+      "relation": "self",
+      "url": "https://fhir.humana.com/api/Practitioner?identifier=1000000004&_total=estimate&_count=20&_skip=0"
+    }
+  ],
+  "id": "fa6d14d6-10c0-482c-a340-c2e55663ce94"
+}

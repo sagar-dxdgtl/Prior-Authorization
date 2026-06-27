@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Provider Network Verification</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%230e7c86'/%3E%3Cpath d='M6 17V7l12 10V7' stroke='%23eafafa' stroke-width='2.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0a1a2f; --navy:#0d2440; --canvas:#eef1f5; --surface:#ffffff;
+    --line:#dce2ea; --line-strong:#c3ccd8; --muted:#5b6b7d; --soft:#8696a8;
+    --accent:#0e7c86; --accent-deep:#0a5b63; --accent-wash:#e6f3f4;
+    --in:#1b7f4b; --in-wash:#e7f4ec; --oon:#b42318; --oon-wash:#fdecea;
+    --unk:#9a5b09; --unk-wash:#fbf1e0;
+    --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --shadow:0 1px 2px rgba(10,26,47,.05),0 10px 28px rgba(10,26,47,.07);
+  }
+  *{box-sizing:border-box}
+  html{-webkit-font-smoothing:antialiased}
+  body{margin:0;font-family:var(--sans);color:var(--ink);background:var(--canvas);line-height:1.45}
+
+  /* top bar */
+  .topbar{background:var(--navy);color:#fff;border-bottom:1px solid #08203a}
+  .topbar .inner{max-width:none;margin:0;padding:14px 32px;display:flex;align-items:center;gap:14px}
+  .mark{width:30px;height:30px;border-radius:7px;background:linear-gradient(135deg,var(--accent),#13a3a0);
+        display:grid;place-items:center;font-weight:700;font-size:15px;color:#04222a;flex:none}
+  .brand{display:flex;flex-direction:column;line-height:1.15}
+  .brand b{font-size:15px;font-weight:600;letter-spacing:-.01em}
+  .brand span{font-size:11px;color:#9fb3c8;font-family:var(--mono)}
+  .live{margin-left:auto;display:flex;align-items:center;gap:7px;font-size:11px;color:#a7d8da;
+        font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em}
+  .live .pulse{width:8px;height:8px;border-radius:50%;background:#3ad29f;box-shadow:0 0 0 0 rgba(58,210,159,.6);
+        animation:pulse 2.4s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(58,210,159,.55)}70%{box-shadow:0 0 0 7px rgba(58,210,159,0)}100%{box-shadow:0 0 0 0 rgba(58,210,159,0)}}
+
+  .shell{max-width:none;margin:0;padding:26px 32px 60px;display:grid;
+         grid-template-columns:380px minmax(0,1fr);gap:22px;align-items:start}
+  @media(max-width:840px){.shell{grid-template-columns:1fr}}
+
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
+  .panel-h{padding:15px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
+  .panel-h h2{margin:0;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.09em;color:var(--muted)}
+  .panel-b{padding:18px 20px}
+  .query{position:sticky;top:22px}
+
+  label{display:block;font-size:11px;font-weight:600;color:#34465a;margin:14px 0 5px;letter-spacing:.01em}
+  label:first-of-type{margin-top:0}
+  input,select{width:100%;padding:9px 11px;border:1px solid var(--line-strong);border-radius:8px;
+        font-size:14px;font-family:var(--sans);background:#fff;color:var(--ink);transition:border-color .12s,box-shadow .12s}
+  input.mono{font-family:var(--mono);letter-spacing:.02em}
+  input[type=file]{width:100%;font-size:12px;color:var(--muted);padding:0}
+  input[type=file]::file-selector-button{font-family:var(--sans);font-size:12px;font-weight:600;
+    color:var(--accent-deep);background:var(--accent-wash);border:1px solid var(--accent);
+    border-radius:7px;padding:7px 11px;margin-right:10px;cursor:pointer}
+  input::placeholder{color:#aab6c4}
+  input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-wash)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+  .rule{height:1px;background:var(--line);margin:16px 0 2px}
+  .needs{margin-top:8px;font-size:11px;color:var(--soft);font-family:var(--mono)}
+  .run{margin-top:20px;width:100%;padding:12px;border:0;border-radius:9px;background:var(--accent);
+       color:#fff;font-family:var(--sans);font-size:14px;font-weight:600;cursor:pointer;letter-spacing:.01em;transition:background .12s}
+  .run:hover{background:var(--accent-deep)} .run:active{transform:translateY(1px)} .run:disabled{opacity:.55;cursor:wait}
+
+  /* determination */
+  .empty{padding:52px 28px;text-align:center;color:var(--soft);font-size:13.5px}
+  .empty svg{display:block;margin:0 auto 14px;opacity:.5}
+  .verdict{padding:22px 24px;animation:rise .28s ease both}
+  @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .vhead{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .lozenge{display:inline-flex;align-items:center;gap:10px;padding:10px 16px;border-radius:10px;
+           font-size:17px;font-weight:700;letter-spacing:-.01em;border:1px solid}
+  .lozenge .ic{width:20px;height:20px;flex:none}
+  .l-in{background:var(--in-wash);color:var(--in);border-color:#bfe3cd}
+  .l-oon{background:var(--oon-wash);color:var(--oon);border-color:#f3c9c4}
+  .l-unk{background:var(--unk-wash);color:var(--unk);border-color:#eed9b3}
+  .l-rev{background:#fff1e3;color:#9a3b00;border-color:#f3c39a}
+  .xc{display:flex;gap:8px;align-items:baseline;margin-top:6px;font-size:13px}
+  .xc .r{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.04em;
+         padding:1px 6px;border-radius:5px;flex:none}
+  .xc .r.corroborates{background:var(--in-wash);color:var(--in)}
+  .xc .r.contradicts{background:var(--oon-wash);color:var(--oon)}
+  .xc .r.inconclusive{background:#eef1f5;color:var(--muted)}
+  .conf{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted);
+        font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em}
+  .meter{display:flex;gap:3px}
+  .meter i{width:6px;height:14px;border-radius:2px;background:var(--line-strong)}
+  .meter i.on{background:var(--accent)}
+
+  .facts{margin-top:20px;border-top:1px solid var(--line);padding-top:4px}
+  .fact{padding:13px 0;border-bottom:1px solid var(--line)}
+  .fact .k{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--soft)}
+  .fact .v{margin-top:5px;font-size:14px;color:var(--ink)}
+  .fact .v.mono{font-family:var(--mono);font-size:13px;word-break:break-word}
+  .tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .tag{font-family:var(--mono);font-size:12px;background:#f1f4f8;border:1px solid var(--line);
+       border-radius:6px;padding:3px 9px;color:#3b4d61}
+  .tag.match{background:var(--in-wash);border-color:#bfe3cd;color:var(--in);font-weight:600}
+  .evidence a{display:flex;gap:8px;font-family:var(--mono);font-size:11.5px;color:var(--accent-deep);
+              text-decoration:none;margin-top:7px;word-break:break-all;line-height:1.4}
+  .evidence a::before{content:"↗";color:var(--soft);flex:none}
+  .evidence a:hover{text-decoration:underline}
+  details{margin-top:16px} summary{cursor:pointer;font-size:11px;color:var(--muted);font-family:var(--mono);
+          text-transform:uppercase;letter-spacing:.06em}
+  pre{background:var(--ink);color:#cfe3f2;padding:14px;border-radius:9px;overflow:auto;
+      font-family:var(--mono);font-size:11.5px;margin-top:9px;line-height:1.5}
+  .errbox{padding:22px 24px}
+  .errbox .e{background:var(--oon-wash);border:1px solid #f3c9c4;color:var(--oon);
+             border-radius:9px;padding:13px 15px;font-size:13.5px}
+  .spin{display:flex;gap:11px;align-items:center;color:var(--muted);font-size:13.5px;padding:34px 24px}
+  .spin .s,.probe-h .s{width:20px;height:20px;border:3px solid var(--line);border-top-color:var(--accent);
+           border-radius:50%;animation:rot .8s linear infinite;flex:none}
+  @keyframes rot{to{transform:rotate(360deg)}}
+
+  /* multi-source probe loader */
+  .probe{padding:24px 26px;animation:rise .28s ease both}
+  .probe-h{display:flex;gap:11px;align-items:center;color:var(--ink);font-size:14px;font-weight:600;margin-bottom:14px}
+  .steps{list-style:none;margin:0;padding:0}
+  .steps li{display:flex;align-items:center;gap:11px;padding:10px 0;font-size:13px;color:var(--soft);
+            border-bottom:1px solid var(--line)}
+  .steps li:last-child{border-bottom:0}
+  .steps li::before{content:"";width:16px;height:16px;border-radius:50%;border:2px solid var(--line-strong);
+                    box-sizing:border-box;flex:none}
+  .steps li.active{color:var(--ink);font-weight:500}
+  .steps li.active::before{border-color:var(--accent);border-top-color:transparent;animation:rot .7s linear infinite}
+  .steps li.done{color:var(--muted)}
+  .steps li.done::before{content:"✓";border-color:var(--in);background:var(--in);color:#fff;font-size:11px;
+                         font-weight:700;display:grid;place-items:center;animation:none}
+  .foot{max-width:none;margin:0;padding:0 32px 40px;color:var(--soft);font-size:11.5px;line-height:1.6}
+  .foot code{font-family:var(--mono);color:var(--muted)}
+  @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+  /* evidence lanes */
+  .lanes{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:18px}
+  @media(max-width:520px){.lanes{grid-template-columns:1fr}}
+  .lane{border:1px solid var(--line);border-radius:10px;padding:12px 13px;background:#fbfcfe}
+  .lane h4{margin:0 0 6px;font-size:10.5px;font-weight:600;text-transform:uppercase;
+           letter-spacing:.07em;color:var(--soft);display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .lane .badge{font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.04em;
+               padding:2px 6px;border-radius:5px;white-space:nowrap}
+  .badge.live{background:var(--in-wash);color:var(--in);border:1px solid #bfe3cd}
+  .badge.needs{background:var(--unk-wash);color:var(--unk);border:1px solid #eed9b3}
+  .lane .ld{font-size:12.5px;color:var(--ink);line-height:1.4}
+  .lane .ld .res{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;
+                 padding:1px 5px;border-radius:4px;margin-right:5px}
+  .res.corroborates{background:var(--in-wash);color:var(--in)}
+  .res.contradicts{background:var(--oon-wash);color:var(--oon)}
+  .res.inconclusive{background:#eef1f5;color:var(--muted)}
+  .lane .sub{margin-top:5px;font-size:11px;color:var(--soft);font-family:var(--mono)}
+  /* ground-truth banner */
+  .gt{margin-top:18px;border:1px solid var(--line-strong);border-radius:10px;padding:13px 15px;background:#fff}
+  .gt.caught{border-color:#bfe3cd;background:var(--in-wash)}
+  .gt.missed{border-color:#f3c9c4;background:var(--oon-wash)}
+  .gt .row{display:flex;gap:10px;font-size:13px;margin:2px 0}
+  .gt .row b{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.05em;
+             color:var(--muted);min-width:54px}
+  .gt .how{margin-top:6px;font-size:12px;color:var(--ink)}
+  .sctag{font-size:11px;color:var(--muted);font-family:var(--mono)}
+</style>
+</head>
+<body>
+<div class="topbar"><div class="inner">
+  <div class="mark">N</div>
+  <div class="brand"><b>Provider Network Verification</b><span>network-status enrichment · RCM</span></div>
+  <div class="live"><span class="pulse"></span> live directory</div>
+</div></div>
+
+<div class="shell">
+  <!-- QUERY -->
+  <section class="panel query">
+    <div class="panel-h"><h2>Query</h2></div>
+    <div class="panel-b">
+      <label for="report">Eligibility report (pVerify 271 PDF)</label>
+      <input type="file" id="report" accept="application/pdf" />
+      <div class="rule"></div>
+
+      <label for="sample">Test case · from eligibility reports</label>
+      <select id="sample"></select>
+      <div class="rule"></div>
+
+      <label for="payer">Payer &amp; network source</label>
+      <select id="payer"></select>
+      <div class="needs" id="needs"></div>
+
+      <label for="plan">Plan / network</label>
+      <input id="plan" placeholder="e.g. Medicare PPO" />
+
+      <div class="grid2">
+        <div><label for="npi">NPI</label><input id="npi" class="mono" placeholder="1679766943" /></div>
+        <div><label for="last">Last name</label><input id="last" placeholder="Herron" /></div>
+      </div>
+      <div class="grid2">
+        <div><label for="first">First name</label><input id="first" placeholder="optional" /></div>
+        <div><label for="year">Coverage year</label><input id="year" class="mono" placeholder="current" /></div>
+      </div>
+      <div class="grid2">
+        <div><label for="state">State</label><input id="state" placeholder="FL" maxlength="2" /></div>
+        <div><label for="zip">ZIP</label><input id="zip" class="mono" placeholder="33409" /></div>
+      </div>
+      <label for="tin">Billing TIN <span style="font-weight:400;color:var(--soft)">· optional, group-level check</span></label>
+      <input id="tin" class="mono" placeholder="e.g. 463812940" />
+      <div id="baseurl-wrap" style="display:none">
+        <label for="baseurl">FHIR base URL</label>
+        <input id="baseurl" class="mono" placeholder="https://fhir.humana.com/api" />
+      </div>
+
+      <button class="run" id="go">Verify network status</button>
+    </div>
+  </section>
+
+  <!-- DETERMINATION -->
+  <section class="panel">
+    <div class="panel-h"><h2>Determination</h2><span id="payerTag" class="needs"></span></div>
+    <div id="result">
+      <div class="empty">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#8696a8" stroke-width="1.4">
+          <path d="M12 3l8 4v5c0 4.4-3 7.7-8 9-5-1.3-8-4.6-8-9V7l8-4z"/><path d="M9 12l2 2 4-4"/></svg>
+        Enter a provider and plan, then run a verification.<br>Every determination cites the exact endpoint it came from.
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="foot">
+  Reads open payer directories and public, compliance-mandated FHIR Provider Directory APIs only.
+  No authentication, CAPTCHAs, or bot protections are bypassed. A directory is one signal, not ground
+  truth — a single-source in-network is reported at <code>medium</code> confidence, and when an
+  independent source (e.g. NPPES) disagrees the verdict becomes <code>REVIEW</code>. Ambiguity returns
+  <code>INDETERMINATE</code>, never a guessed verdict.
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let PAYERS = [], SAMPLES = [], LAST = null;
+
+async function loadSamples(){
+  try{ SAMPLES = await (await fetch('/api/samples')).json(); }catch(e){ SAMPLES = []; }
+  $('sample').innerHTML = '<option value="">— Select a test case —</option>' +
+    SAMPLES.map((s,i)=>`<option value="${i}">${esc(s.label)}</option>`).join('');
+  $('sample').onchange = () => {
+    const s = SAMPLES[$('sample').value]; if(!s) return;
+    $('payer').value = s.payer; onPayer(); fill(s);
+  };
+}
+
+async function loadPayers(){
+  try{ PAYERS = await (await fetch('/api/payers')).json(); }
+  catch(e){ PAYERS = []; }
+  $('payer').innerHTML = PAYERS.map(p=>`<option value="${p.key}">${p.label}</option>`).join('');
+  $('payer').onchange = onPayer; onPayer();
+}
+const meta = () => PAYERS.find(p => p.key === $('payer').value) || {};
+function onPayer(){
+  const m = meta();
+  $('needs').textContent = m.needs ? 'requires: ' + m.needs.join(' · ') : '';
+  $('baseurl-wrap').style.display = (m.needs||[]).includes('base_url') ? 'block' : 'none';
+}
+function fill(e){
+  $('plan').value=e.plan||''; $('npi').value=e.npi||''; $('last').value=e.last_name||'';
+  $('first').value=e.first_name||''; $('state').value=e.state||''; $('zip').value=e.zip||'';
+  $('tin').value=e.tin||''; $('baseurl').value=e.base_url||'';
+}
+
+const ICON = {
+  IN_NETWORK:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>',
+  OUT_OF_NETWORK:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 6L6 18M6 6l12 12"/></svg>',
+  UNKNOWN:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9.1 9a3 3 0 1 1 4.2 2.7c-.8.4-1.3 1-1.3 2"/><circle cx="12" cy="17.5" r=".6" fill="currentColor" stroke="none"/></svg>',
+  REVIEW:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 3l9 16H3z"/><path d="M12 10v4"/><circle cx="12" cy="17" r=".6" fill="currentColor" stroke="none"/></svg>',
+};
+const VERDICT = {
+  IN_NETWORK:{cls:'l-in',text:'In network'},
+  OUT_OF_NETWORK:{cls:'l-oon',text:'Out of network'},
+  UNKNOWN:{cls:'l-unk',text:'Indeterminate'},
+  REVIEW:{cls:'l-rev',text:'Needs review'},
+};
+const esc = s => (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const CONF = {high:3, medium:2, low:1};
+
+const SHORT = {IN_NETWORK:'IN_NETWORK', OUT_OF_NETWORK:'OUT_OF_NETWORK', UNKNOWN:'UNKNOWN', REVIEW:'REVIEW'};
+
+function intakeFrom(d){
+  // 271 intake lane: prefer parsed report, else echo the submitted query (LAST)
+  const p = d.parsed, b = LAST || {};
+  if(p) return `${esc(p.payer_name||p.payer_key||'')} · ${esc(p.plan_name||'')}<br>${esc((p.provider_first||'')+' '+(p.provider_last||''))} · NPI ${esc(p.npi||'—')}`;
+  return `${esc(d.payer||b.payer||'')} · ${esc(b.plan||'—')}<br>${esc(b.last_name||'')} · NPI ${esc(b.npi||'—')}`;
+}
+
+function laneCard(title, badgeText, badgeCls, bodyHtml, subHtml){
+  return `<div class="lane"><h4>${esc(title)}<span class="badge ${badgeCls}">${esc(badgeText)}</span></h4>
+    <div class="ld">${bodyHtml}</div>${subHtml?`<div class="sub">${subHtml}</div>`:''}</div>`;
+}
+
+function sigBy(d, source){ return (d.evidence&&d.evidence.signals||[]).find(s=>s.source===source); }
+
+function renderLanes(d){
+  const ev = d.evidence||{}; const pd = ev.payer_directory||{};
+  // 271 intake (LIVE)
+  const l271 = laneCard('Eligibility 271 (intake)', 'LIVE', 'live', intakeFrom(d),
+    'parsed from the eligibility report / query');
+  // payer directory (LIVE) — the raw pre-finalize signal
+  const mp = pd.matched_provider||{};
+  const pdBody = `<span class="res ${pd.status==='IN_NETWORK'?'corroborates':(pd.status==='OUT_OF_NETWORK'?'contradicts':'inconclusive')}">${esc(SHORT[pd.status]||pd.status||'—')}</span>`
+    + esc(mp.name? mp.name : (pd.plan_or_network_checked||''));
+  const lPayer = laneCard('Payer directory (website / API)', 'LIVE', 'live', pdBody,
+    esc(pd.plan_or_network_checked||''));
+  // Stedi (LIVE badge per product decision)
+  const st = sigBy(d,'Stedi');
+  const stBody = st? `<span class="res ${esc(st.result)}">${esc(st.result)}</span>${esc(st.detail)}`
+                   : '<span class="sub">no Stedi response</span>';
+  const lStedi = laneCard('Stedi 270/271 eligibility', 'LIVE', 'live', stBody, '');
+  // TIN-scope (dynamic badge)
+  const tin = sigBy(d,'TIN-scope');
+  const tinLive = tin && (tin.result==='corroborates' || tin.result==='contradicts');
+  const tinBody = tin && tinLive
+      ? `<span class="res ${esc(tin.result)}">${esc(tin.result)}</span>${esc(tin.detail)}`
+      : esc(tin? tin.detail : 'No billing TIN evaluated for this case.');
+  const lTin = laneCard('TIN-scope (group billing)', tinLive?'LIVE':'NEEDS INTEGRATION',
+      tinLive?'live':'needs', tinBody,
+      tinLive? '' : 'needs NPI→TIN crosswalk / Availity TIN portal');
+  return `<div class="lanes">${l271}${lPayer}${lStedi}${lTin}</div>`;
+}
+
+function renderGroundTruth(d){
+  const gt = d.ground_truth; if(!gt) return '';
+  const ours = d.status, truth = gt.truth;
+  const pdStatus = (d.evidence&&d.evidence.payer_directory||{}).status;
+  const falseIn  = ours==='IN_NETWORK'     && truth==='OUT_OF_NETWORK';   // the costly miss
+  const falseOon = ours==='OUT_OF_NETWORK' && truth==='IN_NETWORK';
+  const miss = falseIn || falseOon;
+  const tag = miss ? 'MISSED' : (ours===truth && ours==='IN_NETWORK' ? 'confirmed' : 'caught');
+  let how;
+  if(falseIn){
+    how = `We returned IN_NETWORK but the confirmed truth is OUT_OF_NETWORK — directory is stale.`;
+  } else if(falseOon){
+    how = `We returned OUT_OF_NETWORK but the confirmed truth is IN_NETWORK.`;
+  } else if((d.notes||'').toUpperCase().includes('OVERRIDE')){
+    how = `Payer directory said ${esc(SHORT[pdStatus]||'—')} (stale); Availity golden-record override confirmed ${esc(truth)}.`;
+  } else if(pdStatus==='IN_NETWORK' && ours==='REVIEW'){
+    how = `Payer directory said IN_NETWORK; an independent cross-check contradicted it → flagged for review.`;
+  } else if(ours==='IN_NETWORK' && truth==='IN_NETWORK'){
+    how = `Directory and the verified TiC source agree — in-network, and the billing TIN checks out.`;
+  } else if(pdStatus==='OUT_OF_NETWORK'){
+    how = `Payer directory returned OUT_OF_NETWORK directly (provider not listed); corroborated by cross-checks.`;
+  } else {
+    how = `Final verdict ${esc(SHORT[ours])} matches the confirmed truth.`;
+  }
+  return `<div class="gt ${miss?'missed':'caught'}">
+    <div class="row"><b>Real</b><span>${esc(truth)} <span class="sctag">(${esc(gt.source)})</span></span></div>
+    <div class="row"><b>Ours</b><span>${esc(SHORT[ours]||ours)} (${esc(d.confidence||'')}) — ${tag}</span></div>
+    <div class="how">How: ${how}</div></div>`;
+}
+
+function render(d){
+  const r=$('result');
+  $('payerTag').textContent = d.payer ? d.payer : '';
+  if(d.error){ r.innerHTML=`<div class="errbox"><div class="e"><b>Could not verify.</b> ${esc(d.error)}</div></div>`; return; }
+  const v=VERDICT[d.status]||{cls:'l-unk',text:d.status};
+  const lvl=CONF[d.confidence]||0;
+  const meter=[1,2,3].map(i=>`<i class="${i<=lvl?'on':''}"></i>`).join('');
+  const mp=d.matched_provider||{}; const nets=mp.networks||[]; const matched=mp.matched_network;
+
+  const provHtml=(mp.name||mp.npi)?`<div class="fact"><div class="k">Matched provider</div>
+     <div class="v">${esc(mp.name||'—')}${mp.specialty?' · '+esc(mp.specialty):''}</div>
+     ${mp.npi?`<div class="v mono">NPI ${esc(mp.npi)}</div>`:''}</div>`:'';
+  const netHtml=nets.length?`<div class="fact"><div class="k">Networks (${nets.length})</div>
+     <div class="tags">${nets.map(n=>`<span class="tag ${n===matched?'match':''}">${esc(n)}</span>`).join('')}</div></div>`:'';
+  const srcs=(d.source_url||'').split(';').map(s=>s.trim()).filter(Boolean);
+  const srcHtml=srcs.length?`<div class="fact evidence"><div class="k">Source endpoints — audit trail</div>
+     ${srcs.map(u=>`<a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>`).join('')}</div>`:'';
+  // Stedi & TIN-scope already have their own evidence lanes; surface every other signal here
+  // (NPPES, Freshness from evidence.signals; plus the golden-record override from corroboration)
+  // so nothing is duplicated or lost — including when an override replaced the corroboration list.
+  const LANE_SOURCES=new Set(['Stedi','TIN-scope']);
+  const sigExtra=((d.evidence&&d.evidence.signals)||[]).filter(s=>!LANE_SOURCES.has(s.source));
+  const corExtra=(d.corroboration||[]).filter(s=>!LANE_SOURCES.has(s.source) && !sigExtra.some(x=>x.source===s.source));
+  const extra=sigExtra.concat(corExtra);
+  const extraHtml=extra.length?`<div class="fact"><div class="k">Additional cross-checks</div>
+     ${extra.map(s=>`<div class="xc"><span class="r ${esc(s.result)}">${esc(s.result)}</span><span>${esc(s.source)} — ${esc(s.detail)}</span></div>`).join('')}</div>`:'';
+
+  r.innerHTML=`<div class="verdict">
+    <div class="vhead">
+      <span class="lozenge ${v.cls}">${ICON[d.status]||''}${v.text}</span>
+      <span class="conf">confidence <span class="meter">${meter}</span> ${esc(d.confidence||'')}</span>
+    </div>
+    ${renderGroundTruth(d)}
+    <div class="facts">
+      <div class="fact"><div class="k">Plan / network checked</div><div class="v">${esc(d.plan_or_network_checked)}</div></div>
+      ${provHtml}${netHtml}
+      <div class="fact"><div class="k">Rationale</div><div class="v">${esc(d.notes)}</div></div>
+      ${srcHtml}
+    </div>
+    <div class="fact"><div class="k">Evidence by source</div></div>
+    ${renderLanes(d)}
+    ${extraHtml}
+    <details><summary>Raw response</summary><pre>${esc(JSON.stringify(d,null,2))}</pre></details>
+  </div>`;
+}
+
+// Staged loader mirroring the real pipeline; runs in parallel with the fetch so the verdict
+// renders only once both the data and the (~6–9s) probe animation have finished.
+const PROBE_STEPS = [
+  'Parsing eligibility intake (271)',
+  'Querying payer directory (live)',
+  'Cross-checking NPPES identity registry',
+  'Running Stedi 270/271 eligibility',
+  'Checking TIN-scope (group billing)',
+  'Finalizing — corroboration + golden record',
+];
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function runProbe(){
+  $('result').innerHTML = `<div class="probe">
+    <div class="probe-h"><span class="s"></span> Running multi-source network probe…</div>
+    <ul class="steps">${PROBE_STEPS.map((t,i)=>`<li id="pst${i}">${esc(t)}</li>`).join('')}</ul>
+  </div>`;
+  for(let i=0;i<PROBE_STEPS.length;i++){
+    const li=$('pst'+i); if(!li) return; li.className='active';
+    await sleep(900 + Math.random()*700);   // ~0.9–1.6s/step → ~5.5–9.5s total
+    const done=$('pst'+i); if(done) done.className='done';
+  }
+}
+
+async function run(){
+  const body={payer:$('payer').value,plan:$('plan').value,npi:$('npi').value,
+    last_name:$('last').value,first_name:$('first').value,state:$('state').value,zip:$('zip').value,
+    tin:$('tin').value||null,
+    year:$('year').value?parseInt($('year').value,10):null, base_url:$('baseurl').value||null};
+  LAST=body;
+  $('go').disabled=true;
+  const fetchP=fetch('/api/check',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)})
+    .then(r=>r.json()).catch(e=>({error:String(e)}));
+  try{
+    const [data]=await Promise.all([fetchP, runProbe()]);
+    if(!data.error) data.payer=data.payer||body.payer;
+    render(data);
+  }catch(e){ render({error:String(e)}); }
+  finally{ $('go').disabled=false; }
+}
+$('go').onclick=run;
+
+$('report').onchange = async () => {
+  const f = $('report').files[0]; if(!f) return;
+  const fd = new FormData(); fd.append('file', f);
+  const fetchP = fetch('/api/check-from-report',{method:'POST',body:fd}).then(r=>r.json()).catch(e=>({error:String(e)}));
+  try{
+    const [d] = await Promise.all([fetchP, runProbe()]);
+    const p = d.parsed;
+    if(p){ // reflect what we extracted into the form
+      $('payer').value=p.payer_key||$('payer').value; onPayer();
+      $('plan').value=p.plan_name||''; $('npi').value=p.npi||'';
+      $('last').value=p.provider_last||''; $('first').value=p.provider_first||'';
+      $('state').value=p.state||''; $('zip').value=p.zip||'';
+    }
+    LAST = {payer:d.payer, npi:(p||{}).npi, plan:(p||{}).plan_name, tin:null};
+    render(d);
+  }catch(e){ render({error:String(e)}); }
+};
+
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&['INPUT','SELECT'].includes(document.activeElement.tagName))run();});
+loadPayers().then(loadSamples);
+</script>
+</body>
+</html>

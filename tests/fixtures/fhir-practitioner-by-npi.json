@@ -1,0 +1,65 @@
+{
+  "resourceType": "Bundle",
+  "type": "searchset",
+  "timestamp": "2026-06-22T18:12:20.690+00:00",
+  "meta": {
+    "lastUpdated": "2026-06-22T18:12:20.690+00:00",
+    "versionId": "20d08ede-3e63-4bc7-a314-cb3bfd88fd7a"
+  },
+  "entry": [
+    {
+      "fullUrl": "https://fhir.humana.com/api/Practitioner/281cc6570df7d71ff36fae6fce8e91a5384eeea059122711b7955c8ccf220179",
+      "search": {
+        "mode": "match"
+      },
+      "resource": {
+        "resourceType": "Practitioner",
+        "id": "281cc6570df7d71ff36fae6fce8e91a5384eeea059122711b7955c8ccf220179",
+        "identifier": [
+          {
+            "system": "http://hl7.org/fhir/sid/us-npi",
+            "value": "1902966708"
+          }
+        ],
+        "active": true,
+        "name": [
+          {
+            "text": "Sheikh Dilmubarak",
+            "family": "Sheikh",
+            "given": [
+              "Dilmubarak"
+            ]
+          }
+        ],
+        "telecom": [
+          {
+            "system": "phone",
+            "value": "7086150600",
+            "use": "work"
+          }
+        ],
+        "communication": [
+          {
+            "coding": [
+              {
+                "display": "Spanish"
+              }
+            ]
+          }
+        ],
+        "meta": {
+          "versionId": "2397e381-d815-4df5-9615-236d7c1172ea",
+          "lastUpdated": "2026-06-20T20:08:04.850+00:00"
+        }
+      }
+    }
+  ],
+  "total": 1,
+  "link": [
+    {
+      "relation": "self",
+      "url": "https://fhir.humana.com/api/Practitioner?identifier=1902966708&_total=estimate&_count=20&_skip=0"
+    }
+  ],
+  "id": "807af252-6ff0-4fc9-af43-f2f04d6c856a"
+}

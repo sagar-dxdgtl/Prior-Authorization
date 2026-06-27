@@ -1,0 +1,11 @@
+.venv/
+.cache/
+.discovery/
+.playwright-mcp/
+__pycache__/
+*.pyc
+.pytest_cache/
+ui-*.png
+test-data/
+.overrides/
+.DS_Store

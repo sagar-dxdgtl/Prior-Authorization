@@ -1,0 +1,80 @@
+{
+  "resourceType": "Bundle",
+  "type": "searchset",
+  "timestamp": "2026-06-22T18:12:21.250+00:00",
+  "meta": {
+    "lastUpdated": "2026-06-22T18:12:21.250+00:00",
+    "versionId": "ceecb52d-b14c-43fa-9fd4-4a0d582cad99"
+  },
+  "entry": [
+    {
+      "fullUrl": "https://fhir.humana.com/api/PractitionerRole/52b319c7fabdef3e0e669ee2a711a221c34c00eb260e86757a81381f21c6acc9",
+      "search": {
+        "mode": "match"
+      },
+      "resource": {
+        "resourceType": "PractitionerRole",
+        "id": "52b319c7fabdef3e0e669ee2a711a221c34c00eb260e86757a81381f21c6acc9",
+        "extension": [
+          {
+            "url": "http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/network-reference",
+            "valueReference": {
+              "reference": "https://fhir.humana.com/api/Organization/bb20afe03c36e6a35125b52dab057ff512692bb7636e4ed7abd6e2e70439060e",
+              "display": "Dental Medicare-Medicaid Duals"
+            }
+          },
+          {
+            "extension": [
+              {
+                "url": "acceptingPatients",
+                "valueCodeableConcept": {
+                  "coding": [
+                    {
+                      "system": "http://hl7.org/fhir/us/davinci-pdex-plan-net/CodeSystem/AcceptingPatientsCS",
+                      "code": "newpt",
+                      "display": "Accepting"
+                    }
+                  ]
+                }
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/newpatients"
+          }
+        ],
+        "active": true,
+        "practitioner": {
+          "reference": "https://fhir.humana.com/api/Practitioner/281cc6570df7d71ff36fae6fce8e91a5384eeea059122711b7955c8ccf220179"
+        },
+        "organization": {
+          "reference": "https://fhir.humana.com/api/Organization/eac42f7da3d5e366bf868854b647e682877e4d8718d222a149d841dfdee61920",
+          "display": "Sheikh Medical Partnership"
+        },
+        "location": [
+          {
+            "reference": "https://fhir.humana.com/api/Location/7963f159b0a85b5df9dc23a2506ca9593851c1dcf437ae8ea36de87c452e64fd",
+            "display": "Sheikh Medical Partnership, Melrose Park"
+          }
+        ],
+        "telecom": [
+          {
+            "system": "phone",
+            "value": "7086150600",
+            "use": "work"
+          }
+        ],
+        "meta": {
+          "versionId": "3b638fe9-424b-4f65-9398-6985ddbb73b2",
+          "lastUpdated": "2026-06-20T20:08:04.850+00:00"
+        }
+      }
+    }
+  ],
+  "total": 1,
+  "link": [
+    {
+      "relation": "self",
+      "url": "https://fhir.humana.com/api/PractitionerRole?practitioner=281cc6570df7d71ff36fae6fce8e91a5384eeea059122711b7955c8ccf220179&_total=estimate&_count=20&_skip=0"
+    }
+  ],
+  "id": "30df0d85-410c-444f-bc9e-9b6f38783ad3"
+}

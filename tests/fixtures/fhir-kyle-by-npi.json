@@ -1,0 +1,76 @@
+{
+  "resourceType": "Bundle",
+  "type": "searchset",
+  "timestamp": "2026-06-22T18:12:22.250+00:00",
+  "meta": {
+    "lastUpdated": "2026-06-22T18:12:22.250+00:00",
+    "versionId": "9cc771e8-4cd0-439d-bea3-5fee870b58e0"
+  },
+  "entry": [
+    {
+      "fullUrl": "https://fhir.humana.com/api/Practitioner/121019814f05e529b5361d8f73ad779dc73f8ac1a56b30a86461234a543db35a",
+      "search": {
+        "mode": "match"
+      },
+      "resource": {
+        "resourceType": "Practitioner",
+        "id": "121019814f05e529b5361d8f73ad779dc73f8ac1a56b30a86461234a543db35a",
+        "identifier": [
+          {
+            "system": "http://hl7.org/fhir/sid/us-npi",
+            "value": "1679766943"
+          }
+        ],
+        "active": true,
+        "name": [
+          {
+            "text": "Herron, Kyle A MD",
+            "family": "Herron",
+            "given": [
+              "Kyle"
+            ]
+          }
+        ],
+        "telecom": [
+          {
+            "system": "phone",
+            "value": "8009916117",
+            "use": "work"
+          },
+          {
+            "system": "fax",
+            "value": "8888128191",
+            "use": "work"
+          },
+          {
+            "system": "phone",
+            "value": "8009116117",
+            "use": "work"
+          }
+        ],
+        "gender": "male",
+        "communication": [
+          {
+            "coding": [
+              {
+                "display": "English"
+              }
+            ]
+          }
+        ],
+        "meta": {
+          "versionId": "273a6715-d5ff-45c2-9e42-99a5d2568292",
+          "lastUpdated": "2026-06-18T10:57:14.175+00:00"
+        }
+      }
+    }
+  ],
+  "total": 1,
+  "link": [
+    {
+      "relation": "self",
+      "url": "https://fhir.humana.com/api/Practitioner?identifier=1679766943&_total=estimate&_count=20&_skip=0"
+    }
+  ],
+  "id": "14f3b2a1-b74b-402d-99d1-badfe0070ac9"
+}
