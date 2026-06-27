@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "network-probe"
+version = "0.1.0"
+description = "Per-payer provider network-status verification + Stedi eligibility/benefits."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx==0.28.1",
+    "fastapi==0.115.6",
+    "uvicorn==0.34.0",
+    "pypdf==5.1.0",
+    "python-multipart==0.0.20",
+    "sqlalchemy==2.0.36",
+    "alembic==1.14.0",
+    "psycopg[binary]==3.2.3",
+    "cryptography==44.0.0",
+    "pydantic-settings==2.7.0",
+    "pyjwt==2.10.1",
+    "bcrypt==4.2.1",
+    "boto3==1.35.80",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.3.4",
+    "ruff",
+    "mypy",
+    "pre-commit",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+network_probe = ["**/*.html"]
+
+[tool.pytest.ini_options]
+markers = [
+    "live: hits real external services (needs prod Stedi key)",
+    "db: needs a local Postgres (preauth_test)",
+]
+addopts = "-ra"
+filterwarnings = [
+    "ignore:.*asyncio_default_fixture_loop_scope.*",
+]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+warn_unused_ignores = false
+warn_redundant_casts = false
+check_untyped_defs = false
