@@ -49,7 +49,7 @@ class EligibilityCheck(Base):
     __tablename__ = "eligibility_checks"
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
-    actor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     action: Mapped[str] = mapped_column(String(20), index=True)
     payer_key: Mapped[str] = mapped_column(String(120))
     member_id_hash: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
