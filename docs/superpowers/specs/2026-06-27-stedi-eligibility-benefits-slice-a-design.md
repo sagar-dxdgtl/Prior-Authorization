@@ -276,3 +276,52 @@ logging, encryption, secrets management.
   catalogue records `enrollment_status` and the engine degrades to UNKNOWN, never guessed.
 - **271 network indicator is benefit-tier** — provider-specific OON stays the directory engine's job;
   Stedi corroborates, doesn't override network status.
+
+---
+
+## 12. Revision — post-review hardening (2026-06-27)
+
+An adversarial review (security/TOCTOU + correctness + HIPAA-coverage critics) found a critical flaw
+and several real gaps. These supersede the relevant parts above:
+
+- **Frontend = our own app.** We build **our own React + Vite + Ant Design app in this repo (`web/`)**
+  with **our own login page**, visually modeled on `physician_app_frontend` but **not connected to it**
+  (that repo is design/contract reference only). It hosts login + the benefits-matrix screen.
+- **Auth (critical fix).** The pre-tenant username lookup must NOT run as the `NOBYPASSRLS` app role
+  against `FORCE RLS users` (it returns zero rows → all logins fail). Use a **`SECURITY DEFINER`
+  Postgres function `auth_lookup_user(username)`** (owned by the migration owner) that returns only
+  `id, tenant_id, password_hash, role, token_version, must_change_password, failed_logins,
+  locked_until`. **Login key = globally-unique username** (`UNIQUE (lower(username))`); tenant is
+  derived from the returned row (no tenant selector needed; resolves the cross-tenant ambiguity).
+  Lockout writes happen inside `tenant_session(tenant_id)` after the lookup. Lockout increment is a
+  **single atomic UPDATE**; unknown usernames still run a **dummy bcrypt verify** (constant-time, no
+  enumeration). `must_change_password` is **enforced server-side**: `get_context` returns **403** for
+  any non-change-password route while the flag is set.
+- **Config fails closed.** `Settings` validators require **≥1 valid Fernet key** and a **strong,
+  non-default `MEMBER_ID_PEPPER` (≥32)** unless `APP_ENV in {dev,test}`; `.env.example` ships a real
+  generated Fernet key. The app refuses to boot misconfigured rather than 500-ing per request.
+- **PHI-free `result_jsonb`/`source_audit` (real invariant).** The raw 271 `coordinationOfBenefits`
+  and payer AAA/error payloads can echo subscriber identifiers, so the parser **redacts** them —
+  `cob` keeps only non-PHI fields (payer/sponsor/IPA names, sequence); errors keep only codes + a
+  fixed description. PHI lives only in the encrypted `*_enc` columns.
+- **Audit covers every PHI route.** `eligibility_checks` gains an **`action`** discriminator
+  (`eligibility|network|override|report_ingest`) and a **`name_enc`** column; `/api/check`,
+  `/api/override`, and the **271-PDF** `/api/check-from-report` each write an audit row.
+- **Existing routes hardened.** `/api/check` and `/api/check-from-report` now **require auth**,
+  **SSRF-guard `base_url`**, **cap upload size**, and **never return `str(exc)`** (generic message +
+  server-logged `request_id`).
+- **SSRF guard is real.** `assert_safe_url` rejects on `not ip.is_global` (covers RFC1918, loopback,
+  link-local incl. 169.254.169.254, unspecified, IPv4-mapped); the **validated `base_url` is threaded
+  into the actual outbound call**; the FHIR client runs with **`follow_redirects=False`** and
+  re-validates any redirect target. (Connect-time IP-pinning for full DNS-rebind defense is noted as a
+  Slice-B hardening.)
+- **`met` is real.** Computed by pairing a calendar-year total line with the matching `remaining` line
+  per `(category, network, level)`; left `null` when unpaired (honest, not faked).
+- **Member-keyed flow wired.** The eligibility request model carries `member_id, dob, first_name,
+  last_name`; they populate `ProviderQuery` (DOB validated), are encrypted at rest, and never logged.
+- **Tests run clean.** `tests/conftest.py` sets required test env + DB fixtures (seed tenant/admin/
+  payers, `auth_header`); the per-commit gate is **`pytest -m "not live and not db"`**; the `db`
+  marker is registered up front.
+
+The implementation plan (`docs/superpowers/plans/2026-06-27-stedi-eligibility-benefits-slice-a.md`)
+is rewritten to v2 to reflect all of the above.
