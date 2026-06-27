@@ -20,6 +20,7 @@ import sys
 from sqlalchemy import text
 
 from network_probe.core._http import CachedClient
+from network_probe.core.config import get_settings
 from network_probe.core.secrets_provider import get_secret
 from network_probe.db.base import owner_engine
 
@@ -54,7 +55,7 @@ def search_payer(client: CachedClient, api_key: str, name: str):
 
 
 def resolve_all(client: CachedClient | None = None, apply: bool = False) -> int:
-    api_key = get_secret("STEDI_API_KEY")
+    api_key = get_settings().stedi_api_key or get_secret("STEDI_API_KEY")
     if not api_key:
         print("STEDI_API_KEY not set — skipping payer-id resolution.")
         return 0

@@ -37,3 +37,13 @@ def test_dob_normalization():
     assert _dob("01/02/1980") == "19800102"
     assert _dob("1980-01-02") == "19800102"
     assert _dob(None) is None
+
+
+def test_client_reads_stedi_key_from_settings(monkeypatch):
+    # the key lives in .env (loaded by Settings), NOT os.environ — the client must read it from Settings
+    class _S:
+        stedi_api_key = "env-key"
+        stedi_eligibility_url = "https://example/elig"
+    monkeypatch.setattr("network_probe.stedi.client.get_settings", lambda: _S())
+    from network_probe.stedi.client import StediEligibilityClient
+    assert StediEligibilityClient().api_key == "env-key"
