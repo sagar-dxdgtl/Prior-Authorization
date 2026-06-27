@@ -18,8 +18,8 @@ def test_search_payer_picks_id_on_name_match():
         )
 
     client = CachedClient(cache_dir=None, delay_seconds=0, client=httpx.Client(transport=httpx.MockTransport(handler)))
-    # name matches displayName -> returns primaryPayerId (the tradingPartnerServiceId)
-    assert search_payer(client, "k", "Some Payer") == "12345"
+    # name matches displayName -> returns (primaryPayerId, displayName) tuple
+    assert search_payer(client, "k", "Some Payer") == ("12345", "Some Payer")
 
 
 def test_search_payer_no_match_returns_none():
