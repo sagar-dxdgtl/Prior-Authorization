@@ -6,6 +6,7 @@ def test_env_secret(monkeypatch):
     assert EnvSecrets().get_secret("FOO_KEY") == "bar"
     assert EnvSecrets().get_secret("MISSING") is None
 
+
 def test_get_secret_prefers_env_when_no_aws(monkeypatch):
     monkeypatch.delenv("AWS_ACCESS_KEY_ID", raising=False)
     monkeypatch.setenv("STEDI_API_KEY", "live-key")

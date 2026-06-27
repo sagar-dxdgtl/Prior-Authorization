@@ -1,10 +1,17 @@
 """NetworkVerdict carries an optional additive `evidence` block."""
+
 from network_probe.domain.models import NetworkStatus, NetworkVerdict
 
 
 def _v(**kw):
-    base = dict(status=NetworkStatus.IN_NETWORK, matched_provider={"npi": "1"},
-                plan_or_network_checked="x", source_url="u", confidence="high", notes="n")
+    base = dict(
+        status=NetworkStatus.IN_NETWORK,
+        matched_provider={"npi": "1"},
+        plan_or_network_checked="x",
+        source_url="u",
+        confidence="high",
+        notes="n",
+    )
     base.update(kw)
     return NetworkVerdict(**base)
 

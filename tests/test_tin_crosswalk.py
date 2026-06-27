@@ -57,15 +57,21 @@ def test_tinscope_uses_crosswalk_when_directory_has_none():
 def test_default_crosswalk_has_seeded_uhc_uvc():
     # TiC-verified UnitedHealthcare TX-exchange mapping (United Vein & Vascular Centers, TIN 933510922).
     from network_probe.domain.tin_crosswalk import default_crosswalk
+
     assert default_crosswalk().tins_for("uhc", "1972603934") == ["933510922"]
     assert default_crosswalk().tins_for("uhc", "1710305735") == ["933510922"]
 
 
 def test_tinscope_corroborates_uhc_fradkin_via_seed():
     # IN directory verdict + billing TIN 933510922 matched against the seeded crosswalk -> corroborates
-    q = ProviderQuery(payer="uhc", plan_hint="Bronze Essential", npi="1972603934",
-                      last_name="Fradkin", tin="933510922")
-    v = NetworkVerdict(NetworkStatus.IN_NETWORK, {"npi": "1972603934", "name": "Kevin Fradkin"},
-                       "uhc / TX Individual Exchange", "u", "high", "n")
+    q = ProviderQuery(payer="uhc", plan_hint="Bronze Essential", npi="1972603934", last_name="Fradkin", tin="933510922")
+    v = NetworkVerdict(
+        NetworkStatus.IN_NETWORK,
+        {"npi": "1972603934", "name": "Kevin Fradkin"},
+        "uhc / TX Individual Exchange",
+        "u",
+        "high",
+        "n",
+    )
     s = TinScopeSource().check(q, v)
     assert s.result == "corroborates" and "933510922" in s.detail and "crosswalk" in s.detail.lower()

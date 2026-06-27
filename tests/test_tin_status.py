@@ -1,4 +1,5 @@
 """Verified TIN-level network status book (payer TIN portal facts) and its use by TinScopeSource."""
+
 from __future__ import annotations
 
 from network_probe.domain.corroboration import TinScopeSource
@@ -7,8 +8,9 @@ from network_probe.domain.tin_status import TinStatus, TinStatusBook, default_ti
 
 
 def _oon_verdict():
-    return NetworkVerdict(NetworkStatus.OUT_OF_NETWORK, {"npi": "1184610453", "name": "Kiang"},
-                          "cigna-fhir", "u", "high", "not listed")
+    return NetworkVerdict(
+        NetworkStatus.OUT_OF_NETWORK, {"npi": "1184610453", "name": "Kiang"}, "cigna-fhir", "u", "high", "not listed"
+    )
 
 
 def test_seed_has_cigna_wazni_record():
@@ -24,8 +26,8 @@ def test_lookup_normalizes_tin_formatting():
 
 def test_lookup_is_payer_and_npi_scoped():
     book = default_tin_status()
-    assert book.lookup("oscar", "1184610453", "463812940") is None        # wrong payer
-    assert book.lookup("cigna-fhir", "9999999999", "463812940") is None   # wrong npi
+    assert book.lookup("oscar", "1184610453", "463812940") is None  # wrong payer
+    assert book.lookup("cigna-fhir", "9999999999", "463812940") is None  # wrong npi
 
 
 def test_tinscope_reports_verified_status_even_when_oon():

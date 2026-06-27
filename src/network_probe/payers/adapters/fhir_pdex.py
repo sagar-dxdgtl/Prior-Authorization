@@ -225,18 +225,22 @@ class FhirPdexAdapter(PayerAdapter):
         prac_url = f"{self.base_url}/Practitioner?identifier={q.npi}"
         if not q.npi:
             return NetworkVerdict(
-                status=NetworkStatus.UNKNOWN, matched_provider=None,
+                status=NetworkStatus.UNKNOWN,
+                matched_provider=None,
                 plan_or_network_checked=f"{self.payer_name} FHIR directory",
-                source_url=self.base_url, confidence="low",
+                source_url=self.base_url,
+                confidence="low",
                 notes="An NPI is required to query a FHIR Provider Directory (identifier search).",
             )
 
         found = self._find_practitioner(q.npi, q.first_name, q.last_name)
         if not found:
             return NetworkVerdict(
-                status=NetworkStatus.OUT_OF_NETWORK, matched_provider=None,
+                status=NetworkStatus.OUT_OF_NETWORK,
+                matched_provider=None,
                 plan_or_network_checked=f"{self.payer_name} FHIR directory (plan hint: {q.plan_hint!r})",
-                source_url=prac_url, confidence="medium",
+                source_url=prac_url,
+                confidence="medium",
                 notes=(
                     f"NPI {q.npi} is not present in the {self.payer_name} FHIR Provider Directory, "
                     f"so the provider is not a contracted/listed provider for this payer."
@@ -247,14 +251,15 @@ class FhirPdexAdapter(PayerAdapter):
         role_url = f"{self.base_url}/PractitionerRole?practitioner={pid}"
         networks, specialties, role_count = self._networks_for(pid)
         srcs = f"{prac_url} ; {role_url}"
-        base_provider = {"npi": q.npi, "name": name, "specialty": ", ".join(specialties) or None,
-                         "networks": networks}
+        base_provider = {"npi": q.npi, "name": name, "specialty": ", ".join(specialties) or None, "networks": networks}
 
         if not networks:
             return NetworkVerdict(
-                status=NetworkStatus.OUT_OF_NETWORK, matched_provider=base_provider,
+                status=NetworkStatus.OUT_OF_NETWORK,
+                matched_provider=base_provider,
                 plan_or_network_checked=f"{self.payer_name} (plan hint: {q.plan_hint!r})",
-                source_url=srcs, confidence="medium",
+                source_url=srcs,
+                confidence="medium",
                 notes=f"{name} (NPI {q.npi}) is in the directory but has no active network roles.",
             )
 
@@ -276,26 +281,35 @@ class FhirPdexAdapter(PayerAdapter):
                 status=NetworkStatus.IN_NETWORK,
                 matched_provider={**base_provider, "matched_network": best_net},
                 plan_or_network_checked=f"{self.payer_name} / network '{best_net}'",
-                source_url=srcs, confidence="high",
-                notes=(f"{name} (NPI {q.npi}) participates in '{best_net}', matched to plan hint "
-                       f"{q.plan_hint!r}{via}. Total networks: {len(networks)}."),
+                source_url=srcs,
+                confidence="high",
+                notes=(
+                    f"{name} (NPI {q.npi}) participates in '{best_net}', matched to plan hint "
+                    f"{q.plan_hint!r}{via}. Total networks: {len(networks)}."
+                ),
             )
 
         if not (q.plan_hint or "").strip():
             return NetworkVerdict(
-                status=NetworkStatus.IN_NETWORK, matched_provider=base_provider,
+                status=NetworkStatus.IN_NETWORK,
+                matched_provider=base_provider,
                 plan_or_network_checked=f"{self.payer_name} (any network)",
-                source_url=srcs, confidence="medium",
-                notes=(f"{name} (NPI {q.npi}) is a contracted {self.payer_name} provider in "
-                       f"{len(networks)} network(s): {', '.join(networks[:8])}"
-                       f"{'…' if len(networks) > 8 else ''}. No plan hint given to narrow to one."),
+                source_url=srcs,
+                confidence="medium",
+                notes=(
+                    f"{name} (NPI {q.npi}) is a contracted {self.payer_name} provider in "
+                    f"{len(networks)} network(s): {', '.join(networks[:8])}"
+                    f"{'…' if len(networks) > 8 else ''}. No plan hint given to narrow to one."
+                ),
             )
 
         # provider IS in the directory, but no confident match for the requested plan -> honest UNKNOWN
         return NetworkVerdict(
-            status=NetworkStatus.UNKNOWN, matched_provider=base_provider,
+            status=NetworkStatus.UNKNOWN,
+            matched_provider=base_provider,
             plan_or_network_checked=f"{self.payer_name} (plan hint: {q.plan_hint!r})",
-            source_url=srcs, confidence="medium",
+            source_url=srcs,
+            confidence="medium",
             notes=(
                 f"{name} (NPI {q.npi}) is in the {self.payer_name} directory but none of their "
                 f"{len(networks)} networks confidently matched plan hint {q.plan_hint!r}. "

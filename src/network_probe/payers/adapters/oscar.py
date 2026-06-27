@@ -135,9 +135,7 @@ class OscarAdapter(PayerAdapter):
                 "zip_code": zip_code or "",
             }
         )
-        return self.client.get_json(
-            f"{BASE}/api/provider-profile/legacy-initial-data-api/{quote(entity_id)}?{q}"
-        )
+        return self.client.get_json(f"{BASE}/api/provider-profile/legacy-initial-data-api/{quote(entity_id)}?{q}")
 
     # ---- network resolution -------------------------------------------------
 
@@ -201,8 +199,7 @@ class OscarAdapter(PayerAdapter):
         result = dict(best[2])
         result["score"] = round(best[0], 3)
         result["source_url"] = (
-            f"{BASE}/api/get-network-plans?networkId={result['network_id']}"
-            f"&planYear={self.year}&state={state}"
+            f"{BASE}/api/get-network-plans?networkId={result['network_id']}&planYear={self.year}&state={state}"
         )
         return result
 
@@ -214,9 +211,7 @@ class OscarAdapter(PayerAdapter):
         Returns (status, confidence, notes, extras) where extras carries per-TIN and freshness
         signals (in_network_tins, going_oon_soon, last_inn_date) for the corroboration layer.
         """
-        provider = (
-            profile.get("reduxState", {}).get("providerProfile", {}).get("provider", {})
-        )
+        provider = profile.get("reduxState", {}).get("providerProfile", {}).get("provider", {})
         offices = provider.get("offices") or []
 
         y_start, y_end = date(self.year, 1, 1), date(self.year, 12, 31)
@@ -266,8 +261,7 @@ class OscarAdapter(PayerAdapter):
             for *_x, ni in chosen
         )
         if in_net:
-            in_tins = sorted({str(ni.get("tin")) for *_x, ni in chosen
-                              if ni.get("in_network") and ni.get("tin")})
+            in_tins = sorted({str(ni.get("tin")) for *_x, ni in chosen if ni.get("in_network") and ni.get("tin")})
             extras = {"in_network_tins": in_tins, "going_oon_soon": going_oon, "last_inn_date": last_inn}
             note = f"Active in-network record for network {network_id}, {self.year} [{detail}]."
             if going_oon:
@@ -304,9 +298,8 @@ class OscarAdapter(PayerAdapter):
                 ),
             )
         nid = resolved["network_id"]
-        checked = (
-            f"{resolved['network_name']} (networkId={nid}, year={self.year})"
-            + (f" / plan '{resolved['matched_plan']}'" if resolved.get("matched_plan") else "")
+        checked = f"{resolved['network_name']} (networkId={nid}, year={self.year})" + (
+            f" / plan '{resolved['matched_plan']}'" if resolved.get("matched_plan") else ""
         )
         if resolved.get("source_url"):
             urls.append(resolved["source_url"])

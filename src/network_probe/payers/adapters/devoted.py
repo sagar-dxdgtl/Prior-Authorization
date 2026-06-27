@@ -45,8 +45,14 @@ INDEX = "provider_directory_quality_score_ranked"
 
 # Attributes we need back from each hit.
 _ATTRS = [
-    "ProviderName", "Npi", "Npis", "NetworkNames", "NetworkCountyCodes",
-    "DirectorySpecialty", "AddressCity", "AddressState",
+    "ProviderName",
+    "Npi",
+    "Npis",
+    "NetworkNames",
+    "NetworkCountyCodes",
+    "DirectorySpecialty",
+    "AddressCity",
+    "AddressState",
 ]
 
 
@@ -213,15 +219,11 @@ class DevotedAdapter(PayerAdapter):
             nets = sorted({n for h in elsewhere for n in (h.get("NetworkNames") or [])})
             return NetworkVerdict(
                 status=NetworkStatus.OUT_OF_NETWORK,
-                matched_provider={"npi": q.npi, "name": elsewhere[0].get("ProviderName"),
-                                  "network_names": nets},
+                matched_provider={"npi": q.npi, "name": elsewhere[0].get("ProviderName"), "network_names": nets},
                 plan_or_network_checked=checked,
                 source_url=base_src,
                 confidence="high",
-                notes=(
-                    f"NPI {q.npi} is in Devoted's {self.year} directory ({', '.join(nets)}) "
-                    f"but NOT in {net}."
-                ),
+                notes=(f"NPI {q.npi} is in Devoted's {self.year} directory ({', '.join(nets)}) but NOT in {net}."),
             )
 
         return NetworkVerdict(

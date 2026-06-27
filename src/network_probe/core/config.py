@@ -10,6 +10,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 _DEV = {"dev", "test", "local"}
 _DEFAULT_PEPPERS = {"dev-pepper", "dev-only-pepper-change-me-to-32plus-bytes"}
 
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", case_sensitive=False)
     app_env: str = "dev"
@@ -33,12 +34,14 @@ class Settings(BaseSettings):
 
     @field_validator("app_env", mode="before")
     @classmethod
-    def _norm_env(cls, v): return v.strip().lower() if isinstance(v, str) else v
+    def _norm_env(cls, v):
+        return v.strip().lower() if isinstance(v, str) else v
 
     @field_validator("jwt_secret")
     @classmethod
     def _validate_jwt_secret_length(cls, v):
-        if len(v) < 32: raise ValueError("JWT_SECRET must be >= 32 chars")
+        if len(v) < 32:
+            raise ValueError("JWT_SECRET must be >= 32 chars")
         return v
 
     @property
@@ -63,11 +66,14 @@ class Settings(BaseSettings):
         if self.app_env in _DEV:
             return self
         keys = self.fernet_key_list
-        if not keys: raise ValueError("FERNET_KEYS required outside dev")
-        for k in keys: Fernet(k.encode())
+        if not keys:
+            raise ValueError("FERNET_KEYS required outside dev")
+        for k in keys:
+            Fernet(k.encode())
         if len(self.member_id_pepper) < 32 or self.member_id_pepper in _DEFAULT_PEPPERS:
             raise ValueError("MEMBER_ID_PEPPER must be strong and non-default outside dev")
         return self
+
 
 @lru_cache
 def get_settings() -> Settings:

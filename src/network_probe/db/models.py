@@ -13,8 +13,10 @@ from network_probe.db.base import Base
 def _uuid() -> uuid.UUID:
     return uuid.uuid4()
 
+
 def _now() -> datetime:
     return datetime.now(UTC)
+
 
 class Tenant(Base):
     __tablename__ = "tenants"
@@ -22,6 +24,7 @@ class Tenant(Base):
     name: Mapped[str] = mapped_column(String(200))
     slug: Mapped[str] = mapped_column(String(80), unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
 
 class User(Base):
     __tablename__ = "users"
@@ -37,6 +40,7 @@ class User(Base):
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
+
 class Payer(Base):
     __tablename__ = "payers"
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
@@ -48,6 +52,7 @@ class Payer(Base):
     stedi_payer_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     enrollment_status: Mapped[str] = mapped_column(String(30), default="unknown")
     network_indicator_supported: Mapped[bool] = mapped_column(Boolean, default=False)
+
 
 class EligibilityCheck(Base):
     __tablename__ = "eligibility_checks"
@@ -66,6 +71,7 @@ class EligibilityCheck(Base):
     source_audit: Mapped[dict] = mapped_column(JSONB, default=dict)
     request_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
 
 class OverrideRow(Base):
     __tablename__ = "overrides"

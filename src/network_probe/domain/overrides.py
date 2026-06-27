@@ -29,9 +29,9 @@ def _norm(s: str) -> str:
 class Override:
     payer: str
     npi: str
-    status: str                  # IN_NETWORK | OUT_OF_NETWORK | REVIEW
-    verified_by: str             # e.g. "Availity 2026-05-21" or "ops:jdoe"
-    verified_at: str             # ISO date the human/source confirmed it
+    status: str  # IN_NETWORK | OUT_OF_NETWORK | REVIEW
+    verified_by: str  # e.g. "Availity 2026-05-21" or "ops:jdoe"
+    verified_at: str  # ISO date the human/source confirmed it
     network: str | None = None
     plan: str | None = None
     tin: str | None = None
@@ -92,12 +92,23 @@ class DbOverrideStore:
     def _items(self) -> list[Override]:
         from network_probe.db.models import OverrideRow
         from network_probe.db.session import tenant_session
+
         with tenant_session(self.tenant_id) as s:
-            rows = s.query(OverrideRow).all()   # RLS scopes to this tenant
-            return [Override(payer=r.payer, npi=r.npi, status=r.status,
-                             verified_by=r.verified_by, verified_at=r.verified_at,
-                             network=r.network, plan=r.plan, tin=r.tin,
-                             note=r.note or "") for r in rows]
+            rows = s.query(OverrideRow).all()  # RLS scopes to this tenant
+            return [
+                Override(
+                    payer=r.payer,
+                    npi=r.npi,
+                    status=r.status,
+                    verified_by=r.verified_by,
+                    verified_at=r.verified_at,
+                    network=r.network,
+                    plan=r.plan,
+                    tin=r.tin,
+                    note=r.note or "",
+                )
+                for r in rows
+            ]
 
     def lookup(self, q: ProviderQuery) -> Override | None:
         return OverrideStore.best_match(self._items(), q)
@@ -105,11 +116,22 @@ class DbOverrideStore:
     def add(self, override: Override) -> None:
         from network_probe.db.models import OverrideRow
         from network_probe.db.session import tenant_session
+
         with tenant_session(self.tenant_id) as s:
-            s.add(OverrideRow(tenant_id=self.tenant_id, payer=override.payer, npi=override.npi,
-                              status=override.status, verified_by=override.verified_by,
-                              verified_at=override.verified_at, network=override.network,
-                              plan=override.plan, tin=override.tin, note=override.note or ""))
+            s.add(
+                OverrideRow(
+                    tenant_id=self.tenant_id,
+                    payer=override.payer,
+                    npi=override.npi,
+                    status=override.status,
+                    verified_by=override.verified_by,
+                    verified_at=override.verified_at,
+                    network=override.network,
+                    plan=override.plan,
+                    tin=override.tin,
+                    note=override.note or "",
+                )
+            )
 
 
 def verdict_from_override(o: Override, original: NetworkVerdict) -> NetworkVerdict:
@@ -120,10 +142,17 @@ def verdict_from_override(o: Override, original: NetworkVerdict) -> NetworkVerdi
         plan_or_network_checked=original.plan_or_network_checked,
         source_url=original.source_url,
         confidence="high",
-        notes=(f"VERIFIED OVERRIDE — {o.status} confirmed by {o.verified_by} on {o.verified_at}"
-               + (f" ({scope})" if scope else "")
-               + (f". {o.note}" if o.note else "")
-               + " [overrides the live directory]"),
-        corroboration=[{"source": "override", "result": "authoritative",
-                        "detail": f"{o.status} per {o.verified_by} ({o.verified_at})"}],
+        notes=(
+            f"VERIFIED OVERRIDE — {o.status} confirmed by {o.verified_by} on {o.verified_at}"
+            + (f" ({scope})" if scope else "")
+            + (f". {o.note}" if o.note else "")
+            + " [overrides the live directory]"
+        ),
+        corroboration=[
+            {
+                "source": "override",
+                "result": "authoritative",
+                "detail": f"{o.status} per {o.verified_by} ({o.verified_at})",
+            }
+        ],
     )

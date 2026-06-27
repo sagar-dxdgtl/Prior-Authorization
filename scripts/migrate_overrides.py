@@ -1,4 +1,5 @@
 """Migrate legacy global JSON overrides (.overrides/overrides.json) into the tenant-scoped DB store."""
+
 from __future__ import annotations
 
 import json
@@ -27,6 +28,7 @@ def migrate(json_path: Path, tenant_id) -> int:
 
 if __name__ == "__main__":
     import sys
+
     if len(sys.argv) != 3:
         print("Usage: python -m scripts.migrate_overrides <json_path> <tenant_id>")
         sys.exit(1)

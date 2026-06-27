@@ -12,18 +12,22 @@ RATE_LIMIT_PER_MIN = 120
 DAILY_QUOTA = 1000
 MONTHLY_QUOTA = 20000
 
+
 class _Counters:
     def __init__(self):
         self._lock = threading.Lock()
         self._daily = defaultdict(int)
         self._monthly = defaultdict(int)
+
     def bump(self, tenant: str) -> tuple[int, int]:
         with self._lock:
             self._daily[tenant] += 1
             self._monthly[tenant] += 1
             return self._daily[tenant], self._monthly[tenant]
 
+
 _counters = _Counters()
+
 
 def _tenant_of(request) -> str:
     auth = request.headers.get("authorization")
@@ -36,6 +40,7 @@ def _tenant_of(request) -> str:
             return "anon"
     return "anon"
 
+
 class RateLimitHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         tenant = _tenant_of(request)
@@ -43,7 +48,7 @@ class RateLimitHeadersMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         h = response.headers
         h["x-ratelimit-limit"] = str(RATE_LIMIT_PER_MIN)
-        h["x-ratelimit-remaining"] = str(RATE_LIMIT_PER_MIN)   # advisory; per-minute enforcement is Slice B
+        h["x-ratelimit-remaining"] = str(RATE_LIMIT_PER_MIN)  # advisory; per-minute enforcement is Slice B
         h["x-quota-daily-limit"] = str(DAILY_QUOTA)
         h["x-quota-daily-used"] = str(daily)
         h["x-quota-daily-remaining"] = str(max(0, DAILY_QUOTA - daily))

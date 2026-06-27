@@ -71,7 +71,11 @@ def test_report_to_query_uses_report_name_not_nppes():
 
 
 def test_payer_mapping():
-    for needle, key in [("Cigna", "cigna-fhir"), ("Humana", "humana-fhir"),
-                        ("United Healthcare", "uhc"), ("DEVOTED HEALTH", "devoted")]:
+    for needle, key in [
+        ("Cigna", "cigna-fhir"),
+        ("Humana", "humana-fhir"),
+        ("United Healthcare", "uhc"),
+        ("DEVOTED HEALTH", "devoted"),
+    ]:
         txt = SYNTH.replace("Oscar Health EDI", needle)
         assert parse_report(txt)["payer_key"] == key

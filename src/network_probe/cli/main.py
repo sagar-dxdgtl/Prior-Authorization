@@ -26,8 +26,12 @@ def _build_parser() -> argparse.ArgumentParser:
         description="Verify whether a provider is in-network for a given payer plan.",
     )
     p.add_argument("--payer", required=True, help="payer key, e.g. 'oscar'")
-    p.add_argument("--plan", required=True, dest="plan_hint",
-                   help="plan name / hint, e.g. 'BASE SILVER CSR 150' or 'SILVERSIMPLEPCPSAVER'")
+    p.add_argument(
+        "--plan",
+        required=True,
+        dest="plan_hint",
+        help="plan name / hint, e.g. 'BASE SILVER CSR 150' or 'SILVERSIMPLEPCPSAVER'",
+    )
     p.add_argument("--npi", help="provider NPI (preferred match key)")
     p.add_argument("--first-name", dest="first_name")
     p.add_argument("--last-name", dest="last_name")
@@ -35,11 +39,13 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--zip", dest="zip_code", help="patient ZIP, for plan/network scoping")
     p.add_argument("--tin", help="member's billing TIN (group-level network check)")
     p.add_argument("--year", type=int, help="coverage year (default: current year)")
-    p.add_argument("--base-url", dest="base_url",
-                   help="FHIR PDEX base URL (for --payer fhir, e.g. https://fhir.humana.com/api)")
+    p.add_argument(
+        "--base-url", dest="base_url", help="FHIR PDEX base URL (for --payer fhir, e.g. https://fhir.humana.com/api)"
+    )
     p.add_argument("--no-cache", action="store_true", help="disable on-disk response cache")
-    p.add_argument("--no-corroborate", action="store_true",
-                   help="skip cross-source corroboration (NPPES) + confidence demotion")
+    p.add_argument(
+        "--no-corroborate", action="store_true", help="skip cross-source corroboration (NPPES) + confidence demotion"
+    )
     p.add_argument("--json", action="store_true", help="emit the verdict as JSON")
     return p
 
@@ -65,6 +71,7 @@ def main(argv=None) -> int:
         adapter_kwargs["base_url"] = args.base_url
     if args.no_cache:
         from network_probe.core._http import CachedClient
+
         adapter_kwargs["client"] = CachedClient(cache_dir=None)
 
     try:
@@ -87,7 +94,7 @@ def main(argv=None) -> int:
         mp = verdict.matched_provider
         name = mp.get("display_name") or mp.get("name") or "(provider)"
         print(f"  matched  : {name} (NPI {mp.get('npi')}, {mp.get('specialty')})")
-    for sig in (verdict.corroboration or []):
+    for sig in verdict.corroboration or []:
         print(f"  x-check  : [{sig['source']}] {sig['result']} — {sig['detail']}")
     print(f"  source   : {verdict.source_url}")
     print()

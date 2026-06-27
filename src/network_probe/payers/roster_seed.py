@@ -45,7 +45,13 @@ ROSTER = [
     ("BCBS / Empire (Anthem / Elevance)", "Commercial", "CO-Denver", None, "needs_payer_id"),
     ("Cigna Healthcare", "ACA", "CO-Denver", "62308", "needs_enrollment"),
     ("Cigna Healthcare", "Commercial", "CO-Denver", "62308", "needs_enrollment"),
-    ("Colorado Department of Health Care Policy & Financing", "Traditional Medicaid", "CO-Denver", None, "needs_payer_id"),
+    (
+        "Colorado Department of Health Care Policy & Financing",
+        "Traditional Medicaid",
+        "CO-Denver",
+        None,
+        "needs_payer_id",
+    ),
     ("Healthspring", "Medicare Advantage", "CO-Denver", None, "needs_payer_id"),
     ("Humana", "Medicare Advantage", "CO-Denver", "61101", "supported"),
     ("Kaiser Permanente", "Commercial", "CO-Denver", None, "needs_payer_id"),
@@ -79,8 +85,10 @@ ROSTER = [
     ("Curative", "Commercial", "FL-South Florida", None, "needs_payer_id"),
 ]
 
+
 def slug(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", (s or "").lower()).strip("-")
+
 
 def payer_rows():
     """Yield dict kwargs for one GLOBAL Payer row per ROSTER entry."""

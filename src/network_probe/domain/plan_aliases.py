@@ -24,10 +24,8 @@ def _norm(s: str) -> str:
 PLAN_NETWORK_ALIASES: dict[str, list[dict]] = {
     "uhc": [
         # UHC on-exchange metal plans map to the state Individual Exchange network.
-        {"when": "bronze essential", "state": "TX",
-         "networks": ["TX Individual Exchange Benefit Plan"]},
-        {"when": "exchange", "state": "TX",
-         "networks": ["TX Individual Exchange Benefit Plan"]},
+        {"when": "bronze essential", "state": "TX", "networks": ["TX Individual Exchange Benefit Plan"]},
+        {"when": "exchange", "state": "TX", "networks": ["TX Individual Exchange Benefit Plan"]},
     ],
     "humana-fhir": [
         # Humana MA "giveback" plans are sold on the Medicare PPO network.
@@ -38,8 +36,7 @@ PLAN_NETWORK_ALIASES: dict[str, list[dict]] = {
 }
 
 
-def network_aliases(payer: str | None, plan_hint: str | None,
-                    state: str | None = None) -> list[str]:
+def network_aliases(payer: str | None, plan_hint: str | None, state: str | None = None) -> list[str]:
     """Canonical network names to also try for this payer + plan hint (+ state)."""
     hint = _norm(plan_hint)
     st = (state or "").upper()

@@ -5,6 +5,7 @@ Revises: 0003_seed_admin
 Create Date: 2026-06-27
 
 """
+
 from collections.abc import Sequence
 
 from alembic import op

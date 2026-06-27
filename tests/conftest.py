@@ -16,9 +16,12 @@ os.environ.setdefault("MEMBER_ID_PEPPER", "t" * 40)
 
 _DATA_TABLES = "tenants, users, payers, eligibility_checks, overrides"
 
+
 def _owner():
     from network_probe.db.base import owner_engine
+
     return owner_engine()
+
 
 @pytest.fixture(autouse=True)
 def _clean_db(request):
@@ -28,19 +31,24 @@ def _clean_db(request):
         yield
         return
     from sqlalchemy import text
+
     with _owner().begin() as c:
         c.execute(text(f"TRUNCATE {_DATA_TABLES} RESTART IDENTITY CASCADE"))
     yield
+
 
 @pytest.fixture
 def demo_tenant():
     from sqlalchemy.orm import Session
 
     from network_probe.db.models import Tenant
+
     tid = uuid.uuid4()
     with Session(_owner()) as s:
-        s.add(Tenant(id=tid, name="Demo", slug=f"demo-{tid.hex[:8]}")); s.commit()
+        s.add(Tenant(id=tid, name="Demo", slug=f"demo-{tid.hex[:8]}"))
+        s.commit()
     return tid
+
 
 @pytest.fixture
 def seed_admin(demo_tenant):
@@ -48,11 +56,20 @@ def seed_admin(demo_tenant):
 
     from network_probe.auth.passwords import hash_password
     from network_probe.db.models import User
+
     with Session(_owner()) as s:
-        s.add(User(tenant_id=demo_tenant, username="admin",
-                   password_hash=hash_password("Initial-pw-1234"), role="admin",
-                   must_change_password=True)); s.commit()
+        s.add(
+            User(
+                tenant_id=demo_tenant,
+                username="admin",
+                password_hash=hash_password("Initial-pw-1234"),
+                role="admin",
+                must_change_password=True,
+            )
+        )
+        s.commit()
     return {"tenant_id": demo_tenant, "username": "admin", "password": "Initial-pw-1234"}
+
 
 @pytest.fixture
 def auth_header(demo_tenant):
@@ -61,19 +78,31 @@ def auth_header(demo_tenant):
     from network_probe.auth import jwt_tokens as jt
     from network_probe.auth.passwords import hash_password
     from network_probe.db.models import User
+
     uid = uuid.uuid4()
     with Session(_owner()) as s:
-        s.add(User(id=uid, tenant_id=demo_tenant, username=f"u-{uid.hex[:6]}",
-                   password_hash=hash_password("x" * 12), role="user",
-                   must_change_password=False, token_version=0)); s.commit()
+        s.add(
+            User(
+                id=uid,
+                tenant_id=demo_tenant,
+                username=f"u-{uid.hex[:6]}",
+                password_hash=hash_password("x" * 12),
+                role="user",
+                must_change_password=False,
+                token_version=0,
+            )
+        )
+        s.commit()
     tok, _ = jt.issue_access(uid, demo_tenant, "user", 0)
     return {"Authorization": f"Bearer {tok}"}
+
 
 @pytest.fixture
 def seed_payers():
     from sqlalchemy.orm import Session
 
     from network_probe.db.models import Payer
+
     with Session(_owner()) as s:
-        s.add(Payer(key="oscar", label="Oscar", stedi_payer_id="OSCAR",
-                    enrollment_status="supported")); s.commit()
+        s.add(Payer(key="oscar", label="Oscar", stedi_payer_id="OSCAR", enrollment_status="supported"))
+        s.commit()

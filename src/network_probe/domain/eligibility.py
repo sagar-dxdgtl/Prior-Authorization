@@ -7,11 +7,14 @@ from network_probe.payers.catalogue import DbPayerCatalogue, PayerCatalogue
 from network_probe.stedi.client import EligibilitySource, StediEligibilityClient
 
 
-def check_eligibility(q: ProviderQuery, base_url: str | None = None,
-                      catalogue: PayerCatalogue | None = None,
-                      stedi: EligibilitySource | None = None,
-                      tenant_id=None,
-                      override_store=None) -> EligibilityResult:
+def check_eligibility(
+    q: ProviderQuery,
+    base_url: str | None = None,
+    catalogue: PayerCatalogue | None = None,
+    stedi: EligibilitySource | None = None,
+    tenant_id=None,
+    override_store=None,
+) -> EligibilityResult:
     cat = catalogue or DbPayerCatalogue()
     payer = cat.resolve(q.payer)
     source = stedi or StediEligibilityClient(payer_id=payer.stedi_payer_id if payer else None)
@@ -34,14 +37,18 @@ def check_eligibility(q: ProviderQuery, base_url: str | None = None,
     store = override_store
     if store is None and tenant_id is not None:
         from network_probe.domain.overrides import DbOverrideStore
+
         store = DbOverrideStore(tenant_id)
     if store is not None:
         ov = store.lookup(q)
         if ov is not None:
             result.network_status = NetworkStatus(ov.status)
             result.corroboration = (result.corroboration or []) + [
-                {"source": "override", "result": "authoritative",
-                 "detail": f"{ov.status} confirmed by {ov.verified_by} ({ov.verified_at})"}]
-            result.source_audit = {**(result.source_audit or {}),
-                                   "override": f"{ov.verified_by} {ov.verified_at}"}
+                {
+                    "source": "override",
+                    "result": "authoritative",
+                    "detail": f"{ov.status} confirmed by {ov.verified_by} ({ov.verified_at})",
+                }
+            ]
+            result.source_audit = {**(result.source_audit or {}), "override": f"{ov.verified_by} {ov.verified_at}"}
     return result

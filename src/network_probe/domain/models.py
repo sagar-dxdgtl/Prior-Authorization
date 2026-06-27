@@ -23,7 +23,7 @@ class ProviderQuery:
     tin: str | None = None  # provider's billing TIN for the encounter — a known pre-auth input
     #                            (W-9 / PM config), not a lookup; contracts are at the TIN/group level
     member_id: str | None = None  # subscriber/member ID (for an eligibility 270/271 cross-check)
-    dob: str | None = None        # subscriber DOB (MM/DD/YYYY as it appears on the 271)
+    dob: str | None = None  # subscriber DOB (MM/DD/YYYY as it appears on the 271)
 
 
 @dataclass

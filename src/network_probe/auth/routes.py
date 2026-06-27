@@ -19,14 +19,22 @@ from network_probe.db.session import tenant_session
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 LOCK_THRESHOLD, LOCK_MINUTES = 5, 15
 
+
 def _lookup(username: str):
     """RLS-exempt minimal lookup via the SECURITY DEFINER function (app role has EXECUTE)."""
     with app_engine().connect() as conn:
         return conn.execute(text("SELECT * FROM auth_lookup_user(:u)"), {"u": username}).mappings().first()
 
+
 def _user_payload(row, username: str = "") -> dict:
-    return {"id": str(row["id"]), "username": username, "name": username, "role": row["role"],
-            "tenant_id": str(row["tenant_id"])}
+    return {
+        "id": str(row["id"]),
+        "username": username,
+        "name": username,
+        "role": row["role"],
+        "tenant_id": str(row["tenant_id"]),
+    }
+
 
 @router.post("/login")
 def login(form: OAuth2PasswordRequestForm = Depends()):
@@ -40,12 +48,15 @@ def login(form: OAuth2PasswordRequestForm = Depends()):
         if row:
             # ATOMIC failure increment + lock (single statement; both CASEs read the pre-update value).
             with tenant_session(row["tenant_id"]) as s:
-                s.execute(text(
-                    "UPDATE users SET "
-                    "failed_logins = CASE WHEN failed_logins + 1 >= :thr THEN 0 ELSE failed_logins + 1 END, "
-                    "locked_until = CASE WHEN failed_logins + 1 >= :thr THEN :until ELSE locked_until END "
-                    "WHERE id = :id"),
-                    {"thr": LOCK_THRESHOLD, "until": now + timedelta(minutes=LOCK_MINUTES), "id": row["id"]})
+                s.execute(
+                    text(
+                        "UPDATE users SET "
+                        "failed_logins = CASE WHEN failed_logins + 1 >= :thr THEN 0 ELSE failed_logins + 1 END, "
+                        "locked_until = CASE WHEN failed_logins + 1 >= :thr THEN :until ELSE locked_until END "
+                        "WHERE id = :id"
+                    ),
+                    {"thr": LOCK_THRESHOLD, "until": now + timedelta(minutes=LOCK_MINUTES), "id": row["id"]},
+                )
         raise HTTPException(status_code=401, detail={"message": "invalid credentials"})
     # success: reset counters
     with tenant_session(row["tenant_id"]) as s:
@@ -54,10 +65,17 @@ def login(form: OAuth2PasswordRequestForm = Depends()):
     refresh = jt.issue_refresh(row["id"], row["tenant_id"], row["role"], row["token_version"])
     if row["must_change_password"]:
         return {"must_change_password": True, "tokens": {"access": access}, "user": _user_payload(row, form.username)}
-    return {"access_token": access, "expires_in": expires_in, "refresh_token": refresh, "user": _user_payload(row, form.username)}
+    return {
+        "access_token": access,
+        "expires_in": expires_in,
+        "refresh_token": refresh,
+        "user": _user_payload(row, form.username),
+    }
+
 
 class RefreshReq(BaseModel):
     refresh_token: str
+
 
 @router.post("/refresh")
 def refresh(req: RefreshReq):
@@ -71,12 +89,14 @@ def refresh(req: RefreshReq):
         if not u or u.token_version != c.get("tv"):
             raise HTTPException(status_code=401, detail={"message": "invalid refresh token"})
         access, expires_in = jt.issue_access(u.id, u.tenant_id, u.role, u.token_version)
-    return {"access_token": access, "expires_in": expires_in}   # no new refresh per frontend contract
+    return {"access_token": access, "expires_in": expires_in}  # no new refresh per frontend contract
+
 
 class ChangePwReq(BaseModel):
     current_password: str
     new_password: str
     confirm_password: str
+
 
 @router.post("/change-password/")
 def change_password(req: ChangePwReq, ctx: RequestContext = Depends(get_context_pwchange)):

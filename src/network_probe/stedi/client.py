@@ -15,12 +15,24 @@ from network_probe.stedi.parse_271 import parse_271_benefits
 class EligibilitySource(Protocol):
     def check(self, q: ProviderQuery) -> EligibilityResult: ...
 
+
 def _unknown(reason: str) -> EligibilityResult:
     return EligibilityResult(
-        coverage_active=None, plan_name=None, group=None, coverage_dates={},
-        network_status=NetworkStatus.UNKNOWN, benefits=[], pcp_required=None,
-        prior_auth_required=None, referral_required=None, cob=None,
-        network_verdict=None, corroboration=[], source_audit={"source": "stedi", "note": reason})
+        coverage_active=None,
+        plan_name=None,
+        group=None,
+        coverage_dates={},
+        network_status=NetworkStatus.UNKNOWN,
+        benefits=[],
+        pcp_required=None,
+        prior_auth_required=None,
+        referral_required=None,
+        cob=None,
+        network_verdict=None,
+        corroboration=[],
+        source_audit={"source": "stedi", "note": reason},
+    )
+
 
 def _dob(dob: str | None) -> str | None:
     """Normalize MM/DD/YYYY or YYYY-MM-DD to Stedi's YYYYMMDD."""
@@ -35,11 +47,17 @@ def _dob(dob: str | None) -> str | None:
     digits = re.sub(r"[^0-9]", "", dob)
     return digits or None
 
+
 class StediEligibilityClient:
     DEFAULT_STC = ["30", "98"]
 
-    def __init__(self, api_key: str | None = None, client: CachedClient | None = None,
-                 payer_id: str | None = None, service_type_codes: list | None = None):
+    def __init__(
+        self,
+        api_key: str | None = None,
+        client: CachedClient | None = None,
+        payer_id: str | None = None,
+        service_type_codes: list | None = None,
+    ):
         self.api_key = api_key if api_key is not None else get_secret("STEDI_API_KEY")
         # PHI must never hit disk: force cache_dir=None.
         self.client = client or CachedClient(cache_dir=None, delay_seconds=0.2)
@@ -55,15 +73,24 @@ class StediEligibilityClient:
         body = {
             "tradingPartnerServiceId": self.payer_id,
             "provider": {k: v for k, v in {"npi": q.npi, "lastName": q.last_name}.items() if v},
-            "subscriber": {k: v for k, v in {
-                "memberId": q.member_id, "dateOfBirth": _dob(q.dob),
-                "firstName": q.first_name, "lastName": q.last_name}.items() if v},
+            "subscriber": {
+                k: v
+                for k, v in {
+                    "memberId": q.member_id,
+                    "dateOfBirth": _dob(q.dob),
+                    "firstName": q.first_name,
+                    "lastName": q.last_name,
+                }.items()
+                if v
+            },
             "encounter": {"serviceTypeCodes": self.stc},
         }
         try:
             data = self.client.post_json(
-                self.url, content=json.dumps(body),
-                headers={"Authorization": self.api_key, "content-type": "application/json"})
+                self.url,
+                content=json.dumps(body),
+                headers={"Authorization": self.api_key, "content-type": "application/json"},
+            )
         except Exception:
             return _unknown("Stedi eligibility call failed")
         return parse_271_benefits(data)

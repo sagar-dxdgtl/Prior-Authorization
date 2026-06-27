@@ -53,6 +53,15 @@ line-length = 120
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
+# Ignore rules that conflict with intentional, behavior-correct idioms in this codebase:
+#   B008  - FastAPI Depends()/File() default-argument idiom
+#   B904  - intentional leak-free re-raise (no exception chaining by design)
+#   E741  - dense 271-parsing uses short names (e.g. `l` for a benefit line)
+#   UP042 - (str, Enum) bases are intentional; StrEnum migration is behavior-sensitive
+ignore = ["B008", "B904", "E741", "UP042"]
+
+[tool.ruff.lint.per-file-ignores]
+"alembic/**" = ["E402"]  # env.py imports after sys.path / Alembic config setup
 
 [tool.mypy]
 python_version = "3.12"

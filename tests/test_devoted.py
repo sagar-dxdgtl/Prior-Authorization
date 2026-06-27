@@ -25,8 +25,8 @@ from network_probe.payers.adapters.devoted import DevotedAdapter
 
 FIX = Path(__file__).parent / "fixtures"
 
-KYLE_NPI = "1679766943"      # IN Devoted FL HMO
-JESSICA_NPI = "1568741320"   # not in Devoted at all
+KYLE_NPI = "1679766943"  # IN Devoted FL HMO
+JESSICA_NPI = "1568741320"  # not in Devoted at all
 YEAR = 2026
 TODAY = date(2026, 6, 22)
 
@@ -64,11 +64,11 @@ def _offline_adapter() -> DevotedAdapter:
 
 
 def _query(npi: str) -> ProviderQuery:
-    return ProviderQuery(payer="devoted", plan_hint="HMO", npi=npi,
-                         last_name="Herron", state="FL", zip_code="33409")
+    return ProviderQuery(payer="devoted", plan_hint="HMO", npi=npi, last_name="Herron", state="FL", zip_code="33409")
 
 
 # ---- offline tests ----------------------------------------------------------
+
 
 def test_resolve_network_fl_hmo():
     assert _offline_adapter().resolve_network("HMO", "FL") == "FL HMO"
@@ -112,6 +112,7 @@ def test_unresolvable_plan_is_unknown_not_oon():
 
 
 # ---- live end-to-end --------------------------------------------------------
+
 
 @pytest.mark.live
 def test_kyle_in_network_live():

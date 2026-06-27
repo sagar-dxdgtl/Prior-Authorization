@@ -32,6 +32,7 @@ def _extract_text(source) -> str:
     if isinstance(source, str) and "\n" in source and "PAYER" in source.upper():
         return source  # already text
     from pypdf import PdfReader
+
     reader = PdfReader(source)
     return "\n".join((p.extract_text() or "") for p in reader.pages)
 
@@ -67,11 +68,18 @@ def parse_report(source) -> dict:
         state, zip_code = csz.group(1), csz.group(2)
 
     return {
-        "payer_name": payer_name, "payer_key": payer_key,
-        "plan_name": plan_name, "policy_type": policy_type,
-        "npi": npi, "member_id": member_id, "dob": dob, "eligibility_status": status,
-        "provider_first": provider_first, "provider_last": provider_last,
-        "state": state, "zip": zip_code,
+        "payer_name": payer_name,
+        "payer_key": payer_key,
+        "plan_name": plan_name,
+        "policy_type": policy_type,
+        "npi": npi,
+        "member_id": member_id,
+        "dob": dob,
+        "eligibility_status": status,
+        "provider_first": provider_first,
+        "provider_last": provider_last,
+        "state": state,
+        "zip": zip_code,
     }
 
 
@@ -81,9 +89,11 @@ def _nppes_name(npi: str, client: CachedClient) -> tuple[str | None, str | None]
         data = client.post_json(
             "https://npiregistry.cms.hhs.gov/RegistryBack/npiDetails",
             content=json.dumps({"number": npi, "skip": 0, "exactMatch": False}),
-            headers={"content-type": "application/json",
-                     "origin": "https://npiregistry.cms.hhs.gov",
-                     "referer": "https://npiregistry.cms.hhs.gov/search"},
+            headers={
+                "content-type": "application/json",
+                "origin": "https://npiregistry.cms.hhs.gov",
+                "referer": "https://npiregistry.cms.hhs.gov/search",
+            },
         )
         b = data.get("basic") or {}
         return (b.get("firstName"), b.get("lastName"))

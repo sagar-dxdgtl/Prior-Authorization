@@ -52,17 +52,20 @@ PAYERS = [
         "key": "oscar",
         "label": "Oscar Health — FL marketplace (live scrape, open API)",
         "needs": ["plan", "last_name", "state", "zip"],
-        "example": {"npi": "1679766943", "last_name": "Herron",
-                    "plan": "BASE SILVER CSR 150 / SILVERSIMPLEPCPSAVER",
-                    "state": "FL", "zip": "33409"},
+        "example": {
+            "npi": "1679766943",
+            "last_name": "Herron",
+            "plan": "BASE SILVER CSR 150 / SILVERSIMPLEPCPSAVER",
+            "state": "FL",
+            "zip": "33409",
+        },
         "example_label": "Kyle A Herron · Silver Simple PCP Saver",
     },
     {
         "key": "devoted",
         "label": "Devoted Health — Medicare Advantage (live, Algolia)",
         "needs": ["plan", "npi", "state"],
-        "example": {"npi": "1679766943", "last_name": "Herron", "plan": "HMO",
-                    "state": "FL", "zip": "33409"},
+        "example": {"npi": "1679766943", "last_name": "Herron", "plan": "HMO", "state": "FL", "zip": "33409"},
         "example_label": "Kyle A Herron · HMO",
     },
     {
@@ -83,8 +86,7 @@ PAYERS = [
         "key": "fhir",
         "label": "Generic FHIR PDEX (set a base URL)",
         "needs": ["plan", "npi", "base_url"],
-        "example": {"npi": "1679766943", "plan": "Medicare PPO",
-                    "base_url": "https://fhir.humana.com/api"},
+        "example": {"npi": "1679766943", "plan": "Medicare PPO", "base_url": "https://fhir.humana.com/api"},
         "example_label": "Kyle A Herron · fhir.humana.com",
     },
     {
@@ -99,66 +101,153 @@ PAYERS = [
 # Test cases extracted from the pVerify 271 eligibility reports in ./test-data.
 # Each verifies the *rendering provider* against the *subscriber's plan network*.
 SAMPLES = [
-    {"label": "Ochoa, Clemencia · Oscar · Dr Herron",
-     "payer": "oscar", "plan": "BASE SILVER CSR 150 / SILVERSIMPLEPCPSAVER",
-     "npi": "1679766943", "last_name": "Herron", "first_name": "Kyle", "state": "FL", "zip": "33409"},
-    {"label": "Craig, Duana · Devoted TX HMO · Dr George",
-     "payer": "devoted", "plan": "HMO", "npi": "1720209885", "last_name": "George",
-     "first_name": "Jojy", "state": "TX", "zip": ""},
-    {"label": "Rodriguez, Aurelia · Devoted CO PPO · Dr Li",
-     "payer": "devoted", "plan": "PPO", "npi": "1629339312", "last_name": "Li",
-     "first_name": "Jing", "state": "CO", "zip": ""},
-    {"label": "Franz, Robert · Humana Medicare PPO · Dr Friedman",
-     "payer": "humana-fhir", "plan": "Medicare PPO", "npi": "1336160274",
-     "last_name": "Friedman", "first_name": "Jefffrey", "state": "", "zip": ""},
-    {"label": "Schindler, Brian · Humana Medicare PPO · Dr Leschak",
-     "payer": "humana-fhir", "plan": "Medicare PPO", "npi": "1760430029",
-     "last_name": "Leschak", "first_name": "Stephen", "state": "", "zip": ""},
-    {"label": "Benschneider, Todd · Cigna · Dr Kiang",
-     "payer": "cigna-fhir", "plan": "", "npi": "1184610453", "last_name": "Kiang",
-     "first_name": "William", "state": "FL", "zip": "33647", "tin": "463812940"},
-    {"label": "Salman, Sobia · UnitedHealthcare · Dr Fradkin",
-     "payer": "uhc", "plan": "Bronze Essential", "npi": "1972603934", "last_name": "Fradkin",
-     "first_name": "Kevin", "state": "TX", "zip": "", "tin": "933510922"},
+    {
+        "label": "Ochoa, Clemencia · Oscar · Dr Herron",
+        "payer": "oscar",
+        "plan": "BASE SILVER CSR 150 / SILVERSIMPLEPCPSAVER",
+        "npi": "1679766943",
+        "last_name": "Herron",
+        "first_name": "Kyle",
+        "state": "FL",
+        "zip": "33409",
+    },
+    {
+        "label": "Craig, Duana · Devoted TX HMO · Dr George",
+        "payer": "devoted",
+        "plan": "HMO",
+        "npi": "1720209885",
+        "last_name": "George",
+        "first_name": "Jojy",
+        "state": "TX",
+        "zip": "",
+    },
+    {
+        "label": "Rodriguez, Aurelia · Devoted CO PPO · Dr Li",
+        "payer": "devoted",
+        "plan": "PPO",
+        "npi": "1629339312",
+        "last_name": "Li",
+        "first_name": "Jing",
+        "state": "CO",
+        "zip": "",
+    },
+    {
+        "label": "Franz, Robert · Humana Medicare PPO · Dr Friedman",
+        "payer": "humana-fhir",
+        "plan": "Medicare PPO",
+        "npi": "1336160274",
+        "last_name": "Friedman",
+        "first_name": "Jefffrey",
+        "state": "",
+        "zip": "",
+    },
+    {
+        "label": "Schindler, Brian · Humana Medicare PPO · Dr Leschak",
+        "payer": "humana-fhir",
+        "plan": "Medicare PPO",
+        "npi": "1760430029",
+        "last_name": "Leschak",
+        "first_name": "Stephen",
+        "state": "",
+        "zip": "",
+    },
+    {
+        "label": "Benschneider, Todd · Cigna · Dr Kiang",
+        "payer": "cigna-fhir",
+        "plan": "",
+        "npi": "1184610453",
+        "last_name": "Kiang",
+        "first_name": "William",
+        "state": "FL",
+        "zip": "33647",
+        "tin": "463812940",
+    },
+    {
+        "label": "Salman, Sobia · UnitedHealthcare · Dr Fradkin",
+        "payer": "uhc",
+        "plan": "Bronze Essential",
+        "npi": "1972603934",
+        "last_name": "Fradkin",
+        "first_name": "Kevin",
+        "state": "TX",
+        "zip": "",
+        "tin": "933510922",
+    },
 ]
 
 # Independently-confirmed truth (Availity / payer portal / phone) for the demo cases, keyed by
 # (payer, npi). Surfaced as `ground_truth` so the UI can show "real vs what we gave".
 GROUND_TRUTH: dict[tuple[str, str], dict] = {
-    ("oscar", "1679766943"): {"truth": "OUT_OF_NETWORK", "source": "Availity / payer portal",
-                              "note": "Absent from Oscar network 066."},
-    ("devoted", "1629339312"): {"truth": "OUT_OF_NETWORK", "source": "Availity / payer portal",
-                                "note": "Devoted directory lists Dr Li as IN for CO PPO — stale."},
-    ("humana-fhir", "1336160274"): {"truth": "OUT_OF_NETWORK", "source": "Availity / payer portal",
-                                    "note": "Not in the queried Medicare PPO network."},
-    ("cigna-fhir", "1184610453"): {"truth": "OUT_OF_NETWORK", "source": "Cigna portal (TIN-level)",
-                                   "note": "Out-of-network for this patient's TIN."},
-    ("uhc", "1972603934"): {"truth": "IN_NETWORK", "source": "UHC Transparency-in-Coverage MRF (TX exchange)",
-                            "note": "In-network under billing TIN 933510922 (Texas UVC Medical, PLLC)."},
+    ("oscar", "1679766943"): {
+        "truth": "OUT_OF_NETWORK",
+        "source": "Availity / payer portal",
+        "note": "Absent from Oscar network 066.",
+    },
+    ("devoted", "1629339312"): {
+        "truth": "OUT_OF_NETWORK",
+        "source": "Availity / payer portal",
+        "note": "Devoted directory lists Dr Li as IN for CO PPO — stale.",
+    },
+    ("humana-fhir", "1336160274"): {
+        "truth": "OUT_OF_NETWORK",
+        "source": "Availity / payer portal",
+        "note": "Not in the queried Medicare PPO network.",
+    },
+    ("cigna-fhir", "1184610453"): {
+        "truth": "OUT_OF_NETWORK",
+        "source": "Cigna portal (TIN-level)",
+        "note": "Out-of-network for this patient's TIN.",
+    },
+    ("uhc", "1972603934"): {
+        "truth": "IN_NETWORK",
+        "source": "UHC Transparency-in-Coverage MRF (TX exchange)",
+        "note": "In-network under billing TIN 933510922 (Texas UVC Medical, PLLC).",
+    },
 }
 
 # Seeded accuracy scorecard for the 4 pVerify OON examples (see TODO-network-accuracy.md).
 # Not a live re-run — documented results, with Rodriguez corrected by the golden-record override.
 BENCHMARK = [
-    {"case": "Ochoa · Oscar · Herron", "truth": "OUT_OF_NETWORK",
-     "our_status": "OUT_OF_NETWORK", "our_confidence": "high", "caught": True,
-     "how": "directory absence (primary signal)"},
-    {"case": "Benschneider · Cigna · Kiang", "truth": "OUT_OF_NETWORK",
-     "our_status": "OUT_OF_NETWORK", "our_confidence": "medium", "caught": True,
-     "how": "directory absence (primary signal)"},
-    {"case": "Franz · Humana · Friedman", "truth": "OUT_OF_NETWORK",
-     "our_status": "OUT_OF_NETWORK", "our_confidence": "medium", "caught": True,
-     "how": "directory absence (primary signal)"},
-    {"case": "Rodriguez · Devoted CO PPO · Li", "truth": "OUT_OF_NETWORK",
-     "our_status": "OUT_OF_NETWORK", "our_confidence": "high", "caught": True,
-     "how": "golden-record override (Availity); directory still lists Li as IN — stale"},
+    {
+        "case": "Ochoa · Oscar · Herron",
+        "truth": "OUT_OF_NETWORK",
+        "our_status": "OUT_OF_NETWORK",
+        "our_confidence": "high",
+        "caught": True,
+        "how": "directory absence (primary signal)",
+    },
+    {
+        "case": "Benschneider · Cigna · Kiang",
+        "truth": "OUT_OF_NETWORK",
+        "our_status": "OUT_OF_NETWORK",
+        "our_confidence": "medium",
+        "caught": True,
+        "how": "directory absence (primary signal)",
+    },
+    {
+        "case": "Franz · Humana · Friedman",
+        "truth": "OUT_OF_NETWORK",
+        "our_status": "OUT_OF_NETWORK",
+        "our_confidence": "medium",
+        "caught": True,
+        "how": "directory absence (primary signal)",
+    },
+    {
+        "case": "Rodriguez · Devoted CO PPO · Li",
+        "truth": "OUT_OF_NETWORK",
+        "our_status": "OUT_OF_NETWORK",
+        "our_confidence": "high",
+        "caught": True,
+        "how": "golden-record override (Availity); directory still lists Li as IN — stale",
+    },
 ]
 
 app = FastAPI(title="Network-Status Verification Probe", version="1.0")
 
 
 class BodySizeLimitMiddleware(BaseHTTPMiddleware):
-    MAX = 12 * 1024 * 1024   # 12 MB global ceiling (report ingest enforces its own 10 MB)
+    MAX = 12 * 1024 * 1024  # 12 MB global ceiling (report ingest enforces its own 10 MB)
+
     async def dispatch(self, request: Request, call_next):
         cl = request.headers.get("content-length")
         if cl and cl.isdigit() and int(cl) > self.MAX:
@@ -166,8 +255,13 @@ class BodySizeLimitMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-app.add_middleware(CORSMiddleware, allow_origins=get_settings().cors_origins,
-                   allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_settings().cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.add_middleware(RateLimitHeadersMiddleware)
 app.add_middleware(BodySizeLimitMiddleware)
 app.include_router(auth_router)
@@ -182,25 +276,34 @@ def _http_exc(request: Request, exc: HTTPException):
 @app.exception_handler(RequestValidationError)
 def _validation_exc(request: Request, exc: RequestValidationError):
     rid = uuid.uuid4().hex[:12]
-    log.info("request validation failed req=%s", rid)   # do NOT log exc (may contain PHI input)
+    log.info("request validation failed req=%s", rid)  # do NOT log exc (may contain PHI input)
     return JSONResponse(status_code=422, content={"message": "invalid request", "request_id": rid})
 
 
 @app.exception_handler(Exception)
 def _unhandled(request: Request, exc: Exception):
     rid = uuid.uuid4().hex[:12]
-    log.exception("unhandled error req=%s", rid)            # full detail server-side ONLY
+    log.exception("unhandled error req=%s", rid)  # full detail server-side ONLY
     return JSONResponse(status_code=500, content={"message": "internal error", "request_id": rid})
 
 
 def _result_from_verdict(verdict) -> EligibilityResult:
     """Wrap a directory NetworkVerdict as an EligibilityResult for auditing the network-only routes."""
     return EligibilityResult(
-        coverage_active=None, plan_name=None, group=None, coverage_dates={},
-        network_status=verdict.status, benefits=[], pcp_required=None, prior_auth_required=None,
-        referral_required=None, cob=None, network_verdict=verdict,
+        coverage_active=None,
+        plan_name=None,
+        group=None,
+        coverage_dates={},
+        network_status=verdict.status,
+        benefits=[],
+        pcp_required=None,
+        prior_auth_required=None,
+        referral_required=None,
+        cob=None,
+        network_verdict=verdict,
         corroboration=verdict.corroboration or [],
-        source_audit={"source": "directory", "url": verdict.source_url})
+        source_audit={"source": "directory", "url": verdict.source_url},
+    )
 
 
 class CheckRequest(BaseModel):
@@ -221,9 +324,9 @@ class CheckRequest(BaseModel):
 class OverrideRequest(BaseModel):
     payer: str
     npi: str
-    status: str                 # IN_NETWORK | OUT_OF_NETWORK | REVIEW
+    status: str  # IN_NETWORK | OUT_OF_NETWORK | REVIEW
     verified_by: str
-    verified_at: str            # ISO date
+    verified_at: str  # ISO date
     network: str | None = None
     plan: str | None = None
     tin: str | None = None
@@ -270,10 +373,18 @@ def eligibility(req: CheckRequest, ctx: RequestContext = Depends(get_context)):
             dob = normalize_dob(req.dob)
         except ValueError:
             raise HTTPException(status_code=400, detail={"message": "invalid DOB"})
-    q = ProviderQuery(payer=req.payer, plan_hint=req.plan or "", npi=req.npi or None,
-                      first_name=req.first_name or None, last_name=req.last_name or None,
-                      state=req.state or None, zip_code=req.zip or None, tin=req.tin or None,
-                      member_id=req.member_id or None, dob=dob)
+    q = ProviderQuery(
+        payer=req.payer,
+        plan_hint=req.plan or "",
+        npi=req.npi or None,
+        first_name=req.first_name or None,
+        last_name=req.last_name or None,
+        state=req.state or None,
+        zip_code=req.zip or None,
+        tin=req.tin or None,
+        member_id=req.member_id or None,
+        dob=dob,
+    )
     rid = uuid.uuid4().hex[:12]
     result = check_eligibility(q, base_url=(req.base_url or None), tenant_id=ctx.tenant_id)
     write_audit(ctx, "eligibility", q, result, rid)
@@ -307,8 +418,7 @@ def check(req: CheckRequest, ctx: RequestContext = Depends(get_context)):
     except Exception as exc:  # bad payer, missing base_url, network error
         rid = uuid.uuid4().hex[:12]
         log.warning("check failed req=%s: %s", rid, exc)
-        return JSONResponse(status_code=400,
-                            content={"message": "could not complete check", "request_id": rid})
+        return JSONResponse(status_code=400, content={"message": "could not complete check", "request_id": rid})
     write_audit(ctx, "network", q, _result_from_verdict(verdict), uuid.uuid4().hex[:12])
     gt = GROUND_TRUTH.get((req.payer, req.npi or ""))
     return {"payer": req.payer, "ground_truth": gt, **verdict.to_dict()}
@@ -326,21 +436,17 @@ def check_from_report(file: UploadFile = File(...), ctx: RequestContext = Depend
         parsed = parse_report(io.BytesIO(raw))
     except Exception as exc:
         log.warning("report parse failed req=%s: %s", rid, exc)
-        return JSONResponse(status_code=400,
-                            content={"message": "could not parse report", "request_id": rid})
+        return JSONResponse(status_code=400, content={"message": "could not parse report", "request_id": rid})
     if not parsed.get("payer_key"):
-        return JSONResponse(status_code=400,
-                            content={"message": "unmapped payer in report", "request_id": rid})
+        return JSONResponse(status_code=400, content={"message": "unmapped payer in report", "request_id": rid})
     if not parsed.get("npi"):
-        return JSONResponse(status_code=400,
-                            content={"message": "no provider NPI found in report", "request_id": rid})
+        return JSONResponse(status_code=400, content={"message": "no provider NPI found in report", "request_id": rid})
     q = report_to_query(parsed)
     try:
         verdict = check_network(q)
     except Exception as exc:
         log.warning("report check failed req=%s: %s", rid, exc)
-        return JSONResponse(status_code=400,
-                            content={"message": "could not complete check", "request_id": rid})
+        return JSONResponse(status_code=400, content={"message": "could not complete check", "request_id": rid})
     write_audit(ctx, "report_ingest", q, _result_from_verdict(verdict), rid)
     return {"payer": q.payer, "parsed": parsed, "request_id": rid, **verdict.to_dict()}
 
@@ -349,31 +455,52 @@ def check_from_report(file: UploadFile = File(...), ctx: RequestContext = Depend
 def add_override(req: OverrideRequest, ctx: RequestContext = Depends(get_context)):
     """Record a human/authoritative-confirmed status (golden record). Wins over the directory."""
     from network_probe.domain.overrides import DbOverrideStore, Override
+
     rid = uuid.uuid4().hex[:12]
     try:
-        DbOverrideStore(ctx.tenant_id).add(Override(
-            payer=req.payer, npi=req.npi, status=req.status, verified_by=req.verified_by,
-            verified_at=req.verified_at, network=req.network, plan=req.plan, tin=req.tin, note=req.note))
+        DbOverrideStore(ctx.tenant_id).add(
+            Override(
+                payer=req.payer,
+                npi=req.npi,
+                status=req.status,
+                verified_by=req.verified_by,
+                verified_at=req.verified_at,
+                network=req.network,
+                plan=req.plan,
+                tin=req.tin,
+                note=req.note,
+            )
+        )
     except Exception as exc:
         log.warning("override failed req=%s: %s", rid, exc)
-        return JSONResponse(status_code=400,
-                            content={"message": "could not record override", "request_id": rid})
+        return JSONResponse(status_code=400, content={"message": "could not record override", "request_id": rid})
     try:
         status = NetworkStatus(req.status)
     except ValueError:
         status = NetworkStatus.UNKNOWN
     q = ProviderQuery(payer=req.payer, plan_hint=req.plan or "", npi=req.npi, tin=req.tin)
     result = EligibilityResult(
-        coverage_active=None, plan_name=None, group=None, coverage_dates={},
-        network_status=status, benefits=[], pcp_required=None, prior_auth_required=None,
-        referral_required=None, cob=None, network_verdict=None, corroboration=[],
-        source_audit={"source": "override", "verified_by": req.verified_by})
+        coverage_active=None,
+        plan_name=None,
+        group=None,
+        coverage_dates={},
+        network_status=status,
+        benefits=[],
+        pcp_required=None,
+        prior_auth_required=None,
+        referral_required=None,
+        cob=None,
+        network_verdict=None,
+        corroboration=[],
+        source_audit={"source": "override", "verified_by": req.verified_by},
+    )
     write_audit(ctx, "override", q, result, rid)
     return {"ok": True}
 
 
 def main() -> None:
     import uvicorn
+
     uvicorn.run(app, host="127.0.0.1", port=8000)
 
 

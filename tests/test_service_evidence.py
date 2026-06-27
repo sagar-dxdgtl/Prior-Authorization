@@ -1,5 +1,6 @@
 """service.check_network attaches an evidence block: the raw payer-directory snapshot
 (pre-finalize) plus the per-source display signals."""
+
 from __future__ import annotations
 
 from network_probe.domain import service as svc
@@ -9,15 +10,21 @@ from network_probe.domain.models import NetworkStatus, NetworkVerdict, ProviderQ
 
 class _FakeAdapter:
     client = None
+
     def check_network(self, q):
-        return NetworkVerdict(status=NetworkStatus.IN_NETWORK,
-                              matched_provider={"npi": q.npi, "name": "Kyle A Herron"},
-                              plan_or_network_checked="oscar / net 066", source_url="http://dir",
-                              confidence="high", notes="found in directory.")
+        return NetworkVerdict(
+            status=NetworkStatus.IN_NETWORK,
+            matched_provider={"npi": q.npi, "name": "Kyle A Herron"},
+            plan_or_network_checked="oscar / net 066",
+            source_url="http://dir",
+            confidence="high",
+            notes="found in directory.",
+        )
 
 
 class _FakeStedi:
     name = "Stedi"
+
     def check(self, q, v):
         return Signal("Stedi", "inconclusive", "no provider-specific signal")
 

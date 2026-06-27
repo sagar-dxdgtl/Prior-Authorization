@@ -8,6 +8,7 @@ from network_probe.stedi.parse_271 import parse_271_benefits
 
 DATA = json.loads((pathlib.Path(__file__).parent / "fixtures/stedi-271-inn-oon.json").read_text())
 
+
 def test_active_and_inn_oon_copays():
     r = parse_271_benefits(DATA)
     assert r.coverage_active is True
@@ -15,11 +16,12 @@ def test_active_and_inn_oon_copays():
     nets = {b.network: b.amount for b in copays}
     assert nets[Network.IN] == Decimal("30") and nets[Network.OON] == Decimal("60")
 
+
 def test_met_paired_and_cob_redacted():
     r = parse_271_benefits(DATA)
     ded = next(b for b in r.benefits if b.category == BenefitCategory.DEDUCTIBLE and b.time_period == "calendar year")
     assert ded.network == Network.OON and ded.level == CoverageLevel.FAMILY
-    assert str(ded.met) == "2500" and str(ded.remaining) == "1500"   # 4000 total - 1500 remaining
+    assert str(ded.met) == "2500" and str(ded.remaining) == "1500"  # 4000 total - 1500 remaining
     # the standalone "remaining" line was consumed into the total
     assert not any(b.category == BenefitCategory.DEDUCTIBLE and b.time_period == "remaining" for b in r.benefits)
     coins = next(b for b in r.benefits if b.category == BenefitCategory.COINSURANCE)
@@ -28,11 +30,13 @@ def test_met_paired_and_cob_redacted():
     assert r.cob and "primaryPayer" in r.cob and "subscriberMemberId" not in r.cob
     assert "SHOULD-NOT-LEAK" not in json.dumps(r.to_dict())
 
+
 def test_aaa_reject_is_unknown_and_redacted():
     r = parse_271_benefits({"errors": [{"code": "42", "description": "member id ABC123 not found"}]})
     assert r.coverage_active is None and r.network_status == NetworkStatus.UNKNOWN
     assert r.source_audit["error_codes"] == ["42"]
     assert "ABC123" not in json.dumps(r.source_audit)
+
 
 def test_inactive_coverage():
     r = parse_271_benefits({"benefitsInformation": [{"code": "6", "name": "Inactive"}]})

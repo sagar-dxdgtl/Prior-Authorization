@@ -12,8 +12,10 @@ from network_probe.payers.adapters.oscar import OscarAdapter
 
 def _fhir_factory(payer_key: str):
     """Build a FHIR PDEX adapter bound to a known payer endpoint."""
+
     def make(**kwargs):
         return FhirPdexAdapter(payer_name=payer_key, **kwargs)
+
     return make
 
 
@@ -55,6 +57,7 @@ def check_network(q: ProviderQuery, corroborate: bool = True, **adapter_kwargs) 
     signals: list = []
     if corroborate:
         from network_probe.domain.corroboration import default_sources, finalize, run_display_signals
+
         client = getattr(adapter, "client", None)
         sources = default_sources(client)
         # signals are computed once against the raw directory verdict so they are available for

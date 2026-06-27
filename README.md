@@ -26,8 +26,8 @@ The architecture is a pluggable per-payer adapter, so new payers drop in without
 models, service, or CLI.
 
 > **Note on Humana & BCBS-TX:** their *web* "Find a Doctor" tools are behind bot protection
-> (Akamai-style sensor headers; Imperva) — documented as blockers in `DISCOVERY-humana.md` /
-> `DISCOVERY-bcbstx.md`, and **not** scraped (see [Ethics](#ethics)). The **FHIR adapter reaches
+> (Akamai-style sensor headers; Imperva) — documented as blockers in `docs/discovery/DISCOVERY-humana.md` /
+> `docs/discovery/DISCOVERY-bcbstx.md`, and **not** scraped (see [Ethics](#ethics)). The **FHIR adapter reaches
 > Humana legitimately** via its CMS Provider Directory API instead.
 
 > **Why two payers matters:** the same provider can be in one payer's network and out of another's.
@@ -41,7 +41,7 @@ models, service, or CLI.
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+pip install -e ".[dev]"      # editable install (requirements.txt also works: it is just `-e .[dev]`)
 
 # The ground-truth case (expected: OUT-OF-NETWORK)
 python -m network_probe.cli \
@@ -69,7 +69,7 @@ endpoints shown as an audit trail) over a small JSON API:
 - `GET /api/payers` — available payers + the fields each needs
 - `POST /api/check` — `{payer, plan, npi, last_name, state, zip, year, base_url}` → verdict JSON
 
-The API is a thin shell over `network_probe.service.check_network` — same verdict logic as the CLI.
+The API is a thin shell over `network_probe.domain.service.check_network` — same verdict logic as the CLI.
 
 Expected:
 
@@ -107,13 +107,13 @@ Expected:
 `confidence` is `high` / `medium` / `low` / `conflict`; `source_url` records the exact endpoint(s)
 queried. A directory is treated as **one signal, not ground truth**: a single-source IN is reported at
 `medium`, cross-checks appear under "Cross-checks," and a **confirmed override** (golden record,
-`POST /api/override`) wins over the live directory. See `TODO-network-accuracy.md`.
+`POST /api/override`) wins over the live directory. See `docs/roadmap/TODO-network-accuracy.md`.
 
 ---
 
 ## How it works (Oscar)
 
-Full reverse-engineered endpoint contract is in [`DISCOVERY.md`](./DISCOVERY.md). In short:
+Full reverse-engineered endpoint contract is in [`DISCOVERY.md`](./docs/discovery/DISCOVERY.md). In short:
 
 1. **Resolve plan → network.** Oscar searches one network at a time, and a plan maps to exactly one
    network (the #1 source of wrong answers if you get it wrong). The probe enumerates the state's
@@ -133,7 +133,7 @@ on disk during development (`.cache/`) to avoid hammering the endpoint.
 
 ## How it works (Devoted)
 
-Full contract in [`DISCOVERY-devoted.md`](./DISCOVERY-devoted.md). Devoted's directory is a public
+Full contract in [`DISCOVERY-devoted.md`](./docs/discovery/DISCOVERY-devoted.md). Devoted's directory is a public
 **Algolia** index queried with a read-only InstantSearch key embedded in the page. The "network" is
 `"<STATE> <PLANTYPE>"` (e.g. `FL HMO`, `TX PPO CSNP`). The probe resolves that from `--state` +
 `--plan` (validated against the live network-name facet), then searches by **exact NPI** filtered to
@@ -144,7 +144,7 @@ UNKNOWN.
 
 ## How it works (FHIR PDEX Plan-Net) — the compliant adapter
 
-Full contract in [`DISCOVERY-fhir.md`](./DISCOVERY-fhir.md). Talks to a payer's **CMS Provider
+Full contract in [`DISCOVERY-fhir.md`](./docs/discovery/DISCOVERY-fhir.md). Talks to a payer's **CMS Provider
 Directory API** (FHIR R4, Da Vinci PDEX Plan-Net) — public and auth-free by federal mandate, so no
 scraping or bot walls. `Practitioner?identifier=<NPI>` → `PractitionerRole?practitioner=<id>` → read
 the network from each role's `network-reference` extension, then match `--plan` against those network
@@ -169,7 +169,7 @@ than an honest `UNKNOWN`.
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -e ".[dev]"      # src-layout editable install; `pip install -r requirements.txt` also works
 ```
 
 ### 2. Create the Postgres databases and app role
@@ -245,7 +245,7 @@ Test markers:
 
 | command | what runs | requires |
 |---|---|---|
-| `pytest -m "not live and not db"` | pure unit + integration tests (fixture-driven, no external services) | nothing beyond `pip install -r requirements.txt` |
+| `pytest -m "not live and not db"` | pure unit + integration tests (fixture-driven, no external services) | nothing beyond `pip install -e ".[dev]"` |
 | `pytest -m db` | database-layer tests (models, RLS, auth routes, repo) | local Postgres `preauth_test` with `preauth_app` role |
 | `pytest -m live` | real end-to-end calls to Oscar, Devoted, Stedi | live network + prod `STEDI_API_KEY` |
 
@@ -268,27 +268,31 @@ pytest                             # everything
 ## Project layout
 
 ```
-network_probe/
-  models.py            ProviderQuery, NetworkVerdict, NetworkStatus   (payer-agnostic)
-  base.py              PayerAdapter interface                          (payer-agnostic)
-  _http.py             polite, cached httpx helper (GET + POST)        (shared)
-  adapters/oscar.py    Oscar adapter — all Oscar specifics live here
-  adapters/devoted.py  Devoted adapter (Algolia) — all Devoted specifics
-  adapters/fhir_pdex.py Generic FHIR PDEX Plan-Net adapter (Humana/Cigna/any payer)
-  service.py           payer string -> adapter dispatch                (payer-agnostic)
-  cli.py               command-line entry point                        (payer-agnostic)
+src/network_probe/
+  core/                cross-cutting infra: config, context, crypto, secrets_provider, _http
+  domain/              models, benefits, eligibility, service, corroboration, overrides, ...
+    models.py            ProviderQuery, NetworkVerdict, NetworkStatus   (payer-agnostic)
+    service.py           payer string -> adapter dispatch                (payer-agnostic)
+  payers/
+    adapters/base.py     PayerAdapter interface                          (payer-agnostic)
+    adapters/oscar.py    Oscar adapter — all Oscar specifics live here
+    adapters/devoted.py  Devoted adapter (Algolia) — all Devoted specifics
+    adapters/fhir_pdex.py Generic FHIR PDEX Plan-Net adapter (Humana/Cigna/any payer)
+    catalogue.py, roster_seed.py   payer roster -> Stedi payer ids
+  api/                 FastAPI app (app.py), ratelimit/netutil/validation, static UI
+  cli/                 command-line entry points (main.py, ingest.py, __main__.py)
+  auth/  db/  stedi/   authentication, persistence (RLS), Stedi eligibility client
 tests/
   test_oscar.py        offline (fixtures) + live end-to-end
   test_devoted.py      offline (fixtures) + live end-to-end
   test_fhir_pdex.py    offline (fixtures) + live end-to-end
   fixtures/            captured real responses
-DISCOVERY.md           Oscar endpoint contract
-DISCOVERY-devoted.md   Devoted endpoint contract
-DISCOVERY-fhir.md      compliant FHIR PDEX Plan-Net contract (Humana verified)
-DISCOVERY-humana.md    Humana web tool — documented BOT-PROTECTION blocker
-DISCOVERY-bcbstx.md    BCBS-TX web tool — documented IMPERVA blocker
+docs/
+  architecture.md      system architecture
+  discovery/           reverse-engineered payer endpoint contracts (Oscar, Devoted, FHIR, ...)
+  roadmap/             TODO-* roadmap / parity notes
 ```
 
 ### Adding a payer
-Implement `PayerAdapter.check_network` in `network_probe/adapters/<payer>.py`, then register it in
-`network_probe/service.py`. The models, CLI, and service stay untouched.
+Implement `PayerAdapter.check_network` in `src/network_probe/payers/adapters/<payer>.py`, then register
+it in `src/network_probe/domain/service.py`. The models, CLI, and service stay untouched.

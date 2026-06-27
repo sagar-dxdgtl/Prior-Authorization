@@ -119,36 +119,42 @@ do **not** bypass them — we use Humana's compliant **FHIR** endpoint instead; 
 
 ## 7. Inputs / entry points
 
-- **271 ingest** (`report_ingest.py`, `ingest.py`) — drop in a pVerify eligibility PDF → parse payer,
+- **271 ingest** (`domain/report_ingest.py`, `cli/ingest.py`) — drop in a pVerify eligibility PDF → parse payer,
   plan, provider NPI+name, member id/dob, state/zip → run the probe. *This is the member-keyed intake.*
-- **API** (`api.py`, FastAPI) — `POST /api/check`, `POST /api/check-from-report` (PDF upload),
+- **API** (`api/app.py`, FastAPI) — `POST /api/check`, `POST /api/check-from-report` (PDF upload),
   `GET /api/payers`, `GET /api/samples`, `POST /api/override`.
-- **UI** (`static/index.html`) — single-page form, report upload, verdict + cross-checks + audit trail.
-- **CLI** (`cli.py`) — single check; `python -m network_probe.ingest *.pdf` for batch.
+- **UI** (`api/static/index.html`) — single-page form, report upload, verdict + cross-checks + audit trail.
+- **CLI** (`cli/main.py`) — single check; `python -m network_probe.cli.ingest *.pdf` for batch.
 
 ---
 
 ## 8. Module map
 
 ```
-network_probe/
-  models.py          ProviderQuery, NetworkVerdict, NetworkStatus
-  service.py         check_network() — adapter dispatch + finalize
-  base.py            PayerAdapter interface
-  adapters/
-    oscar.py         Oscar (per-TIN, freshness)
-    devoted.py       Devoted (Algolia)
-    fhir_pdex.py     Humana / Cigna / UHC / generic PDEX
-  plan_aliases.py    plan name → network resolution
-  corroboration.py   Signal, sources (NPPES/TIN/Freshness/Stedi), finalize()
-  overrides.py       golden-record override store (MDM)
-  tin_crosswalk.py   NPI→TIN loader (staged; needs a data file)
-  report_ingest.py   271 PDF → ProviderQuery
-  ingest.py          batch CLI
-  api.py             FastAPI app
-  cli.py             CLI
-  _http.py           CachedClient (UA, delays, cache)
-  static/index.html  UI
+src/network_probe/
+  domain/
+    models.py          ProviderQuery, NetworkVerdict, NetworkStatus
+    service.py         check_network() — adapter dispatch + finalize
+    plan_aliases.py    plan name → network resolution
+    corroboration.py   Signal, sources (NPPES/TIN/Freshness/Stedi), finalize()
+    overrides.py       golden-record override store (MDM)
+    tin_crosswalk.py   NPI→TIN loader (staged; needs a data file)
+    report_ingest.py   271 PDF → ProviderQuery
+  payers/
+    adapters/base.py     PayerAdapter interface
+    adapters/oscar.py    Oscar (per-TIN, freshness)
+    adapters/devoted.py  Devoted (Algolia)
+    adapters/fhir_pdex.py Humana / Cigna / UHC / generic PDEX
+  cli/
+    main.py            CLI
+    ingest.py          batch CLI
+  api/
+    app.py             FastAPI app
+    static/index.html  UI
+  core/
+    _http.py           CachedClient (UA, delays, cache)
+    config.py, context.py, crypto.py, secrets_provider.py
+  auth/  db/  stedi/   auth, persistence (RLS), Stedi eligibility client
 ```
 
 ---
@@ -229,8 +235,8 @@ Slice A transformed the demo probe into a multi-tenant, HIPAA-aware eligibility 
 - **Multilingual** — i18n for member-facing outputs.
 
 ### Slice C — directory breadth + crosswalk
-- **NPI→TIN crosswalk** — loader built (`tin_crosswalk.py`); needs a data file (TiC parse / vendor crosswalk). No free API exists; TiC files are per-payer and huge. See `TODO-unblock-phase2-3.md`.
+- **NPI→TIN crosswalk** — loader built (`domain/tin_crosswalk.py`); needs a data file (TiC parse / vendor crosswalk). No free API exists; TiC files are per-payer and huge. See `./roadmap/TODO-unblock-phase2-3.md`.
 - **Additional payer directories** — expand beyond the current 5-payer catalogue; more FHIR PDEX adapters.
 
-See `TODO-pverify-parity.md` for the sequential roadmap and `TODO-network-accuracy.md` for the
+See `./roadmap/TODO-pverify-parity.md` for the sequential roadmap and `./roadmap/TODO-network-accuracy.md` for the
 accuracy mechanisms in depth.

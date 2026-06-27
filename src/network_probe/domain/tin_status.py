@@ -35,7 +35,7 @@ class TinStatus:
     payer: str
     npi: str
     tin: str
-    status: str                  # IN_NETWORK | OUT_OF_NETWORK
+    status: str  # IN_NETWORK | OUT_OF_NETWORK
     group: str | None = None  # billing group / org name shown by the portal
     source: str | None = None
     verified_at: str | None = None
@@ -45,8 +45,15 @@ class TinStatus:
 #   TIN 463812940 / WAZNI PLLC · KIANG WILLIAM (NPI 1184610453) -> "You are Out-Of-Network for
 #   this patient." (Cigna HMO FL, Plan ID 3346355)
 _SEED = [
-    TinStatus(payer="cigna-fhir", npi="1184610453", tin="463812940", status="OUT_OF_NETWORK",
-              group="Wazni PLLC", source="Cigna Network Status portal", verified_at="2026-05-28"),
+    TinStatus(
+        payer="cigna-fhir",
+        npi="1184610453",
+        tin="463812940",
+        status="OUT_OF_NETWORK",
+        group="Wazni PLLC",
+        source="Cigna Network Status portal",
+        verified_at="2026-05-28",
+    ),
 ]
 
 
@@ -60,9 +67,7 @@ class TinStatusBook:
 
     def lookup(self, payer, npi, tin) -> TinStatus | None:
         for s in self._items:
-            if (s.payer.lower() == (payer or "").lower()
-                    and s.npi == (npi or "")
-                    and _norm(s.tin) == _norm(tin)):
+            if s.payer.lower() == (payer or "").lower() and s.npi == (npi or "") and _norm(s.tin) == _norm(tin):
                 return s
         return None
 

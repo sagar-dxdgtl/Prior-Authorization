@@ -19,8 +19,11 @@ from network_probe.domain.service import check_network
 
 def verify_report(path: str, client: CachedClient) -> dict:
     parsed = parse_report(path)
-    out = {"report": path.split("/")[-1], **{k: parsed[k] for k in ("payer_key", "npi", "state", "zip")},
-           "plan": parsed.get("plan_name")}
+    out = {
+        "report": path.split("/")[-1],
+        **{k: parsed[k] for k in ("payer_key", "npi", "state", "zip")},
+        "plan": parsed.get("plan_name"),
+    }
     if not parsed.get("payer_key"):
         return {**out, "status": "ERROR", "detail": f"unmapped payer {parsed.get('payer_name')!r}"}
     if not parsed.get("npi"):
@@ -30,8 +33,13 @@ def verify_report(path: str, client: CachedClient) -> dict:
         v = check_network(q)
     except Exception as exc:
         return {**out, "status": "ERROR", "detail": str(exc)}
-    return {**out, "provider": (v.matched_provider or {}).get("name") or f"{q.first_name or ''} {q.last_name or ''}".strip(),
-            "status": v.status.value, "confidence": v.confidence, "why": v.notes}
+    return {
+        **out,
+        "provider": (v.matched_provider or {}).get("name") or f"{q.first_name or ''} {q.last_name or ''}".strip(),
+        "status": v.status.value,
+        "confidence": v.confidence,
+        "why": v.notes,
+    }
 
 
 def main(argv=None) -> int:
@@ -51,7 +59,9 @@ def main(argv=None) -> int:
     for r in results:
         name = r["report"].replace("Eligibility Report - ", "")[:21]
         st = r.get("status", "?")
-        print(f"{name:22} {str(r.get('payer_key')):11} {str(r.get('npi')):11} {st:16} {r.get('confidence','') or r.get('detail','')[:30]}")
+        print(
+            f"{name:22} {str(r.get('payer_key')):11} {str(r.get('npi')):11} {st:16} {r.get('confidence', '') or r.get('detail', '')[:30]}"  # noqa: E501
+        )
     print()
     return 0
 

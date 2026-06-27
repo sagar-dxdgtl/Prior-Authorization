@@ -5,19 +5,32 @@ from decimal import Decimal, InvalidOperation
 from network_probe.domain.benefits import BenefitCategory, BenefitLine, CoverageLevel, EligibilityResult, Network
 from network_probe.domain.models import NetworkStatus
 
-_CATEGORY = {"B": BenefitCategory.COPAY, "A": BenefitCategory.COINSURANCE,
-             "C": BenefitCategory.DEDUCTIBLE, "G": BenefitCategory.OOP_MAX, "F": BenefitCategory.LIMITATION}
+_CATEGORY = {
+    "B": BenefitCategory.COPAY,
+    "A": BenefitCategory.COINSURANCE,
+    "C": BenefitCategory.DEDUCTIBLE,
+    "G": BenefitCategory.OOP_MAX,
+    "F": BenefitCategory.LIMITATION,
+}
 _LEVEL = {"IND": CoverageLevel.INDIVIDUAL, "FAM": CoverageLevel.FAMILY}
 _NET = {"Y": Network.IN, "N": Network.OON}
 _TIME = {"23": "calendar year", "29": "remaining", "27": "visit", "22": "service year"}
-_COB_ALLOW = {"primaryPayer", "secondaryPayer", "planSponsor", "ipa", "sequence",
-              "payerResponsibilitySequenceNumberCode"}
+_COB_ALLOW = {
+    "primaryPayer",
+    "secondaryPayer",
+    "planSponsor",
+    "ipa",
+    "sequence",
+    "payerResponsibilitySequenceNumberCode",
+}
+
 
 def _dec(v) -> Decimal | None:
     try:
         return Decimal(str(v)) if v not in (None, "") else None
     except (InvalidOperation, ValueError):
         return None
+
 
 def _redact_cob(raw):
     if isinstance(raw, dict):
@@ -28,6 +41,7 @@ def _redact_cob(raw):
         out = [o for o in out if o]
         return out or None
     return None
+
 
 def _pair_met(lines: list[BenefitLine]) -> list[BenefitLine]:
     """For deductible/OOP: when a calendar-year total and a remaining line exist for the same
@@ -46,16 +60,28 @@ def _pair_met(lines: list[BenefitLine]) -> list[BenefitLine]:
             drop_ids.add(id(rem))
     return [l for l in lines if id(l) not in drop_ids]
 
+
 def parse_271_benefits(data: dict) -> EligibilityResult:
     if data.get("errors"):
         return EligibilityResult(
-            coverage_active=None, plan_name=None, group=None, coverage_dates={},
-            network_status=NetworkStatus.UNKNOWN, benefits=[], pcp_required=None,
-            prior_auth_required=None, referral_required=None, cob=None,
-            network_verdict=None, corroboration=[],
-            source_audit={"source": "stedi-271",
-                          "error_codes": [e.get("code") for e in data["errors"]],
-                          "note": "payer could not respond"})
+            coverage_active=None,
+            plan_name=None,
+            group=None,
+            coverage_dates={},
+            network_status=NetworkStatus.UNKNOWN,
+            benefits=[],
+            pcp_required=None,
+            prior_auth_required=None,
+            referral_required=None,
+            cob=None,
+            network_verdict=None,
+            corroboration=[],
+            source_audit={
+                "source": "stedi-271",
+                "error_codes": [e.get("code") for e in data["errors"]],
+                "note": "payer could not respond",
+            },
+        )
     infos = data.get("benefitsInformation") or []
     active = any(b.get("code") == "1" for b in infos)
     inactive = any(b.get("code") == "6" for b in infos)
@@ -78,17 +104,27 @@ def parse_271_benefits(data: dict) -> EligibilityResult:
         time_period = _TIME.get(b.get("timeQualifierCode"))
         amount = _dec(b.get("benefitAmount"))
         stc = (b.get("serviceTypeCodes") or [""])[0]
-        label = (b.get("serviceTypes") or [b.get("name", "")])[0] if b.get("serviceTypes") else (b.get("name", "") or "")
-        lines.append(BenefitLine(
-            service_type=stc, service_type_label=label,
-            network=_NET.get(b.get("inPlanNetworkIndicatorCode"), Network.UNKNOWN),
-            category=cat, level=_LEVEL.get(b.get("coverageLevelCode"), CoverageLevel.UNKNOWN),
-            amount=amount if cat != BenefitCategory.COINSURANCE else None,
-            percent=_dec(b.get("benefitPercent")),
-            time_period=time_period,
-            met=None,
-            remaining=amount if time_period == "remaining" else None,
-            raw_codes={k: b.get(k) for k in ("code", "coverageLevelCode", "inPlanNetworkIndicatorCode", "timeQualifierCode")}))
+        label = (
+            (b.get("serviceTypes") or [b.get("name", "")])[0] if b.get("serviceTypes") else (b.get("name", "") or "")
+        )
+        lines.append(
+            BenefitLine(
+                service_type=stc,
+                service_type_label=label,
+                network=_NET.get(b.get("inPlanNetworkIndicatorCode"), Network.UNKNOWN),
+                category=cat,
+                level=_LEVEL.get(b.get("coverageLevelCode"), CoverageLevel.UNKNOWN),
+                amount=amount if cat != BenefitCategory.COINSURANCE else None,
+                percent=_dec(b.get("benefitPercent")),
+                time_period=time_period,
+                met=None,
+                remaining=amount if time_period == "remaining" else None,
+                raw_codes={
+                    k: b.get(k)
+                    for k in ("code", "coverageLevelCode", "inPlanNetworkIndicatorCode", "timeQualifierCode")
+                },
+            )
+        )
 
     lines = _pair_met(lines)
     nets = {l.network for l in lines}
@@ -97,7 +133,7 @@ def parse_271_benefits(data: dict) -> EligibilityResult:
     elif Network.OON in nets and Network.IN not in nets:
         status = NetworkStatus.OUT_OF_NETWORK
     else:
-        status = NetworkStatus.UNKNOWN     # mixed/none → defer to the directory engine, never guess
+        status = NetworkStatus.UNKNOWN  # mixed/none → defer to the directory engine, never guess
 
     plan = data.get("planInformation") or {}
     return EligibilityResult(
@@ -105,8 +141,13 @@ def parse_271_benefits(data: dict) -> EligibilityResult:
         plan_name=plan.get("planName") or plan.get("groupDescription"),
         group=plan.get("groupNumber"),
         coverage_dates=data.get("planDateInformation") or {},
-        network_status=status, benefits=lines,
-        pcp_required=pcp, prior_auth_required=prior_auth, referral_required=referral,
+        network_status=status,
+        benefits=lines,
+        pcp_required=pcp,
+        prior_auth_required=prior_auth,
+        referral_required=referral,
         cob=_redact_cob(data.get("coordinationOfBenefits")),
-        network_verdict=None, corroboration=[],
-        source_audit={"source": "stedi-271"})
+        network_verdict=None,
+        corroboration=[],
+        source_audit={"source": "stedi-271"},
+    )

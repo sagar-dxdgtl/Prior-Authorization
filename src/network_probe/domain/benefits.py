@@ -8,14 +8,24 @@ from network_probe.domain.models import NetworkStatus, NetworkVerdict
 
 
 class Network(str, Enum):
-    IN = "IN"; OON = "OON"; UNKNOWN = "UNKNOWN"
+    IN = "IN"
+    OON = "OON"
+    UNKNOWN = "UNKNOWN"
+
 
 class BenefitCategory(str, Enum):
-    COPAY = "copay"; COINSURANCE = "coinsurance"; DEDUCTIBLE = "deductible"
-    OOP_MAX = "oop_max"; LIMITATION = "limitation"
+    COPAY = "copay"
+    COINSURANCE = "coinsurance"
+    DEDUCTIBLE = "deductible"
+    OOP_MAX = "oop_max"
+    LIMITATION = "limitation"
+
 
 class CoverageLevel(str, Enum):
-    INDIVIDUAL = "individual"; FAMILY = "family"; UNKNOWN = "unknown"
+    INDIVIDUAL = "individual"
+    FAMILY = "family"
+    UNKNOWN = "unknown"
+
 
 @dataclass
 class BenefitLine:
@@ -33,8 +43,11 @@ class BenefitLine:
 
     def to_dict(self) -> dict:
         return {
-            "service_type": self.service_type, "service_type_label": self.service_type_label,
-            "network": self.network.value, "category": self.category.value, "level": self.level.value,
+            "service_type": self.service_type,
+            "service_type_label": self.service_type_label,
+            "network": self.network.value,
+            "category": self.category.value,
+            "level": self.level.value,
             "amount": None if self.amount is None else str(self.amount),
             "percent": None if self.percent is None else str(self.percent),
             "time_period": self.time_period,
@@ -42,6 +55,7 @@ class BenefitLine:
             "remaining": None if self.remaining is None else str(self.remaining),
             "raw_codes": self.raw_codes,
         }
+
 
 @dataclass
 class EligibilityResult:
@@ -61,11 +75,17 @@ class EligibilityResult:
 
     def to_dict(self) -> dict:
         return {
-            "coverage_active": self.coverage_active, "plan_name": self.plan_name, "group": self.group,
-            "coverage_dates": self.coverage_dates, "network_status": self.network_status.value,
+            "coverage_active": self.coverage_active,
+            "plan_name": self.plan_name,
+            "group": self.group,
+            "coverage_dates": self.coverage_dates,
+            "network_status": self.network_status.value,
             "benefits": [b.to_dict() for b in self.benefits],
-            "pcp_required": self.pcp_required, "prior_auth_required": self.prior_auth_required,
-            "referral_required": self.referral_required, "cob": self.cob,
+            "pcp_required": self.pcp_required,
+            "prior_auth_required": self.prior_auth_required,
+            "referral_required": self.referral_required,
+            "cob": self.cob,
             "network_verdict": self.network_verdict.to_dict() if self.network_verdict else None,
-            "corroboration": self.corroboration, "source_audit": self.source_audit,
+            "corroboration": self.corroboration,
+            "source_audit": self.source_audit,
         }
