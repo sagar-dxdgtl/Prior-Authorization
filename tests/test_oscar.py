@@ -24,15 +24,15 @@ from urllib.parse import parse_qs, urlsplit
 import httpx
 import pytest
 
-from network_probe._http import CachedClient
-from network_probe.adapters.oscar import OscarAdapter
-from network_probe.models import NetworkStatus, ProviderQuery
+from network_probe.core._http import CachedClient
+from network_probe.domain.models import NetworkStatus, ProviderQuery
+from network_probe.payers.adapters.oscar import OscarAdapter
 
 FIX = Path(__file__).parent / "fixtures"
 
 # ---- test constants ---------------------------------------------------------
-KYLE_NPI = "1679766943"          # ground-truth OON provider (absent from net 066)
-JESSICA_NPI = "1568741320"       # positive control (in net 066)
+KYLE_NPI = "1679766943"  # ground-truth OON provider (absent from net 066)
+JESSICA_NPI = "1568741320"  # positive control (in net 066)
 JESSICA_EID = "8oHqRKWUYDqgNR"
 PLAN_HINT = "BASE SILVER CSR 150 / SILVERSIMPLEPCPSAVER"
 TODAY = date(2026, 6, 22)
@@ -88,6 +88,7 @@ def _query(npi: str) -> ProviderQuery:
 
 # ---- offline tests ----------------------------------------------------------
 
+
 def test_resolve_network_maps_test_plan_to_066():
     a = _offline_adapter()
     resolved = a.resolve_network(PLAN_HINT, "FL")
@@ -132,6 +133,7 @@ def test_missing_last_name_is_unknown_not_oon():
 
 
 # ---- live end-to-end (the real validation; run with `pytest -m live`) --------
+
 
 @pytest.mark.live
 def test_herron_oon_live():

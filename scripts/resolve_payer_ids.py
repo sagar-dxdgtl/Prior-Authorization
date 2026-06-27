@@ -10,6 +10,7 @@ names is fuzzy (e.g. "BCBS / Empire (Anthem / Elevance)"), so review before writ
 
     python scripts/resolve_payer_ids.py --apply
 """
+
 from __future__ import annotations
 
 import os
@@ -18,8 +19,8 @@ import sys
 
 from sqlalchemy import text
 
-from network_probe._http import CachedClient
-from network_probe.secrets_provider import get_secret
+from network_probe.core._http import CachedClient
+from network_probe.core.secrets_provider import get_secret
 from network_probe.db.base import owner_engine
 
 PAYERS_URL = os.environ.get("STEDI_PAYERS_URL", "https://healthcare.us.stedi.com/2024-04-01/payers")
@@ -38,8 +39,13 @@ def search_payer(client: CachedClient, api_key: str, name: str):
     want = _norm(name)
     if not want:
         return None
-    for it in (data.get("items") or []):
-        candidates = [it.get("displayName"), it.get("conciseName"), *(it.get("names") or []), *(it.get("aliases") or [])]
+    for it in data.get("items") or []:
+        candidates = [
+            it.get("displayName"),
+            it.get("conciseName"),
+            *(it.get("names") or []),
+            *(it.get("aliases") or []),
+        ]
         for c in candidates:
             nc = _norm(c)
             if nc and (nc == want or want in nc or nc in want):
@@ -55,16 +61,22 @@ def resolve_all(client: CachedClient | None = None, apply: bool = False) -> int:
     client = client or CachedClient(cache_dir=None, delay_seconds=0.3)
     n = 0
     with owner_engine().begin() as conn:
-        rows = conn.execute(text(
-            "SELECT id, label FROM payers WHERE tenant_id IS NULL AND stedi_payer_id IS NULL")).mappings().all()
+        rows = (
+            conn.execute(text("SELECT id, label FROM payers WHERE tenant_id IS NULL AND stedi_payer_id IS NULL"))
+            .mappings()
+            .all()
+        )
         for r in rows:
             pid = search_payer(client, api_key, r["label"])
             if pid:
                 print(f"  {'APPLY' if apply else 'PROPOSE'}: {r['label']!r} -> {pid}")
                 if apply:
-                    conn.execute(text(
-                        "UPDATE payers SET stedi_payer_id=:pid, enrollment_status='needs_enrollment' WHERE id=:id"),
-                        {"pid": pid, "id": r["id"]})
+                    conn.execute(
+                        text(
+                            "UPDATE payers SET stedi_payer_id=:pid, enrollment_status='needs_enrollment' WHERE id=:id"
+                        ),
+                        {"pid": pid, "id": r["id"]},
+                    )
                 n += 1
             else:
                 print(f"  no confident match: {r['label']!r}")

@@ -3,14 +3,19 @@ check that the HTTP shell maps requests to the service and serializes verdicts."
 
 from __future__ import annotations
 
+import sys
+
 import pytest
 
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
 
-from network_probe import api as api_mod  # noqa: E402
-from network_probe.models import NetworkStatus, NetworkVerdict, ProviderQuery  # noqa: E402
+import network_probe.api.app  # noqa: E402,F401  (register the module in sys.modules)
+from network_probe.domain.models import NetworkStatus, NetworkVerdict, ProviderQuery  # noqa: E402
 
+# The package re-exports the FastAPI `app`, which shadows the `app` submodule attribute,
+# so reach the module object via sys.modules to monkeypatch its module-level globals.
+api_mod = sys.modules["network_probe.api.app"]
 client = TestClient(api_mod.app)
 
 
@@ -34,14 +39,17 @@ def test_payers_lists_adapters():
 @pytest.mark.db
 def test_check_maps_service_verdict(monkeypatch, auth_header):
     fake = NetworkVerdict(
-        status=NetworkStatus.IN_NETWORK, matched_provider={"npi": "1679766943", "name": "Kyle A Herron"},
+        status=NetworkStatus.IN_NETWORK,
+        matched_provider={"npi": "1679766943", "name": "Kyle A Herron"},
         plan_or_network_checked="humana-fhir / network 'Medicare PPO'",
         source_url="https://fhir.humana.com/api/Practitioner?identifier=1679766943",
-        confidence="high", notes="matched",
+        confidence="high",
+        notes="matched",
     )
     monkeypatch.setattr(api_mod, "check_network", lambda q, **kw: fake)
-    r = client.post("/api/check", json={"payer": "humana-fhir", "plan": "Medicare PPO", "npi": "1679766943"},
-                    headers=auth_header)
+    r = client.post(
+        "/api/check", json={"payer": "humana-fhir", "plan": "Medicare PPO", "npi": "1679766943"}, headers=auth_header
+    )
     assert r.status_code == 200
     body = r.json()
     assert body["status"] == "IN_NETWORK" and body["payer"] == "humana-fhir"
@@ -52,6 +60,7 @@ def test_check_maps_service_verdict(monkeypatch, auth_header):
 def test_check_errors_return_400(monkeypatch, auth_header):
     def boom(q, **kw):
         raise ValueError("no adapter for payer 'nope'")
+
     monkeypatch.setattr(api_mod, "check_network", boom)
     r = client.post("/api/check", json={"payer": "nope", "plan": "x"}, headers=auth_header)
     assert r.status_code == 400
@@ -63,17 +72,36 @@ def test_check_errors_return_400(monkeypatch, auth_header):
 
 @pytest.mark.db
 def test_check_from_report(monkeypatch, auth_header):
-    parsed = {"payer_key": "oscar", "payer_name": "Oscar Health EDI", "npi": "1679766943",
-              "provider_first": "Kyle", "provider_last": "Herron", "plan_name": "BASE SILVER",
-              "policy_type": "HMO", "state": "FL", "zip": "33409", "member_id": "OSC1"}
-    fake = NetworkVerdict(status=NetworkStatus.OUT_OF_NETWORK, matched_provider=None,
-                          plan_or_network_checked="Oscar 066", source_url="u", confidence="high", notes="n")
+    parsed = {
+        "payer_key": "oscar",
+        "payer_name": "Oscar Health EDI",
+        "npi": "1679766943",
+        "provider_first": "Kyle",
+        "provider_last": "Herron",
+        "plan_name": "BASE SILVER",
+        "policy_type": "HMO",
+        "state": "FL",
+        "zip": "33409",
+        "member_id": "OSC1",
+    }
+    fake = NetworkVerdict(
+        status=NetworkStatus.OUT_OF_NETWORK,
+        matched_provider=None,
+        plan_or_network_checked="Oscar 066",
+        source_url="u",
+        confidence="high",
+        notes="n",
+    )
     monkeypatch.setattr(api_mod, "parse_report", lambda src: parsed)
-    monkeypatch.setattr(api_mod, "report_to_query", lambda p, client=None:
-                        ProviderQuery(payer="oscar", plan_hint="x", npi="1679766943", last_name="Herron"))
+    monkeypatch.setattr(
+        api_mod,
+        "report_to_query",
+        lambda p, client=None: ProviderQuery(payer="oscar", plan_hint="x", npi="1679766943", last_name="Herron"),
+    )
     monkeypatch.setattr(api_mod, "check_network", lambda q, **kw: fake)
-    r = client.post("/api/check-from-report", files={"file": ("r.pdf", b"%PDF-1.4", "application/pdf")},
-                    headers=auth_header)
+    r = client.post(
+        "/api/check-from-report", files={"file": ("r.pdf", b"%PDF-1.4", "application/pdf")}, headers=auth_header
+    )
     assert r.status_code == 200
     body = r.json()
     assert body["status"] == "OUT_OF_NETWORK" and body["parsed"]["payer_key"] == "oscar"
@@ -81,12 +109,16 @@ def test_check_from_report(monkeypatch, auth_header):
 
 @pytest.mark.db
 def test_check_includes_ground_truth(monkeypatch, auth_header):
-    fake = NetworkVerdict(status=NetworkStatus.OUT_OF_NETWORK, matched_provider=None,
-                          plan_or_network_checked="devoted PPO", source_url="u",
-                          confidence="high", notes="override")
+    fake = NetworkVerdict(
+        status=NetworkStatus.OUT_OF_NETWORK,
+        matched_provider=None,
+        plan_or_network_checked="devoted PPO",
+        source_url="u",
+        confidence="high",
+        notes="override",
+    )
     monkeypatch.setattr(api_mod, "check_network", lambda q, **kw: fake)
-    r = client.post("/api/check", json={"payer": "devoted", "plan": "PPO", "npi": "1629339312"},
-                    headers=auth_header)
+    r = client.post("/api/check", json={"payer": "devoted", "plan": "PPO", "npi": "1629339312"}, headers=auth_header)
     assert r.status_code == 200
     gt = r.json()["ground_truth"]
     assert gt and gt["truth"] == "OUT_OF_NETWORK"
@@ -94,11 +126,16 @@ def test_check_includes_ground_truth(monkeypatch, auth_header):
 
 @pytest.mark.db
 def test_check_ground_truth_none_for_unknown(monkeypatch, auth_header):
-    fake = NetworkVerdict(status=NetworkStatus.IN_NETWORK, matched_provider=None,
-                          plan_or_network_checked="x", source_url="u", confidence="high", notes="n")
+    fake = NetworkVerdict(
+        status=NetworkStatus.IN_NETWORK,
+        matched_provider=None,
+        plan_or_network_checked="x",
+        source_url="u",
+        confidence="high",
+        notes="n",
+    )
     monkeypatch.setattr(api_mod, "check_network", lambda q, **kw: fake)
-    r = client.post("/api/check", json={"payer": "oscar", "plan": "x", "npi": "0000000000"},
-                    headers=auth_header)
+    r = client.post("/api/check", json={"payer": "oscar", "plan": "x", "npi": "0000000000"}, headers=auth_header)
     assert r.json()["ground_truth"] is None
 
 

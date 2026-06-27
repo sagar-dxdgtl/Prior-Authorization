@@ -13,15 +13,15 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from urllib.parse import urlsplit, parse_qs
+from urllib.parse import parse_qs, urlsplit
 
 import httpx
 import pytest
 
-from network_probe._http import CachedClient
-from network_probe.adapters.fhir_pdex import FhirPdexAdapter
-from network_probe.models import NetworkStatus, ProviderQuery
-from network_probe.plan_aliases import network_aliases
+from network_probe.core._http import CachedClient
+from network_probe.domain.models import NetworkStatus, ProviderQuery
+from network_probe.domain.plan_aliases import network_aliases
+from network_probe.payers.adapters.fhir_pdex import FhirPdexAdapter
 
 FIX = Path(__file__).parent / "fixtures"
 KYLE_NPI = "1679766943"
@@ -61,6 +61,7 @@ def _q(npi, plan):
 
 
 # ---- offline ----------------------------------------------------------------
+
 
 def test_kyle_in_network_medicare_ppo():
     v = _offline().check_network(_q(KYLE_NPI, "Medicare PPO"))
@@ -103,18 +104,47 @@ def _refserver_handler(request: httpx.Request) -> httpx.Response:
     qs = parse_qs(u.query)
     if u.path.endswith("/Practitioner"):
         if "identifier" in qs:  # this server doesn't support NPI identifier search
-            return httpx.Response(400, json={"resourceType": "OperationOutcome",
-                                             "issue": [{"severity": "error", "code": "not-supported"}]})
+            return httpx.Response(
+                400,
+                json={"resourceType": "OperationOutcome", "issue": [{"severity": "error", "code": "not-supported"}]},
+            )
         if (qs.get("family") or [""])[0].lower() == "smith":
-            return httpx.Response(200, json={"resourceType": "Bundle", "total": 1, "entry": [
-                {"resource": {"resourceType": "Practitioner", "id": "p1", "name": [{"text": "Jane Smith"}],
-                              "identifier": [{"system": "http://hl7.org/fhir/sid/us-npi", "value": "1234567893"}]}}]})
+            return httpx.Response(
+                200,
+                json={
+                    "resourceType": "Bundle",
+                    "total": 1,
+                    "entry": [
+                        {
+                            "resource": {
+                                "resourceType": "Practitioner",
+                                "id": "p1",
+                                "name": [{"text": "Jane Smith"}],
+                                "identifier": [{"system": "http://hl7.org/fhir/sid/us-npi", "value": "1234567893"}],
+                            }
+                        }
+                    ],
+                },
+            )
         return httpx.Response(200, json={"resourceType": "Bundle", "total": 0, "entry": []})
     if u.path.endswith("/PractitionerRole"):
-        return httpx.Response(200, json={"resourceType": "Bundle", "total": 1, "entry": [
-            {"resource": {"resourceType": "PractitionerRole", "id": "r1",
-                          "extension": [{"url": NET_EXT, "valueReference": {"reference": "Organization/o1"}}],
-                          "specialty": [{"coding": [{"display": "Cardiology"}]}]}}]})
+        return httpx.Response(
+            200,
+            json={
+                "resourceType": "Bundle",
+                "total": 1,
+                "entry": [
+                    {
+                        "resource": {
+                            "resourceType": "PractitionerRole",
+                            "id": "r1",
+                            "extension": [{"url": NET_EXT, "valueReference": {"reference": "Organization/o1"}}],
+                            "specialty": [{"coding": [{"display": "Cardiology"}]}],
+                        }
+                    }
+                ],
+            },
+        )
     if "/Organization/" in u.path:
         return httpx.Response(200, json={"resourceType": "Organization", "id": "o1", "name": "Open Access Plus"})
     return httpx.Response(404, json={})
@@ -122,28 +152,33 @@ def _refserver_handler(request: httpx.Request) -> httpx.Response:
 
 def _refserver() -> FhirPdexAdapter:
     mock = httpx.Client(transport=httpx.MockTransport(_refserver_handler))
-    return FhirPdexAdapter(base_url="https://example.org/fhir", payer_name="cigna-fhir",
-                           client=CachedClient(cache_dir=None, delay_seconds=0, client=mock))
+    return FhirPdexAdapter(
+        base_url="https://example.org/fhir",
+        payer_name="cigna-fhir",
+        client=CachedClient(cache_dir=None, delay_seconds=0, client=mock),
+    )
 
 
 def test_name_fallback_with_org_resolution_in_network():
     """identifier search 400s → name fallback → NPI match → network name via Organization read."""
-    v = _refserver().check_network(ProviderQuery(
-        payer="cigna-fhir", plan_hint="Open Access Plus", npi="1234567893", last_name="Smith"))
+    v = _refserver().check_network(
+        ProviderQuery(payer="cigna-fhir", plan_hint="Open Access Plus", npi="1234567893", last_name="Smith")
+    )
     assert v.status == NetworkStatus.IN_NETWORK
     assert v.matched_provider["matched_network"] == "Open Access Plus"
 
 
 def test_name_fallback_npi_mismatch_is_oon():
-    v = _refserver().check_network(ProviderQuery(
-        payer="cigna-fhir", plan_hint="X", npi="9999999999", last_name="Smith"))
+    v = _refserver().check_network(
+        ProviderQuery(payer="cigna-fhir", plan_hint="X", npi="9999999999", last_name="Smith")
+    )
     assert v.status == NetworkStatus.OUT_OF_NETWORK
 
 
 # --- plan-name -> network-name alias map ---
 def test_plan_alias_lookup():
     assert network_aliases("uhc", "UHC Bronze Essential", "TX") == ["TX Individual Exchange Benefit Plan"]
-    assert network_aliases("uhc", "Bronze Essential", "FL") == []          # state gate
+    assert network_aliases("uhc", "Bronze Essential", "FL") == []  # state gate
     assert network_aliases("humana-fhir", "HUM FULL AC GIVEBACK") == ["Medicare PPO"]
 
 
@@ -152,30 +187,64 @@ def _uhc_handler(request: httpx.Request) -> httpx.Response:
     qs = parse_qs(u.query)
     if u.path.endswith("/Practitioner"):
         if (qs.get("identifier") or [""])[0] == "1972603934":
-            return httpx.Response(200, json={"resourceType": "Bundle", "total": 1, "entry": [
-                {"resource": {"resourceType": "Practitioner", "id": "u1", "name": [{"text": "Kevin D Fradkin"}],
-                              "identifier": [{"system": "http://hl7.org/fhir/sid/us-npi", "value": "1972603934"}]}}]})
+            return httpx.Response(
+                200,
+                json={
+                    "resourceType": "Bundle",
+                    "total": 1,
+                    "entry": [
+                        {
+                            "resource": {
+                                "resourceType": "Practitioner",
+                                "id": "u1",
+                                "name": [{"text": "Kevin D Fradkin"}],
+                                "identifier": [{"system": "http://hl7.org/fhir/sid/us-npi", "value": "1972603934"}],
+                            }
+                        }
+                    ],
+                },
+            )
         return httpx.Response(200, json={"resourceType": "Bundle", "total": 0, "entry": []})
     if u.path.endswith("/PractitionerRole"):
-        return httpx.Response(200, json={"resourceType": "Bundle", "total": 1, "entry": [
-            {"resource": {"resourceType": "PractitionerRole", "id": "ur1", "extension": [
-                {"url": NET_EXT, "valueReference": {"display": "TX Individual Exchange Benefit Plan"}}]}}]})
+        return httpx.Response(
+            200,
+            json={
+                "resourceType": "Bundle",
+                "total": 1,
+                "entry": [
+                    {
+                        "resource": {
+                            "resourceType": "PractitionerRole",
+                            "id": "ur1",
+                            "extension": [
+                                {"url": NET_EXT, "valueReference": {"display": "TX Individual Exchange Benefit Plan"}}
+                            ],
+                        }
+                    }
+                ],
+            },
+        )
     return httpx.Response(404, json={})
 
 
 def test_uhc_bronze_essential_resolves_in_network_via_alias():
     """The exact case from the report: plan 'Bronze Essential' (TX) → IN via the alias map."""
     mock = httpx.Client(transport=httpx.MockTransport(_uhc_handler))
-    a = FhirPdexAdapter(base_url="https://example.org/fhir", payer_name="uhc",
-                        client=CachedClient(cache_dir=None, delay_seconds=0, client=mock))
-    v = a.check_network(ProviderQuery(payer="uhc", plan_hint="Bronze Essential",
-                                      npi="1972603934", last_name="Fradkin", state="TX"))
+    a = FhirPdexAdapter(
+        base_url="https://example.org/fhir",
+        payer_name="uhc",
+        client=CachedClient(cache_dir=None, delay_seconds=0, client=mock),
+    )
+    v = a.check_network(
+        ProviderQuery(payer="uhc", plan_hint="Bronze Essential", npi="1972603934", last_name="Fradkin", state="TX")
+    )
     assert v.status == NetworkStatus.IN_NETWORK
     assert v.matched_provider["matched_network"] == "TX Individual Exchange Benefit Plan"
     assert "alias" in v.notes.lower()
 
 
 # ---- live (real Humana CMS Provider Directory API) --------------------------
+
 
 @pytest.mark.live
 def test_kyle_in_network_live():

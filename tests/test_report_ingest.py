@@ -3,7 +3,7 @@ layout (no PHI, no PDF dependency) so it runs in any checkout."""
 
 from __future__ import annotations
 
-from network_probe.report_ingest import parse_report, report_to_query
+from network_probe.domain.report_ingest import parse_report, report_to_query
 
 # Mirrors the real pVerify text layout: interleaved query block + clean PLAN COVERAGE / DETAILED RESULT.
 SYNTH = """QUERY CRITERIA
@@ -71,7 +71,11 @@ def test_report_to_query_uses_report_name_not_nppes():
 
 
 def test_payer_mapping():
-    for needle, key in [("Cigna", "cigna-fhir"), ("Humana", "humana-fhir"),
-                        ("United Healthcare", "uhc"), ("DEVOTED HEALTH", "devoted")]:
+    for needle, key in [
+        ("Cigna", "cigna-fhir"),
+        ("Humana", "humana-fhir"),
+        ("United Healthcare", "uhc"),
+        ("DEVOTED HEALTH", "devoted"),
+    ]:
         txt = SYNTH.replace("Oscar Health EDI", needle)
         assert parse_report(txt)["payer_key"] == key

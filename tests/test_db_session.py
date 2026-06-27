@@ -1,6 +1,10 @@
-import uuid, pytest
+import uuid
+
+import pytest
 from sqlalchemy import text
+
 from network_probe.db.session import tenant_session
+
 
 @pytest.mark.db
 def test_set_config_is_transaction_local():
@@ -12,6 +16,7 @@ def test_set_config_is_transaction_local():
     with tenant_session(other) as s2:
         got = s2.execute(text("SELECT current_setting('app.tenant_id', true)")).scalar()
         assert got == str(other) and got != str(tid)
+
 
 def test_invalid_tenant_id_rejected():
     # empty / malformed tenant id must raise BEFORE any DB work (never set app.tenant_id='')

@@ -1,18 +1,23 @@
 """The seeded golden-record override corrects Rodriguez (Devoted CO PPO · Dr Li) to OON."""
+
 from pathlib import Path
 
-from network_probe.corroboration import finalize
-from network_probe.models import NetworkStatus, NetworkVerdict, ProviderQuery
-from network_probe.overrides import OverrideStore
+from network_probe.domain.corroboration import finalize
+from network_probe.domain.models import NetworkStatus, NetworkVerdict, ProviderQuery
+from network_probe.domain.overrides import OverrideStore
 
 SEED = Path(".overrides/overrides.json")
 
 
 def _devoted_in_verdict():
-    return NetworkVerdict(status=NetworkStatus.IN_NETWORK,
-                          matched_provider={"npi": "1629339312", "name": "Jing Li, MD"},
-                          plan_or_network_checked="devoted CO PPO", source_url="http://dir",
-                          confidence="high", notes="listed in directory.")
+    return NetworkVerdict(
+        status=NetworkStatus.IN_NETWORK,
+        matched_provider={"npi": "1629339312", "name": "Jing Li, MD"},
+        plan_or_network_checked="devoted CO PPO",
+        source_url="http://dir",
+        confidence="high",
+        notes="listed in directory.",
+    )
 
 
 def test_seed_file_exists_and_has_rodriguez():

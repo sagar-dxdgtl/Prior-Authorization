@@ -1,8 +1,11 @@
 """Migrate legacy global JSON overrides (.overrides/overrides.json) into the tenant-scoped DB store."""
+
 from __future__ import annotations
+
 import json
 from pathlib import Path
-from network_probe.overrides import Override, DbOverrideStore
+
+from network_probe.domain.overrides import DbOverrideStore, Override
 
 
 def migrate(json_path: Path, tenant_id) -> int:
@@ -25,8 +28,9 @@ def migrate(json_path: Path, tenant_id) -> int:
 
 if __name__ == "__main__":
     import sys
+
     if len(sys.argv) != 3:
-        print(f"Usage: python -m scripts.migrate_overrides <json_path> <tenant_id>")
+        print("Usage: python -m scripts.migrate_overrides <json_path> <tenant_id>")
         sys.exit(1)
     count = migrate(Path(sys.argv[1]), sys.argv[2])
     print(f"Migrated {count} override(s).")
