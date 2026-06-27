@@ -8,7 +8,9 @@ from .service import check_network
 
 def check_eligibility(q: ProviderQuery, base_url: Optional[str] = None,
                       catalogue: Optional[PayerCatalogue] = None,
-                      stedi: Optional[EligibilitySource] = None) -> EligibilityResult:
+                      stedi: Optional[EligibilitySource] = None,
+                      tenant_id=None,
+                      override_store=None) -> EligibilityResult:
     cat = catalogue or DbPayerCatalogue()
     payer = cat.resolve(q.payer)
     source = stedi or StediEligibilityClient(payer_id=payer.stedi_payer_id if payer else None)
@@ -27,4 +29,18 @@ def check_eligibility(q: ProviderQuery, base_url: Optional[str] = None,
             result.network_status = NetworkStatus.REVIEW
         elif result.network_status == NetworkStatus.UNKNOWN and verdict.status != NetworkStatus.UNKNOWN:
             result.network_status = verdict.status
+    # Apply tenant-scoped golden-record override as the authoritative last word.
+    store = override_store
+    if store is None and tenant_id is not None:
+        from .overrides import DbOverrideStore
+        store = DbOverrideStore(tenant_id)
+    if store is not None:
+        ov = store.lookup(q)
+        if ov is not None:
+            result.network_status = NetworkStatus(ov.status)
+            result.corroboration = (result.corroboration or []) + [
+                {"source": "override", "result": "authoritative",
+                 "detail": f"{ov.status} confirmed by {ov.verified_by} ({ov.verified_at})"}]
+            result.source_audit = {**(result.source_audit or {}),
+                                   "override": f"{ov.verified_by} {ov.verified_at}"}
     return result

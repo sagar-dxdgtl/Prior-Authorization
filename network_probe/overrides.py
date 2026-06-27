@@ -53,7 +53,8 @@ class OverrideStore:
             except Exception:
                 self._items = []
 
-    def _matches(self, o: Override, q: ProviderQuery) -> bool:
+    @staticmethod
+    def _matches(o: Override, q: ProviderQuery) -> bool:
         if o.payer.lower() != (q.payer or "").lower() or o.npi != (q.npi or ""):
             return False
         if o.tin and _norm(o.tin) != _norm(q.tin or ""):
@@ -66,18 +67,50 @@ class OverrideStore:
             pass
         return True
 
-    def lookup(self, q: ProviderQuery) -> Optional[Override]:
-        cands = [o for o in self._items if self._matches(o, q)]
+    @staticmethod
+    def best_match(items, q: ProviderQuery) -> Optional[Override]:
+        cands = [o for o in items if OverrideStore._matches(o, q)]
         if not cands:
             return None
-        # most specific, then most recent
         cands.sort(key=lambda o: (o.specificity(), o.verified_at), reverse=True)
         return cands[0]
+
+    def lookup(self, q: ProviderQuery) -> Optional[Override]:
+        return self.best_match(self._items, q)
 
     def add(self, override: Override) -> None:
         self._items.append(override)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps([asdict(o) for o in self._items], indent=2), encoding="utf-8")
+
+
+class DbOverrideStore:
+    """Tenant-scoped golden-record store backed by Postgres (RLS-isolated)."""
+
+    def __init__(self, tenant_id):
+        self.tenant_id = tenant_id
+
+    def _items(self) -> list[Override]:
+        from .db.session import tenant_session
+        from .db.models import OverrideRow
+        with tenant_session(self.tenant_id) as s:
+            rows = s.query(OverrideRow).all()   # RLS scopes to this tenant
+            return [Override(payer=r.payer, npi=r.npi, status=r.status,
+                             verified_by=r.verified_by, verified_at=r.verified_at,
+                             network=r.network, plan=r.plan, tin=r.tin,
+                             note=r.note or "") for r in rows]
+
+    def lookup(self, q: ProviderQuery) -> Optional[Override]:
+        return OverrideStore.best_match(self._items(), q)
+
+    def add(self, override: Override) -> None:
+        from .db.session import tenant_session
+        from .db.models import OverrideRow
+        with tenant_session(self.tenant_id) as s:
+            s.add(OverrideRow(tenant_id=self.tenant_id, payer=override.payer, npi=override.npi,
+                              status=override.status, verified_by=override.verified_by,
+                              verified_at=override.verified_at, network=override.network,
+                              plan=override.plan, tin=override.tin, note=override.note or ""))
 
 
 def verdict_from_override(o: Override, original: NetworkVerdict) -> NetworkVerdict:

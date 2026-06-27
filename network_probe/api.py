@@ -277,7 +277,7 @@ def eligibility(req: CheckRequest, ctx: RequestContext = Depends(get_context)):
                       state=req.state or None, zip_code=req.zip or None, tin=req.tin or None,
                       member_id=req.member_id or None, dob=dob)
     rid = uuid.uuid4().hex[:12]
-    result = check_eligibility(q, base_url=(req.base_url or None))
+    result = check_eligibility(q, base_url=(req.base_url or None), tenant_id=ctx.tenant_id)
     write_audit(ctx, "eligibility", q, result, rid)
     return {"payer": req.payer, "request_id": rid, **result.to_dict()}
 
@@ -350,10 +350,10 @@ def check_from_report(file: UploadFile = File(...), ctx: RequestContext = Depend
 @app.post("/api/override")
 def add_override(req: OverrideRequest, ctx: RequestContext = Depends(get_context)):
     """Record a human/authoritative-confirmed status (golden record). Wins over the directory."""
-    from .overrides import OverrideStore, Override
+    from .overrides import DbOverrideStore, Override
     rid = uuid.uuid4().hex[:12]
     try:
-        OverrideStore().add(Override(
+        DbOverrideStore(ctx.tenant_id).add(Override(
             payer=req.payer, npi=req.npi, status=req.status, verified_by=req.verified_by,
             verified_at=req.verified_at, network=req.network, plan=req.plan, tin=req.tin, note=req.note))
     except Exception as exc:
