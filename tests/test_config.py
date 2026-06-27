@@ -43,8 +43,10 @@ def test_fernet_key_list_strips_and_filters(monkeypatch):
     monkeypatch.setenv("FERNET_KEYS", "k1 , k2,")
     assert Settings().fernet_key_list == ["k1", "k2"]
 
-def test_effective_app_db_url_fallback():
-    # Bypass the local .env (which sets APP_DB_URL) so the fallback is deterministic.
+def test_effective_app_db_url_fallback(monkeypatch):
+    # Bypass both the local .env and any env-var (e.g. set by conftest) so the
+    # fallback to database_url is deterministic regardless of the test environment.
+    monkeypatch.delenv("APP_DB_URL", raising=False)
     s = Settings(_env_file=None, database_url="postgresql+psycopg://owner@l/db",
                  jwt_secret="x"*32)
     assert s.app_db_url is None and s.effective_app_db_url == "postgresql+psycopg://owner@l/db"
