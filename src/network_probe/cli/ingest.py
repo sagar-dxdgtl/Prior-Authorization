@@ -1,7 +1,7 @@
 """Batch ingest: feed pVerify eligibility reports, get the network verdict for each.
 
-    python -m network_probe.ingest test-data/*.pdf
-    python -m network_probe.ingest --json report1.pdf report2.pdf
+    python -m network_probe.cli.ingest test-data/*.pdf
+    python -m network_probe.cli.ingest --json report1.pdf report2.pdf
 
 Fills the reports' own "Provider Network: Unknown" field.
 """
@@ -39,7 +39,7 @@ def main(argv=None) -> int:
     as_json = "--json" in args
     paths = [p for a in args if a != "--json" for p in sorted(glob.glob(a))]
     if not paths:
-        print("usage: python -m network_probe.ingest [--json] <report.pdf ...>", file=sys.stderr)
+        print("usage: python -m network_probe.cli.ingest [--json] <report.pdf ...>", file=sys.stderr)
         return 2
     client = CachedClient()
     results = [verify_report(p, client) for p in paths]
