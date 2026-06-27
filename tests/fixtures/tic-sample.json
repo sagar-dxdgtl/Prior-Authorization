@@ -1,0 +1,7 @@
+{"provider_references": [
+   {"provider_group_id": 1, "provider_groups": [
+       {"npi": [1972603934, 1710305735], "tin": {"type": "ein", "value": "933510922"}}]}],
+ "in_network": [
+   {"negotiation_arrangement": "ffs", "billing_code": "99213", "negotiated_rates": [
+       {"provider_groups": [{"npi": [1679766943], "tin": {"type": "ein", "value": "463812940"}}],
+        "negotiated_prices": []}]}]}
