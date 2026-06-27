@@ -1,0 +1,10 @@
+{"benefitsInformation": [
+  {"code":"1","name":"Active Coverage","serviceTypeCodes":["30"]},
+  {"code":"B","serviceTypeCodes":["98"],"coverageLevelCode":"IND","inPlanNetworkIndicatorCode":"Y","benefitAmount":"30","timeQualifierCode":"27"},
+  {"code":"B","serviceTypeCodes":["98"],"coverageLevelCode":"IND","inPlanNetworkIndicatorCode":"N","benefitAmount":"60","timeQualifierCode":"27"},
+  {"code":"C","serviceTypeCodes":["30"],"coverageLevelCode":"FAM","inPlanNetworkIndicatorCode":"N","benefitAmount":"4000","timeQualifierCode":"23"},
+  {"code":"C","serviceTypeCodes":["30"],"coverageLevelCode":"FAM","inPlanNetworkIndicatorCode":"N","benefitAmount":"1500","timeQualifierCode":"29"},
+  {"code":"A","serviceTypeCodes":["30"],"coverageLevelCode":"IND","inPlanNetworkIndicatorCode":"N","benefitPercent":"0.4"},
+  {"code":"F","serviceTypeCodes":["30"],"additionalInformation":[{"description":"Prior authorization required"}]}
+],
+"coordinationOfBenefits":{"primaryPayer":"Aetna","sequence":"primary","subscriberMemberId":"SHOULD-NOT-LEAK"}}
