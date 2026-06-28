@@ -1,0 +1,5 @@
+{"provider_references": [
+   {"provider_group_id": 1, "location": "loc://az/1"},
+   {"provider_group_id": 2, "location": "loc://az/2"}
+ ],
+ "in_network": []}
