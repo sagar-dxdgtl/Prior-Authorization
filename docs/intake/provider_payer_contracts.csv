@@ -1,0 +1,3 @@
+entity_name,group_npi,tax_id,individual_npi,payer_name,line_of_business,state,par_status,effective_date,term_date,plan_names,notes
+Texas UVC Medical PLLC,1447023528,93-3510922,1972603934,UnitedHealthcare,Commercial,TX,PAR,2024-01-01,,Choice Plus,example row — replace
+,,,,,,,,,,,
