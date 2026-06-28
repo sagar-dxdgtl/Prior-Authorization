@@ -76,3 +76,42 @@ TIN_CROSSWALK_PATH=/path/to/uhc-az-crosswalk.csv
   once the first full set is validated.
 - **Validate matches** against NPPES (`https://npiregistry.cms.hhs.gov/api/?number=<npi>&version=2.1`)
   before trusting a TIN match in production (one AZ NPI flagged as a possible TIN-share in the first run).
+
+## Cigna-style payers (external provider_reference.location files)
+
+Cigna and many modern Aetna plans put their NPI/TIN data in **separate referenced
+files** instead of inline `provider_groups`.  The top-level MRF lists only:
+
+```json
+{"provider_references": [
+    {"provider_group_id": 1, "location": "https://mrf.cigna.com/ref/abc123.json.gz"}
+]}
+```
+
+The ingester resolves these automatically — **`--resolve-references` is ON by default**.
+
+### Important: geo-restriction
+
+Cigna's provider-reference files are served from a **geo-restricted AWS CloudFront**
+distribution.  Requests from outside the US return 403.  Always run the ingester from a
+**US IP address** (EC2 / Fargate in `us-east-1` or `us-west-2`) for Cigna and Aetna MRFs.
+UHC's Azure CDN is open and works from anywhere.
+
+### Usage
+
+```bash
+# Cigna MRF (external refs resolved automatically, default behaviour)
+python scripts/ingest_tic.py cigna-plan.json.gz cigna.csv \
+    --payer cigna --tin-file practice-tins.txt
+
+# Force inline-only mode (disables resolver — use for UHC or air-gapped environments)
+python scripts/ingest_tic.py uhc-plan.json.gz uhc.csv \
+    --payer uhc --tin-file practice-tins.txt --no-resolve-references
+
+# Tune concurrency (default 16 threads; raise for high-latency CDN endpoints)
+python scripts/ingest_tic.py cigna-plan.json.gz cigna.csv \
+    --payer cigna --tin-file practice-tins.txt --max-workers 32
+```
+
+The script prints the number of unique NPI→TIN rows written.  Resolver failures per URL
+are logged at `WARNING` level; the run continues and all non-failing refs are still written.
