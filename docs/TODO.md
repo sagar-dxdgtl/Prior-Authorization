@@ -18,6 +18,17 @@ Keep this updated as items land. (UVVC = tenant #1; the platform is multi-client
 - ☐ ⛔ **user signup** — register dev creds per `docs/payer-sources/SIGNUP-CHECKLIST.md` (Aetna, UHC, Anthem/Elevance, Kaiser, Molina, Centene, + smaller MA plans) → put in `.env` as `<P>_FHIR_*` → I wire each.
 - ☐ Build the generic **authenticated-FHIR adapter** (OAuth2 client-creds + API-key) when the first creds land.
 
+## Prior Authorization API — Da Vinci PAS/CRD/DTR (strategic / future) ⭐
+The product's namesake capability, beyond verification. Aetna (and other payers) expose a FHIR **Prior
+Authorization API**:
+- ☐ **CRD** (Coverage Requirements Discovery) — does a given service/code need prior auth for this member.
+- ☐ **DTR** (Documentation Templates & Rules) — what documentation the PA requires.
+- ☐ **PAS** (Prior Authorization Submission) — submit + track the PA request/decision.
+- ☐ Bigger lift than the directory: needs **provider-system registration + attestation** (not the public
+  Plan-Net path), patient context, and per-payer support varies. Sequence it **after** eligibility +
+  directory + TiC are solid.
+- ☐ Map which roster payers expose a Prior Auth API (CMS-0057 mandates it for impacted payers by 2027).
+
 ## Eligibility — Stedi 270/271
 - ☐ ⛔ **user** — confirm the `.env` key is **prod** (32-char; live test still uses Stedi mock) + do **per-payer enrollment** in the Stedi dashboard.
 - ☐ ⛔ **user** — provide the mock-member **DOB** to flip `test_live_full_benefits_parse` skip→assert.
