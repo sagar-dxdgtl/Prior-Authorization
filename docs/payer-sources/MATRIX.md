@@ -30,7 +30,7 @@ Machine-generated from `src/network_probe/payers/roster_seed.py` (the catalogue 
 | EternalHealth | AZ | Medicare Advantage | — | — | — | needs-authorized-api | review: research candidate RP037; resolver found no confident match — left for review. |
 | Gold Kidney Health Plan | AZ | Medicare Advantage | A6865 | — | — | needs-authorized-api | A6865 — resolver + research agree. |
 | Health Choice / BCBS / (Anthem / Elevance) | AZ | Managed Medicaid | — | — | — | needs-authorized-api | review: BCBSAZ-administered; resolver's 130 (Anthem Indiana) is wrong-state — left for review. |
-| Healthspring | AZ | Medicare Advantage | — | — | `https://www.cigna.com/legal/compliance/machine-readable-files` | needs-authorized-api | review: Cigna Medicare brand; research 52192 vs resolver 63092 disagree — left for review. |
+| Healthspring | AZ | Medicare Advantage | — | `https://p-hi2.digitaledge.cigna.com/ProviderDirectory/v1` (verified) | `https://www.cigna.com/legal/compliance/machine-readable-files` | public-fhir | Verified public FHIR (Cigna Medicare brand). review: Stedi id — research 52192 vs resolver 63092 disagree — left for review. |
 | Humana | AZ | Medicare Advantage | 61101 | `https://fhir.humana.com/api` (verified) | `https://developers.humana.com/syntheticdata/Resource/PCTFilesList?fileType=innetwork` | public-fhir | Verified public FHIR + existing humana-fhir adapter. Stedi 61101 — supported. |
 | Mercy Care | AZ | Managed Medicaid | — | — | — | none | review: resolver's 22248 (AmeriHealth Caritas PA) is wrong; no confirmed AZ id. Govt/Medicaid MCO. |
 | Mercy Care | AZ | Medicare Advantage | — | — | — | none | review: resolver's 22248 (AmeriHealth Caritas PA) is wrong; no confirmed AZ id. Govt/Medicaid MCO. |
@@ -43,7 +43,7 @@ Machine-generated from `src/network_probe/payers/roster_seed.py` (the catalogue 
 | UnitedHealthcare | AZ | Commercial | 87726 | via existing adapter | `https://transparency-in-coverage.uhc.com/` | public-fhir | Existing public Optum FHIR adapter (uhc). Stedi 87726 — supported. |
 | UnitedHealthcare | AZ | Medicare Advantage | 87726 | via existing adapter | `https://transparency-in-coverage.uhc.com/` | public-fhir | Existing public Optum FHIR adapter (uhc). Stedi 87726 — supported. |
 | Wellcare (Centene) | AZ | Medicare Advantage | — | — | `https://www.centene.com/price-transparency-files.html` | needs-authorized-api | review: Centene umbrella 68069 vs WellCare 4032 (KFNLV); resolver's 68068 is behavioral-health — id left for review. |
-| Wellpoint / Amerigroup (Elevance) | AZ | Medicare Advantage | — | `https://totalview.healthos.elevancehealth.com/resources/registered/Wellpoint/api/v1/fhir` (verified) | — | public-fhir | Verified public FHIR (routes the directory leg). review: research WLPNT/RUWTL vs resolver 26375 (Amerigroup) unreconciled — Stedi id left for review. |
+| Wellpoint / Amerigroup (Elevance) | AZ | Medicare Advantage | — | — | — | needs-authorized-api | Auth-gated: metadata is public but data queries on the registered path return 403 without OAuth2 creds. Register at wellpoint.com/developers. review: WLPNT/RUWTL vs resolver 26375 (Amerigroup) unreconciled — Stedi id left for review. |
 | Aetna | CO-Denver | Commercial | 60054 | — | `https://health1.aetna.com/app/public/` | needs-authorized-api | Stedi 60054; provider-directory FHIR is OAuth2-gated (needs-authorized-api). |
 | Aetna | CO-Denver | Medicare Advantage | 60054 | — | `https://health1.aetna.com/app/public/` | needs-authorized-api | Stedi 60054; provider-directory FHIR is OAuth2-gated (needs-authorized-api). |
 | BCBS / Empire (Anthem / Elevance) | CO-Denver | ACA | — | — | `https://www.anthem.com/machine-readable-file` | needs-authorized-api | review: Stedi id varies by state BCBS affiliate (CA 040); resolver's 81508 (Empire/SOMOS) unconfirmed — left for review. |
@@ -52,7 +52,7 @@ Machine-generated from `src/network_probe/payers/roster_seed.py` (the catalogue 
 | Cigna Healthcare | CO-Denver | ACA | 62308 | `https://fhir.cigna.com/ProviderDirectory/v1` (verified) | `https://www.cigna.com/legal/compliance/machine-readable-files` | public-fhir | Verified public FHIR + existing cigna-fhir adapter. Stedi 62308 (enrollment required before live 270/271). |
 | Cigna Healthcare | CO-Denver | Commercial | 62308 | `https://fhir.cigna.com/ProviderDirectory/v1` (verified) | `https://www.cigna.com/legal/compliance/machine-readable-files` | public-fhir | Verified public FHIR + existing cigna-fhir adapter. Stedi 62308 (enrollment required before live 270/271). |
 | Colorado Department of Health Care Policy & Financing | CO-Denver | Traditional Medicaid | SKCO0 | — | — | none | SKCO0 — authoritative CO Medicaid id. Govt program: no PDEX/TiC. |
-| Healthspring | CO-Denver | Medicare Advantage | — | — | `https://www.cigna.com/legal/compliance/machine-readable-files` | needs-authorized-api | review: Cigna Medicare brand; research 52192 vs resolver 63092 disagree — left for review. |
+| Healthspring | CO-Denver | Medicare Advantage | — | `https://p-hi2.digitaledge.cigna.com/ProviderDirectory/v1` (verified) | `https://www.cigna.com/legal/compliance/machine-readable-files` | public-fhir | Verified public FHIR (Cigna Medicare brand). review: Stedi id — research 52192 vs resolver 63092 disagree — left for review. |
 | Humana | CO-Denver | Medicare Advantage | 61101 | `https://fhir.humana.com/api` (verified) | `https://developers.humana.com/syntheticdata/Resource/PCTFilesList?fileType=innetwork` | public-fhir | Verified public FHIR + existing humana-fhir adapter. Stedi 61101 — supported. |
 | Kaiser Permanente | CO-Denver | Commercial | — | — | `https://healthy.kaiserpermanente.org/support/transparency-coverage` | needs-authorized-api | review: regional ids (NorCal 94135, SoCal 94285); CO id unconfirmed; resolver's 91051 (WA) wrong-region. |
 | Kaiser Permanente | CO-Denver | Medicare Advantage | — | — | `https://healthy.kaiserpermanente.org/support/transparency-coverage` | needs-authorized-api | review: regional ids (NorCal 94135, SoCal 94285); CO id unconfirmed; resolver's 91051 (WA) wrong-region. |
@@ -85,10 +85,10 @@ Machine-generated from `src/network_probe/payers/roster_seed.py` (the catalogue 
 ## Counts
 
 - Total roster rows: **67**
-- Rows with `fhir_base_url`: **12** (Cigna 6, Humana 2, Devoted 1, Wellpoint 1, AmeriHealth Caritas 2).
+- Rows with `fhir_base_url`: **13** (Cigna 6, Humana 2, Devoted 1, Healthspring 2, AmeriHealth Caritas 2).
 - Rows with `tic_url`: **42**
 - Rows with a Stedi id: **36**
-- By `directory_access`: `needs-authorized-api` 40 · `none` 8 · `public-fhir` 19
+- By `directory_access`: `needs-authorized-api` 39 · `none` 8 · `public-fhir` 20
 
 ## Needs authorized API / no public source
 
@@ -104,7 +104,7 @@ Payers with **no machine-queryable public directory** today (the engine cannot r
 - **EternalHealth** (needs-authorized-api) — review: research candidate RP037; resolver found no confident match — left for review.
 - **Gold Kidney Health Plan** (needs-authorized-api) — A6865 — resolver + research agree.
 - **Health Choice / BCBS / (Anthem / Elevance)** (needs-authorized-api) — review: BCBSAZ-administered; resolver's 130 (Anthem Indiana) is wrong-state — left for review.
-- **Healthspring** (needs-authorized-api) — review: Cigna Medicare brand; research 52192 vs resolver 63092 disagree — left for review.
+- **Wellpoint / Amerigroup (Elevance)** (needs-authorized-api) — auth-gated: registered-path FHIR returns 403 without OAuth2 creds. Register at wellpoint.com/developers.
 - **Mercy Care** (none) — review: resolver's 22248 (AmeriHealth Caritas PA) is wrong; no confirmed AZ id. Govt/Medicaid MCO.
 - **Molina Healthcare** (needs-authorized-api) — review: resolver's 20934 (Molina Illinois) wrong-state; AZ medical routes via Availity/Emdeon — left for review.
 - **Noridian Healthcare Solutions, LLC** (none) — review: Traditional Medicare uses per-state ids; resolver's 03302 (Medicare North Dakota) is wrong. CMS-owned data (NPPES).

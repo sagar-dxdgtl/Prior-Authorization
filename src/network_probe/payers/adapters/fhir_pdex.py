@@ -43,7 +43,7 @@ MAX_ORG_RESOLVE = 14  # cap Organization name lookups (servers that omit network
 # Known public PDEX Plan-Net base URLs (no auth). Extend freely.
 KNOWN_ENDPOINTS = {
     "humana-fhir": "https://fhir.humana.com/api",
-    "cigna-fhir": "https://p-hi2.digitaledge.cigna.com/ProviderDirectory/v1",
+    "cigna-fhir": "https://fhir.cigna.com/ProviderDirectory/v1",
     # UnitedHealthcare's public PDEX directory (Optum FHIR Layer Exchange) — no auth/login.
     "uhc": "https://flex.optum.com/fhirpublic/R4",
 }

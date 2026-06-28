@@ -14,7 +14,7 @@ Keep this updated as items land. (UVVC = tenant #1; the platform is multi-client
 - ☐ Verify flagged NPI **1285652651** (Gonzalez) — possible TIN-share, excluded pending a check.
 
 ## FHIR provider directories
-- ☑ Public + wired: Cigna, Humana, Devoted, Wellpoint/Amerigroup, AmeriHealth Caritas, UHC (Optum), Oscar.
+- ☑ Public + wired (verified): Cigna, Humana, Devoted, Healthspring (Cigna Medicare — `p-hi2.digitaledge.cigna.com`), AmeriHealth Caritas, UHC (Optum), Oscar. Wellpoint/Amerigroup moved to needs-creds (registered-path FHIR is auth-gated; returns 403 without OAuth2 — register at wellpoint.com/developers).
 - ☐ ⛔ **user signup** — register dev creds per `docs/payer-sources/SIGNUP-CHECKLIST.md` (Aetna, UHC, Anthem/Elevance, Kaiser, Molina, Centene, + smaller MA plans) → put in `.env` as `<P>_FHIR_*` → I wire each.
 - ☐ Build the generic **authenticated-FHIR adapter** (OAuth2 client-creds + API-key) when the first creds land.
 
