@@ -79,6 +79,53 @@ def test_ingest_gz(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# TIN filter
+# ---------------------------------------------------------------------------
+
+
+def test_tin_filter_returns_2_rows(tmp_path):
+    """tin_filter={"933510922"} should keep only the 2 NPIs under that TIN."""
+    out = str(tmp_path / "out.csv")
+    n = ingest_tic(str(FIXTURE), out, tin_filter={"933510922"}, payer="uhc")
+    assert n == 2
+    rows = _read_rows(out)
+    npis = {r["npi"] for r in rows}
+    assert npis == {"1972603934", "1710305735"}
+    # The 463812940 TIN row must not appear
+    tins = {r["tin"] for r in rows}
+    assert tins == {"933510922"}
+
+
+def test_tin_filter_dash_normalized(tmp_path):
+    """93-3510922 should normalize to 933510922 and match the same rows."""
+    out = str(tmp_path / "out.csv")
+    n = ingest_tic(str(FIXTURE), out, tin_filter={"93-3510922"}, payer="uhc")
+    assert n == 2
+    rows = _read_rows(out)
+    npis = {r["npi"] for r in rows}
+    assert npis == {"1972603934", "1710305735"}
+
+
+def test_tin_and_npi_filter_intersection(tmp_path):
+    """When both filters active, a row must pass both (intersection)."""
+    out = str(tmp_path / "out.csv")
+    # npi_filter includes 1972603934 (under 933510922) and 1679766943 (under 463812940)
+    # tin_filter includes only 933510922
+    # Intersection: only 1972603934 survives
+    n = ingest_tic(
+        str(FIXTURE),
+        out,
+        npi_filter={"1972603934", "1679766943"},
+        tin_filter={"933510922"},
+        payer="uhc",
+    )
+    assert n == 1
+    rows = _read_rows(out)
+    assert rows[0]["npi"] == "1972603934"
+    assert rows[0]["tin"] == "933510922"
+
+
+# ---------------------------------------------------------------------------
 # Integration: ingest -> TinCrosswalk -> TinScopeSource
 # ---------------------------------------------------------------------------
 
