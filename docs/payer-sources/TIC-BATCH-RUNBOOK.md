@@ -115,3 +115,67 @@ python scripts/ingest_tic.py cigna-plan.json.gz cigna.csv \
 
 The script prints the number of unique NPI→TIN rows written.  Resolver failures per URL
 are logged at `WARNING` level; the run continues and all non-failing refs are still written.
+
+## One-command pull from an index (`scripts/pull_tic_index.py`)
+
+`pull_tic_index.py` automates the whole **index → select → download → ingest** pipeline:
+it downloads a payer's TiC index (table-of-contents), flattens it, selects the relevant
+in-network files (by `--state` / `--plan-contains`), downloads each, and runs the same
+`ingest_tic` streamer (incl. Pass-3 external `provider_reference.location` resolution),
+filtered to your practice's TINs/NPIs. Output is one deduplicated `npi,tin,payer` CSV.
+
+First use case: **Cigna Arizona** — must run from a **US IP** (its CDN is geo-restricted).
+
+### 1. Get Cigna's signed index URL (on a US IP)
+
+Cigna's machine-readable-files page is JS-rendered, so the index link is not in the raw HTML.
+Open it in a browser and copy the link that ends in `…_index.json?…` (a long signed URL):
+
+```
+https://www.cigna.com/legal/compliance/machine-readable-files
+```
+
+### 2. Preview the files first (`--list`)
+
+```bash
+python scripts/pull_tic_index.py \
+    --index-url '<signed index url>' --state AZ --list
+```
+
+Prints each selected file's location + plan names without downloading anything. If nothing
+matches your filter, the script warns and lists every file available in the index.
+
+### 3. Full pull (download + ingest, filtered to your TINs)
+
+```bash
+python scripts/pull_tic_index.py \
+    --index-url '<signed index url>' --state AZ \
+    --payer cigna --tin-file practice-tins.txt --out cigna-az.csv
+```
+
+- `practice-tins.txt` — one TIN per line (`#` lines are comments); **keep OUT of git**.
+- `cigna-az.csv` — output crosswalk (`npi,tin,payer`), rows deduped across all plan files.
+- The script prints the files selected and the unique row count written.
+
+### Flags
+
+| Flag | Purpose |
+|------|---------|
+| `--index-url` (required) | URL to the TiC index JSON |
+| `--out` (required) | Output CSV path |
+| `--state` | Case-insensitive substring vs. location URL + plan names + market + description (e.g. `AZ`, `arizona`) |
+| `--plan-contains` | Case-insensitive substring vs. plan names + market types |
+| `--tin-file` / `--npi-file` | Filter rows to a practice's TINs / NPIs |
+| `--payer` | Label written to the `payer` column |
+| `--list` | Preview selected files, then exit |
+| `--keep` | Keep downloaded temp files after ingestion |
+| `--workdir` | Directory for temp downloads (defaults to OS temp) |
+| `--max-workers` | Concurrency for downloads + resolver (default 16) |
+
+### Notes
+
+- **US IP required for Cigna/Aetna:** the provider-reference CloudFront CDN returns 403 outside
+  the US. Run from EC2/Fargate in `us-east-1`/`us-west-2`. UHC's Azure CDN is open everywhere.
+- **Signed-URL expiry:** Cigna's index URLs are time-limited — copy a fresh one each run.
+- **Other payers:** the same command works for any CMS-compliant TiC index — just swap
+  `--index-url` and `--payer`.
