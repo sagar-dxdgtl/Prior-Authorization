@@ -1,25 +1,44 @@
 """CLI: stream a TiC in-network MRF into an NPI→TIN crosswalk CSV.
 
 Usage:
-    python -m scripts.ingest_tic <tic_path> <out_csv> [--payer PAYER] [--npi-file NPI_FILE]
+    python -m scripts.ingest_tic <tic_path> <out_csv> [--payer PAYER]
+        [--npi-file NPI_FILE]
+        [--tin-file TIN_FILE] [--tin TIN ...]
 
 Arguments:
     tic_path    Path to the TiC in-network MRF (.json or .json.gz).
     out_csv     Destination CSV (columns: npi, tin, payer).
 
 Options:
-    --payer     Payer label to write in the ``payer`` column (e.g. "uhc").
-    --npi-file  Path to a plain-text file of NPIs to keep (one per line);
-                all other NPIs are skipped, reducing output size.
+    --payer      Payer label to write in the ``payer`` column (e.g. "uhc").
+    --npi-file   Path to a plain-text file of NPIs to keep (one per line);
+                 all other NPIs are skipped, reducing output size.
+    --tin-file   Path to a plain-text file of TINs (EINs) to keep, one per
+                 line.  Lines beginning with ``#`` are treated as comments
+                 and ignored.  Non-digit characters (e.g. dashes) are
+                 stripped before comparison, so ``93-3510922`` matches
+                 ``933510922``.
+    --tin        Individual TIN to keep (repeatable).  May be combined with
+                 ``--tin-file``.
+
+At least one of ``--npi-file``/``--tin-file``/``--tin`` is optional; if none
+are supplied, all provider_groups in the file are written.  When both NPI and
+TIN filters are active a row must satisfy both (intersection).
 """
 
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
 from network_probe.domain.tic_ingest import ingest_tic
+
+
+def _normalize_tin(tin: str) -> str:
+    """Strip all non-digit characters from a TIN string."""
+    return re.sub(r"\D", "", tin)
 
 
 def main(argv=None) -> int:
@@ -36,6 +55,22 @@ def main(argv=None) -> int:
         metavar="NPI_FILE",
         help="Plain-text file of NPIs to keep (one per line); others are skipped",
     )
+    parser.add_argument(
+        "--tin-file",
+        default=None,
+        metavar="TIN_FILE",
+        help=(
+            "Plain-text file of TINs (EINs) to keep, one per line; lines starting "
+            "with '#' are comments.  Non-digit chars are stripped before comparison."
+        ),
+    )
+    parser.add_argument(
+        "--tin",
+        action="append",
+        default=[],
+        metavar="TIN",
+        help="Individual TIN to keep (repeatable); non-digit chars stripped.",
+    )
     args = parser.parse_args(argv)
 
     npi_filter = None
@@ -43,7 +78,25 @@ def main(argv=None) -> int:
         lines = Path(args.npi_file).read_text(encoding="utf-8").splitlines()
         npi_filter = {line.strip() for line in lines if line.strip()}
 
-    rows = ingest_tic(args.tic_path, args.out_csv, npi_filter=npi_filter, payer=args.payer)
+    tin_filter = None
+    raw_tins: list[str] = list(args.tin)
+    if args.tin_file:
+        lines = Path(args.tin_file).read_text(encoding="utf-8").splitlines()
+        raw_tins.extend(
+            line.strip()
+            for line in lines
+            if line.strip() and not line.strip().startswith("#")
+        )
+    if raw_tins:
+        tin_filter = {_normalize_tin(t) for t in raw_tins}
+
+    rows = ingest_tic(
+        args.tic_path,
+        args.out_csv,
+        npi_filter=npi_filter,
+        tin_filter=tin_filter,
+        payer=args.payer,
+    )
     print(f"Wrote {rows} unique NPI→TIN rows to {args.out_csv}")
     return 0
 
