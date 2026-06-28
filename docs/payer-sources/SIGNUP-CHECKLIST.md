@@ -68,10 +68,12 @@ few business days.
 | Cigna | `https://fhir.cigna.com/ProviderDirectory/v1` | public, verified, wired |
 | Humana | `https://fhir.humana.com/api` | public, verified, wired |
 | Devoted Health | `https://fhir.devoted.com/fhir` | public, verified, wired |
-| Wellpoint / Amerigroup | `https://totalview.healthos.elevancehealth.com/resources/registered/Wellpoint/api/v1/fhir` | public, verified, wired |
+| Healthspring (Cigna Medicare) | `https://p-hi2.digitaledge.cigna.com/ProviderDirectory/v1` | public, verified |
 | AmeriHealth Caritas | `https://api-ext.amerihealthcaritas.com/NCEX/provider-api` | public, verified, wired |
 | UnitedHealthcare | (existing Optum public adapter) | wired; portal optional for fuller API |
 | Oscar | (existing public adapter) | wired |
+
+> **AvMed:** The only known FHIR URL for AvMed has an expired TLS certificate — the endpoint is unusable as a public directory source. Stedi 270/271 (id `59274`) remains the only machine-queryable path for AvMed.
 
 ## B. Free developer-portal signup → creds (the work list)
 
@@ -81,6 +83,7 @@ few business days.
 | **Aetna Better Health** (**Medicaid — SEPARATE**, *not* in the commercial endpoint) | `ABH` | **separate product** — likely `public-providerdirectory-fhir` (unqualified) or a state-specific ABH endpoint; **confirm via `interoperabilitydevelopersupport@aetna.com`** | Medicaid plan / NPI | OAuth2 client | you provide (ABH-specific) | `ABH_FHIR_{CLIENT_ID,CLIENT_SECRET,TOKEN_URL,BASE_URL}` |
 | **UnitedHealthcare** | `UHC` | UHC API Marketplace / OneHealthcare ID | Practice/NPI | API key (URL disclosed after reg) | you provide | `UHC_FHIR_{API_KEY,BASE_URL}` |
 | **Anthem / Elevance BCBS** | `ANTHEM` | Elevance / Wellpoint developer portal | Practice/NPI | OAuth2 client | `https://totalview.healthos.elevancehealth.com/resources/registered/…` | `ANTHEM_FHIR_{CLIENT_ID,CLIENT_SECRET,TOKEN_URL,BASE_URL}` |
+| **Wellpoint / Amerigroup (Elevance)** | `WELLPOINT` | `wellpoint.com/developers` (Elevance Health developer portal) | Practice/NPI | OAuth2 client | `https://totalview.healthos.elevancehealth.com/resources/registered/Wellpoint/api/v1/fhir` (registered path; returns 403 without OAuth2 creds) | `WELLPOINT_FHIR_{CLIENT_ID,CLIENT_SECRET,TOKEN_URL,BASE_URL}` |
 | **Kaiser Permanente** | `KAISER` | `developer.kp.org` | Practice/NPI (note: region-specific) | OAuth2 client | you provide (per region) | `KAISER_FHIR_{CLIENT_ID,CLIENT_SECRET,TOKEN_URL,BASE_URL}` |
 | **Molina** | `MOLINA` | `developer.interop.molinahealthcare.com` | Practice/NPI, per state | API key / OAuth2 | you provide | `MOLINA_FHIR_{API_KEY or CLIENT_ID/SECRET,BASE_URL}` |
 | **Centene** (Ambetter / Wellcare / AZ Complete) | `CENTENE` | `partners.centene.com` | Practice/NPI | portal → API creds | you provide | `CENTENE_FHIR_{CLIENT_ID,CLIENT_SECRET,TOKEN_URL,BASE_URL}` |
@@ -91,7 +94,7 @@ few business days.
 | **Align Senior Care** | `ALIGNSENIOR` | AllyAlign / portal | Practice/NPI | OAuth2 / API key | you provide | `ALIGNSENIOR_FHIR_{…,BASE_URL}` |
 | **EternalHealth** | `ETERNAL` | AaNeel-hosted portal | Practice/NPI | OAuth2 / API key | you provide | `ETERNAL_FHIR_{…,BASE_URL}` |
 | **Gold Kidney** | `GOLDKIDNEY` | AaNeel-hosted portal | Practice/NPI | OAuth2 / API key | you provide | `GOLDKIDNEY_FHIR_{…,BASE_URL}` |
-| **Healthspring (Cigna Medicare)** | `HEALTHSPRING` | Cigna developer portal | Practice/NPI | OAuth2 client | you provide | `HEALTHSPRING_FHIR_{…,BASE_URL}` |
+| **Healthspring (Cigna Medicare) — verify endpoint** | `HEALTHSPRING` | Cigna developer portal (if extended auth needed) | Practice/NPI | OAuth2 client (if required) | `https://p-hi2.digitaledge.cigna.com/ProviderDirectory/v1` (currently public — monitor for auth requirement) | `HEALTHSPRING_FHIR_{…,BASE_URL}` |
 | **Health Choice AZ** | `HEALTHCHOICE` | BCBSAZ / Innovaccer (`azblue.innovaccer.com`) | Practice/NPI | API key | you provide | `HEALTHCHOICE_FHIR_{API_KEY,BASE_URL}` |
 
 > Portal URLs move — confirm the exact current URL at signup. Where the base URL is "you provide," the
