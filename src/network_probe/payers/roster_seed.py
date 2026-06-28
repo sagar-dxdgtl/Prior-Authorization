@@ -229,10 +229,10 @@ SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
         "needs-authorized-api",
     ),
     "Healthspring": (
-        None,
+        "https://p-hi2.digitaledge.cigna.com/ProviderDirectory/v1",
         _CIGNA_TIC,
         "https://www.healthspring.com/providers/network-participation",
-        "needs-authorized-api",
+        "public-fhir",
     ),
     "Humana": (
         "https://fhir.humana.com/api",
@@ -301,10 +301,10 @@ SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
         "needs-authorized-api",
     ),
     "Wellpoint / Amerigroup (Elevance)": (
-        "https://totalview.healthos.elevancehealth.com/resources/registered/Wellpoint/api/v1/fhir",
+        None,
         None,
         "https://findcaresecure.wellpoint.com/",
-        "public-fhir",
+        "needs-authorized-api",
     ),
 }
 

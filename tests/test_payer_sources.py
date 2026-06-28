@@ -15,13 +15,14 @@ from network_probe.payers.adapters.fhir_pdex import FhirPdexAdapter
 from network_probe.payers.roster_seed import SOURCES, payer_rows
 
 WELLPOINT = "Wellpoint / Amerigroup (Elevance)"
-WELLPOINT_FHIR = "https://totalview.healthos.elevancehealth.com/resources/registered/Wellpoint/api/v1/fhir"
+HEALTHSPRING = "Healthspring"
+HEALTHSPRING_FHIR = "https://p-hi2.digitaledge.cigna.com/ProviderDirectory/v1"
 
 _FHIR_PAYERS = {
     "Cigna Healthcare": "https://fhir.cigna.com/ProviderDirectory/v1",
     "Humana": "https://fhir.humana.com/api",
     "Devoted Health": "https://fhir.devoted.com/fhir",
-    "Wellpoint / Amerigroup (Elevance)": WELLPOINT_FHIR,
+    "Healthspring": HEALTHSPRING_FHIR,
     "AmeriHealth Caritas": "https://api-ext.amerihealthcaritas.com/NCEX/provider-api",
 }
 _DIRECTORY_ACCESS = {"public-fhir", "needs-authorized-api", "none"}
@@ -50,9 +51,10 @@ def _offline_client() -> CachedClient:
 
 
 def test_fhir_base_url_routes_directory_leg_to_pdex():
-    adapter = svc.get_adapter(WELLPOINT, catalogue=_FakeCatalogue(WELLPOINT_FHIR), client=_offline_client())
+    # Healthspring now qualifies: verified public FHIR, fhir_base_url in catalogue.
+    adapter = svc.get_adapter(HEALTHSPRING, catalogue=_FakeCatalogue(HEALTHSPRING_FHIR), client=_offline_client())
     assert isinstance(adapter, FhirPdexAdapter)
-    assert adapter.base_url == WELLPOINT_FHIR  # constructed with the catalogue's verified URL
+    assert adapter.base_url == HEALTHSPRING_FHIR  # constructed with the catalogue's verified URL
 
 
 def test_no_fhir_base_url_and_no_adapter_raises_no_live_call():
@@ -63,11 +65,11 @@ def test_no_fhir_base_url_and_no_adapter_raises_no_live_call():
 
 def test_registered_adapter_wins_over_catalogue():
     # Oscar has a more-specific registered adapter; the catalogue fhir_base_url must not override it.
-    adapter = svc.get_adapter("oscar", catalogue=_FakeCatalogue(WELLPOINT_FHIR))
+    adapter = svc.get_adapter("oscar", catalogue=_FakeCatalogue(HEALTHSPRING_FHIR))
     assert not isinstance(adapter, FhirPdexAdapter)
 
 
-# ---- (b) the seeded catalogue exposes fhir_base_url for the five verified-public payers -------
+# ---- (b) the seeded catalogue exposes fhir_base_url for the verified-public payers -----------
 
 
 def test_seeded_fhir_base_urls_present():
@@ -77,6 +79,15 @@ def test_seeded_fhir_base_urls_present():
     # everything else has no baked FHIR base URL (honest: only verified-public servers)
     assert by_label["Aetna"] is None
     assert by_label["BCBS / Empire (Anthem / Elevance)"] is None
+    # Wellpoint is auth-gated (registered path returns 403) — must NOT carry a public fhir_base_url
+    assert by_label[WELLPOINT] is None, "Wellpoint must not have a public fhir_base_url"
+
+
+def test_wellpoint_is_auth_gated():
+    rows_by_label = {r["label"]: r for r in payer_rows()}
+    wp = rows_by_label[WELLPOINT]
+    assert wp["fhir_base_url"] is None
+    assert wp["directory_access"] == "needs-authorized-api"
 
 
 # ---- (c) directory_access is populated for every roster row ----------------------------------
@@ -120,15 +131,25 @@ def test_db_catalogue_surfaces_source_columns():
         s.commit()
 
     cat = DbPayerCatalogue()
+
+    # Wellpoint is auth-gated: no public fhir_base_url, directory_access = needs-authorized-api
     wp = cat.resolve(WELLPOINT)
     assert wp is not None
-    assert wp.fhir_base_url == WELLPOINT_FHIR
-    assert wp.directory_access == "public-fhir"
+    assert wp.fhir_base_url is None
+    assert wp.directory_access == "needs-authorized-api"
 
-    # the engine routes this payer's directory leg to a FHIR PDEX adapter built from the DB URL
-    adapter = svc.get_adapter(WELLPOINT, catalogue=cat, client=_offline_client())
-    assert isinstance(adapter, FhirPdexAdapter)
-    assert adapter.base_url == WELLPOINT_FHIR
+    # Wellpoint no longer routes to a FHIR PDEX adapter via the catalogue URL
+    with pytest.raises(ValueError, match="No adapter"):
+        svc.get_adapter(WELLPOINT, catalogue=cat, client=_offline_client())
+
+    # Healthspring has a verified-public FHIR URL → the engine routes to FhirPdexAdapter
+    hs = cat.resolve(HEALTHSPRING)
+    assert hs is not None
+    assert hs.fhir_base_url == HEALTHSPRING_FHIR
+    assert hs.directory_access == "public-fhir"
+    hs_adapter = svc.get_adapter(HEALTHSPRING, catalogue=cat, client=_offline_client())
+    assert isinstance(hs_adapter, FhirPdexAdapter)
+    assert hs_adapter.base_url == HEALTHSPRING_FHIR
 
     # a govt/Medicaid program is honestly recorded as having no public directory source
     ahcccs = cat.resolve("Arizona Health Care Cost Containment System (AHCCCS)")
