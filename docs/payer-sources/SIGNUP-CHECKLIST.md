@@ -31,6 +31,36 @@ non-PHI live directory lookup) and flip that payer to live. Never commit `.env`.
 
 ---
 
+## Who registers + what to provide (you do NOT need a personal NPI)
+
+You register as a **developer / software application**, not as a healthcare provider. A personal NPI is
+**not** required. (And many directory APIs need **no registration at all** — Cigna, Humana, Devoted are
+fully open; just call the endpoint.)
+
+Where a portal does require a developer account, you'll typically provide:
+- **Developer/company account** — your name, work email, company/legal entity (your dev shop *or* the
+  practice).
+- **App registration** — an app name (e.g. `UVVC Network Verification`), a short **intended-use**
+  description (be honest: *"provider-directory lookups + eligibility verification for United Vein &
+  Vascular Centers, a contracted provider group — treatment & operations"*), an **OAuth2 redirect URI**
+  (a placeholder like `https://localhost/callback` is fine; you can change it later), optional website.
+- **Accept** the developer/API terms of use.
+
+**If a portal asks for an NPI / Tax ID to verify a healthcare relationship:** use the **practice's**
+identifiers — the 10 **Group NPIs + TINs** you already have (e.g. AZ `1548800980` / `84-3447602`) —
+and register as the practice's **technology vendor / business associate**. That's the correct framing:
+you're building the tool *for* a contracted practice, not impersonating a provider.
+
+**Pick the right API product:** the **Provider Directory / Plan-Net API** (public, treatment/operations).
+Do **NOT** pick the *Patient Access API* — that one requires an individual member's login/consent and is
+not for directory lookups.
+
+**Paperwork:** have a **BAA with the practice** in place (you'll handle their data downstream). Directory
+data itself isn't PHI, but eligibility (270/271) will be. Some portals approve instantly; others take a
+few business days.
+
+---
+
 ## A. No signup needed — already public / wired ✅
 
 | Payer | FHIR base | Status |
