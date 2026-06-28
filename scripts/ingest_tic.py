@@ -4,6 +4,8 @@ Usage:
     python -m scripts.ingest_tic <tic_path> <out_csv> [--payer PAYER]
         [--npi-file NPI_FILE]
         [--tin-file TIN_FILE] [--tin TIN ...]
+        [--resolve-references | --no-resolve-references]
+        [--max-workers N]
 
 Arguments:
     tic_path    Path to the TiC in-network MRF (.json or .json.gz).
@@ -20,10 +22,27 @@ Options:
                  ``933510922``.
     --tin        Individual TIN to keep (repeatable).  May be combined with
                  ``--tin-file``.
+    --resolve-references
+                 Resolve external ``provider_references[].location`` URLs
+                 (Cigna / modern Aetna style).  Default: enabled.
+    --no-resolve-references
+                 Disable external URL resolution (inline-only mode; safe
+                 for UHC-style files and air-gapped environments).
+    --max-workers N
+                 Number of concurrent threads for resolving location URLs
+                 (default: 16).
 
 At least one of ``--npi-file``/``--tin-file``/``--tin`` is optional; if none
 are supplied, all provider_groups in the file are written.  When both NPI and
 TIN filters are active a row must satisfy both (intersection).
+
+Note on geo-restriction
+-----------------------
+The default resolver fetches location URLs over the public internet.  Cigna's
+provider-reference files are served from a geo-restricted CloudFront CDN that
+is only accessible from **US IP addresses**.  UHC's Azure CDN is open.  Always
+run this script from a US IP (EC2/Fargate in us-east-1 or us-west-2) when
+processing Cigna or Aetna MRFs.
 """
 
 from __future__ import annotations
@@ -33,7 +52,7 @@ import re
 import sys
 from pathlib import Path
 
-from network_probe.domain.tic_ingest import ingest_tic
+from network_probe.domain.tic_ingest import _default_resolver, ingest_tic
 
 
 def _normalize_tin(tin: str) -> str:
@@ -71,6 +90,29 @@ def main(argv=None) -> int:
         metavar="TIN",
         help="Individual TIN to keep (repeatable); non-digit chars stripped.",
     )
+    parser.add_argument(
+        "--resolve-references",
+        dest="resolve_references",
+        action="store_true",
+        default=True,
+        help=(
+            "Resolve external provider_references[].location URLs (Cigna/Aetna style). "
+            "Default: enabled."
+        ),
+    )
+    parser.add_argument(
+        "--no-resolve-references",
+        dest="resolve_references",
+        action="store_false",
+        help="Disable external URL resolution (inline-only mode; safe for UHC-style files).",
+    )
+    parser.add_argument(
+        "--max-workers",
+        type=int,
+        default=16,
+        metavar="N",
+        help="Concurrent threads for resolving location URLs (default: 16).",
+    )
     args = parser.parse_args(argv)
 
     npi_filter = None
@@ -90,12 +132,16 @@ def main(argv=None) -> int:
     if raw_tins:
         tin_filter = {_normalize_tin(t) for t in raw_tins}
 
+    resolver = _default_resolver if args.resolve_references else None
+
     rows = ingest_tic(
         args.tic_path,
         args.out_csv,
         npi_filter=npi_filter,
         tin_filter=tin_filter,
         payer=args.payer,
+        reference_resolver=resolver,
+        max_workers=args.max_workers,
     )
     print(f"Wrote {rows} unique NPI→TIN rows to {args.out_csv}")
     return 0
