@@ -1,0 +1,6 @@
+{"provider_references": [
+   {"provider_group_id": 1, "provider_groups": [
+       {"npi": [1679766943], "tin": {"type": "ein", "value": "463812940"}}]},
+   {"provider_group_id": 2, "location": "loc://az/1"}
+ ],
+ "in_network": []}
