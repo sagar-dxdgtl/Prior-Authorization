@@ -77,8 +77,8 @@ few business days.
 
 | Payer | `<P>` | Register at | Register as | Credential | FHIR base | Env vars |
 |---|---|---|---|---|---|---|
-| **Aetna** | `AETNA` | `developerportal.aetna.com` | Practice/NPI, provider-directory use | OAuth2 client | `https://apif1.aetna.com/fhir/v1` (metadata already public) | `AETNA_FHIR_{CLIENT_ID,CLIENT_SECRET,TOKEN_URL,BASE_URL}` |
-| **Aetna Better Health** | `ABH` | same Aetna developer portal (separate app) | Medicaid plan / NPI | OAuth2 client | you provide | `ABH_FHIR_{CLIENT_ID,CLIENT_SECRET,TOKEN_URL,BASE_URL}` |
+| **Aetna** (**Commercial + Medicare** — one product covers both) | `AETNA` | `developerportal.aetna.com` → product **`public-medicare-providerdirectory-fhir`** | Third-Party App, directory-only | OAuth2 client | `https://apif1.aetna.com/fhir/v1/providerdirectorydata/` (PDEX 1.2.0, R4; `/metadata` public, queries need OAuth2) | `AETNA_FHIR_{CLIENT_ID,CLIENT_SECRET,BASE_URL}`, `AETNA_FHIR_TOKEN_URL=https://apif1.aetna.com/fhir/v1/fhirserver_auth/oauth2/token` |
+| **Aetna Better Health** (**Medicaid — SEPARATE**, *not* in the commercial endpoint) | `ABH` | **separate product** — likely `public-providerdirectory-fhir` (unqualified) or a state-specific ABH endpoint; **confirm via `interoperabilitydevelopersupport@aetna.com`** | Medicaid plan / NPI | OAuth2 client | you provide (ABH-specific) | `ABH_FHIR_{CLIENT_ID,CLIENT_SECRET,TOKEN_URL,BASE_URL}` |
 | **UnitedHealthcare** | `UHC` | UHC API Marketplace / OneHealthcare ID | Practice/NPI | API key (URL disclosed after reg) | you provide | `UHC_FHIR_{API_KEY,BASE_URL}` |
 | **Anthem / Elevance BCBS** | `ANTHEM` | Elevance / Wellpoint developer portal | Practice/NPI | OAuth2 client | `https://totalview.healthos.elevancehealth.com/resources/registered/…` | `ANTHEM_FHIR_{CLIENT_ID,CLIENT_SECRET,TOKEN_URL,BASE_URL}` |
 | **Kaiser Permanente** | `KAISER` | `developer.kp.org` | Practice/NPI (note: region-specific) | OAuth2 client | you provide (per region) | `KAISER_FHIR_{CLIENT_ID,CLIENT_SECRET,TOKEN_URL,BASE_URL}` |
