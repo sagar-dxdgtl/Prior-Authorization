@@ -18,12 +18,23 @@ WELLPOINT = "Wellpoint / Amerigroup (Elevance)"
 HEALTHSPRING = "Healthspring"
 HEALTHSPRING_FHIR = "https://p-hi2.digitaledge.cigna.com/ProviderDirectory/v1"
 
+KAISER = "Kaiser Permanente"
+KAISER_FHIR = "https://kpx-service-bus.kp.org/service/hp/mhpo/healthplanproviderv1rc"
+MOLINA = "Molina Healthcare"
+MOLINA_FHIR = "https://api.interop.molinahealthcare.com/ProviderDirectory"
+# Centene-family plans share one PDEX directory (no-auth; prod egress must be WAF-allowlisted).
+CENTENE_FHIR = "https://iopc-pd.api.centene.com/iopc/pd/fhir/providerdirectory"
 _FHIR_PAYERS = {
     "Cigna Healthcare": "https://fhir.cigna.com/ProviderDirectory/v1",
     "Humana": "https://fhir.humana.com/api",
     "Devoted Health": "https://fhir.devoted.com/fhir",
     "Healthspring": HEALTHSPRING_FHIR,
     "AmeriHealth Caritas": "https://api-ext.amerihealthcaritas.com/NCEX/provider-api",
+    "Kaiser Permanente": KAISER_FHIR,
+    "Molina Healthcare": MOLINA_FHIR,
+    "Ambetter (Centene)": CENTENE_FHIR,
+    "Arizona Complete Health - Complete Care Plan (Centene)": CENTENE_FHIR,
+    "Wellcare (Centene)": CENTENE_FHIR,
 }
 _DIRECTORY_ACCESS = {"public-fhir", "needs-authorized-api", "none"}
 
@@ -55,6 +66,29 @@ def test_fhir_base_url_routes_directory_leg_to_pdex():
     adapter = svc.get_adapter(HEALTHSPRING, catalogue=_FakeCatalogue(HEALTHSPRING_FHIR), client=_offline_client())
     assert isinstance(adapter, FhirPdexAdapter)
     assert adapter.base_url == HEALTHSPRING_FHIR  # constructed with the catalogue's verified URL
+
+
+def test_kaiser_routes_directory_leg_to_pdex():
+    # Kaiser now qualifies: verified public PDEX Plan-Net FHIR, fhir_base_url in catalogue.
+    adapter = svc.get_adapter(KAISER, catalogue=_FakeCatalogue(KAISER_FHIR), client=_offline_client())
+    assert isinstance(adapter, FhirPdexAdapter)
+    assert adapter.base_url == KAISER_FHIR
+
+
+def test_molina_routes_directory_leg_to_pdex():
+    # Molina now qualifies: verified public PDEX Plan-Net FHIR, fhir_base_url in catalogue.
+    adapter = svc.get_adapter(MOLINA, catalogue=_FakeCatalogue(MOLINA_FHIR), client=_offline_client())
+    assert isinstance(adapter, FhirPdexAdapter)
+    assert adapter.base_url == MOLINA_FHIR
+
+
+def test_centene_family_routes_directory_leg_to_pdex():
+    # All Centene-family plans share the one verified-public PDEX endpoint (no-auth; prod needs
+    # WAF allowlist, but routing is driven purely by the catalogue fhir_base_url).
+    for label in ("Ambetter (Centene)", "Wellcare (Centene)"):
+        adapter = svc.get_adapter(label, catalogue=_FakeCatalogue(CENTENE_FHIR), client=_offline_client())
+        assert isinstance(adapter, FhirPdexAdapter), label
+        assert adapter.base_url == CENTENE_FHIR, label
 
 
 def test_no_fhir_base_url_and_no_adapter_raises_no_live_call():

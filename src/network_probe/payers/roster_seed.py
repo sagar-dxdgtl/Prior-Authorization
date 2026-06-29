@@ -105,6 +105,12 @@ ROSTER = [
 # Anything absent from this map gets all-None columns (see _BLANK_SOURCE).
 _CENTENE_TIC = "https://www.centene.com/price-transparency-files.html"
 _CIGNA_TIC = "https://www.cigna.com/legal/compliance/machine-readable-files"
+# Centene's public PDEX Plan-Net directory (FHIR R4, Authentication Type: None per the partner
+# portal) — shared by all Centene-family plans (Ambetter, WellCare, AZ Complete Health). Verified
+# live (CapabilityStatement 200 + unauthenticated Practitioner search returning NPIs). NOTE: the
+# endpoint sits behind a CloudFront AWS-WAF that blocks datacenter/non-US IPs, so the prod egress
+# IP must be allowlisted by Centene (email the API owner) or queries 403. See docs SIGNUP-CHECKLIST.
+_CENTENE_FHIR = "https://iopc-pd.api.centene.com/iopc/pd/fhir/providerdirectory"
 
 # (fhir_base_url, tic_url, directory_url, directory_access)
 SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
@@ -133,10 +139,10 @@ SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
         "needs-authorized-api",
     ),
     "Ambetter (Centene)": (
-        None,
+        _CENTENE_FHIR,
         _CENTENE_TIC,
         "https://www.ambetterhealth.com/find-a-doctor.html",
-        "needs-authorized-api",
+        "public-fhir",
     ),
     "AmeriHealth Caritas": (
         "https://api-ext.amerihealthcaritas.com/NCEX/provider-api",
@@ -145,10 +151,10 @@ SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
         "public-fhir",
     ),
     "Arizona Complete Health - Complete Care Plan (Centene)": (
-        None,
+        _CENTENE_FHIR,
         _CENTENE_TIC,
         "https://www.azcompletehealth.com/find-a-provider",
-        "needs-authorized-api",
+        "public-fhir",
     ),
     "Arizona Health Care Cost Containment System (AHCCCS)": (
         None,
@@ -241,10 +247,10 @@ SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
         "public-fhir",
     ),
     "Kaiser Permanente": (
-        None,
+        "https://kpx-service-bus.kp.org/service/hp/mhpo/healthplanproviderv1rc",
         "https://healthy.kaiserpermanente.org/support/transparency-coverage",
         "https://healthy.kaiserpermanente.org/find-a-doctor",
-        "needs-authorized-api",
+        "public-fhir",
     ),
     "Mercy Care": (
         None,
@@ -253,10 +259,10 @@ SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
         "none",
     ),
     "Molina Healthcare": (
-        None,
+        "https://api.interop.molinahealthcare.com/ProviderDirectory",
         None,
         "https://www.molinahealthcare.com/members/az/en-us/mem/medicaid/helpful-resources/provider.aspx",
-        "needs-authorized-api",
+        "public-fhir",
     ),
     "Noridian Healthcare Solutions, LLC": (
         None,
@@ -295,10 +301,10 @@ SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
         "public-fhir",
     ),
     "Wellcare (Centene)": (
-        None,
+        _CENTENE_FHIR,
         _CENTENE_TIC,
         "https://www.wellcare.com/en/find-a-doctor",
-        "needs-authorized-api",
+        "public-fhir",
     ),
     "Wellpoint / Amerigroup (Elevance)": (
         None,
