@@ -70,6 +70,8 @@ few business days.
 | Devoted Health | `https://fhir.devoted.com/fhir` | public, verified, wired |
 | Healthspring (Cigna Medicare) | `https://p-hi2.digitaledge.cigna.com/ProviderDirectory/v1` | public, verified |
 | AmeriHealth Caritas | `https://api-ext.amerihealthcaritas.com/NCEX/provider-api` | public, verified, wired |
+| Kaiser Permanente | `https://kpx-service-bus.kp.org/service/hp/mhpo/healthplanproviderv1rc` | public, verified, wired (no OAuth2 — registration "Approval Not Required"; national incl. CO) |
+| Molina Healthcare | `https://api.interop.molinahealthcare.com/ProviderDirectory` | public, verified, wired (no OAuth2; 605k practitioners, inline network names) |
 | UnitedHealthcare | (existing Optum public adapter) | wired; portal optional for fuller API |
 | Oscar | (existing public adapter) | wired |
 
@@ -84,9 +86,7 @@ few business days.
 | **UnitedHealthcare** | `UHC` | UHC API Marketplace / OneHealthcare ID | Practice/NPI | API key (URL disclosed after reg) | you provide | `UHC_FHIR_{API_KEY,BASE_URL}` |
 | **Anthem / Elevance BCBS** | `ANTHEM` | Elevance / Wellpoint developer portal | Practice/NPI | OAuth2 client | `https://totalview.healthos.elevancehealth.com/resources/registered/…` | `ANTHEM_FHIR_{CLIENT_ID,CLIENT_SECRET,TOKEN_URL,BASE_URL}` |
 | **Wellpoint / Amerigroup (Elevance)** | `WELLPOINT` | `wellpoint.com/developers` (Elevance Health developer portal) | Practice/NPI | OAuth2 client | `https://totalview.healthos.elevancehealth.com/resources/registered/Wellpoint/api/v1/fhir` (registered path; returns 403 without OAuth2 creds) | `WELLPOINT_FHIR_{CLIENT_ID,CLIENT_SECRET,TOKEN_URL,BASE_URL}` |
-| **Kaiser Permanente** | `KAISER` | `developer.kp.org` | Practice/NPI (note: region-specific) | OAuth2 client | you provide (per region) | `KAISER_FHIR_{CLIENT_ID,CLIENT_SECRET,TOKEN_URL,BASE_URL}` |
-| **Molina** | `MOLINA` | `developer.interop.molinahealthcare.com` | Practice/NPI, per state | API key / OAuth2 | you provide | `MOLINA_FHIR_{API_KEY or CLIENT_ID/SECRET,BASE_URL}` |
-| **Centene** (Ambetter / Wellcare / AZ Complete) | `CENTENE` | `partners.centene.com` | Practice/NPI | portal → API creds | you provide | `CENTENE_FHIR_{CLIENT_ID,CLIENT_SECRET,TOKEN_URL,BASE_URL}` |
+| **Centene** (Ambetter / Wellcare / AZ Complete) | `CENTENE` | `partners.centene.com` (portal documents the endpoint; **Authentication Type: None**, PDEX Plan-Net 1.2.0 / FHIR R4) | Practice/NPI | **none — no API key/registration exists per portal** | National: `https://iopc-pd.api.centene.com/iopc/pd/fhir/providerdirectory` · California: `https://iopc-provider.api.centene.com/iopc/provider/ca/fhir/providerdirectory` — **blocked by AWS-WAF, not auth.** CloudFront fences to **US + non-datacenter IPs**: non-US (India Jio residential) → 403 geo rule; US datacenter/VPN/**EC2/AWS** → 403 hosting-provider/anonymous-IP rule. No key to request. Endpoint + data **confirmed live & no-auth** via out-of-band US-residential check (2026-06-29): `/metadata` 200, `Practitioner?family=SMITH` → 200-record Bundle with NPIs → PDEX Plan-Net, adapter-ready. **Seeded as public-fhir** (migration `0011`, all 3 Centene-family labels) — but the engine's own egress (datacenter/AWS) is WAF-blocked, so prod will **403 every query until your prod Elastic IP `/32` is allowlisted by Centene** (email the API owner; allow rules outrank the managed-rule block). Verify from the *real prod egress* (not a proxy) once allowlisted. | — (public once IP-allowlisted; no creds) |
 | **EmblemHealth** | `EMBLEM` | HealthTranzform developer portal | Practice/NPI | OAuth2 / API key | you provide | `EMBLEM_FHIR_{…,BASE_URL}` |
 | **SCAN Health Plan** | `SCAN` | SCAN developer/interop portal | Practice/NPI | OAuth2 / API key | you provide | `SCAN_FHIR_{…,BASE_URL}` |
 | **SelectHealth** | `SELECTHEALTH` | SelectHealth developer portal | Practice/NPI | OAuth2 / API key | you provide | `SELECTHEALTH_FHIR_{…,BASE_URL}` |
