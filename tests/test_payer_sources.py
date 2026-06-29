@@ -36,7 +36,7 @@ _FHIR_PAYERS = {
     "Arizona Complete Health - Complete Care Plan (Centene)": CENTENE_FHIR,
     "Wellcare (Centene)": CENTENE_FHIR,
 }
-_DIRECTORY_ACCESS = {"public-fhir", "needs-authorized-api", "none"}
+_DIRECTORY_ACCESS = {"public-fhir", "needs-authorized-api", "none", "pdf-directory"}
 
 
 class _FakeRow:
@@ -110,6 +110,32 @@ def test_scan_seeded_public_fhir():
     row = {r["label"]: r for r in payer_rows()}["Scan"]
     assert row["fhir_base_url"] == SCAN_FHIR
     assert row["directory_access"] == "public-fhir"
+
+
+def test_align_routes_to_db_directory_adapter():
+    # Align is a PDF-only network (no FHIR, no NPIs) → DbDirectoryAdapter, keyed by the roster slug.
+    from network_probe.payers.adapters.db_directory import DbDirectoryAdapter
+
+    class _Row:
+        fhir_base_url = None
+        directory_access = "pdf-directory"
+        key = "align-senior-health-plan-fl-south-florida"
+        label = "Align Senior Care"
+
+    class _Cat:
+        def resolve(self, payer):
+            return _Row()
+
+    adapter = svc.get_adapter("Align Senior Care", catalogue=_Cat())
+    assert isinstance(adapter, DbDirectoryAdapter)
+    assert adapter.payer_name == "align-senior-health-plan-fl-south-florida"
+    assert adapter.payer_label == "Align Senior Care"
+
+
+def test_align_seeded_as_pdf_directory():
+    row = {r["label"]: r for r in payer_rows()}["Align Senior Health Plan"]
+    assert row["directory_access"] == "pdf-directory"
+    assert row["fhir_base_url"] is None
 
 
 def test_no_fhir_base_url_and_no_adapter_raises_no_live_call():

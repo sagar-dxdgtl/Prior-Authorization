@@ -7,6 +7,7 @@ from network_probe.payers.adapters.base import PayerAdapter
 from network_probe.payers.adapters.devoted import DevotedAdapter
 from network_probe.payers.adapters.fhir_pdex import KNOWN_ENDPOINTS as _FHIR_ENDPOINTS
 from network_probe.payers.adapters.fhir_pdex import FhirPdexAdapter
+from network_probe.payers.adapters.db_directory import DbDirectoryAdapter
 from network_probe.payers.adapters.oscar import OscarAdapter
 from network_probe.payers.adapters.scan import ScanDirectoryAdapter
 
@@ -34,21 +35,20 @@ for _key in _FHIR_ENDPOINTS:
     _ADAPTER_FACTORIES[_key] = _fhir_factory(_key)
 
 
-def _catalogue_fhir_base_url(payer: str, catalogue) -> str | None:
-    """Look up a verified-public FHIR PDEX base URL recorded for this payer in the catalogue.
+def _catalogue_row(payer: str, catalogue):
+    """Resolve this payer to its catalogue row (for fhir_base_url / directory_access).
 
-    Best-effort and failure-tolerant: if no catalogue is available (e.g. no DB), we return
-    None so the caller falls back to the normal 'no adapter' error — never a live call."""
+    Best-effort and failure-tolerant: if no catalogue is available (e.g. no DB), return None
+    so the caller falls back to the normal 'no adapter' error — never a live call."""
     try:
         cat = catalogue
         if cat is None:
             from network_probe.payers.catalogue import DbPayerCatalogue
 
             cat = DbPayerCatalogue()
-        row = cat.resolve(payer)
+        return cat.resolve(payer)
     except Exception:
         return None
-    return getattr(row, "fhir_base_url", None) if row is not None else None
 
 
 def _fhir_class_for(base_url: str):
@@ -65,13 +65,19 @@ def get_adapter(payer: str, catalogue=None, **kwargs) -> PayerAdapter:
     factory = _ADAPTER_FACTORIES.get(key)
     if factory is not None:
         return factory(**kwargs)
-    # No more-specific registered adapter: route the directory leg to a FHIR adapter when we
-    # have a verified-public base_url — passed explicitly, or recorded for this payer in the
-    # catalogue (the multi-source `fhir_base_url` column).
-    base_url = kwargs.get("base_url") or _catalogue_fhir_base_url(payer, catalogue)
+    # No more-specific registered adapter: consult the catalogue row.
+    row = _catalogue_row(payer, catalogue)
+    # (a) verified-public FHIR base_url — passed explicitly, or the catalogue `fhir_base_url`.
+    base_url = kwargs.get("base_url") or (getattr(row, "fhir_base_url", None) if row is not None else None)
     if base_url:
         kwargs["base_url"] = base_url
         return _fhir_class_for(base_url)(payer_name=key or "fhir", **kwargs)
+    # (b) PDF-only directory (no FHIR, no NPIs — e.g. Align Senior Care): parsed rows in the DB.
+    if row is not None and getattr(row, "directory_access", None) == "pdf-directory":
+        kwargs.pop("base_url", None)
+        return DbDirectoryAdapter(
+            payer_name=getattr(row, "key", key), payer_label=getattr(row, "label", key), **kwargs
+        )
     supported = ", ".join(sorted(_ADAPTER_FACTORIES)) or "(none)"
     raise ValueError(f"No adapter for payer {payer!r}. Supported: {supported}.")
 

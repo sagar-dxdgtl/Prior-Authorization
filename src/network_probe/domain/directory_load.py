@@ -1,0 +1,181 @@
+"""Download, parse, and load monthly PDF provider directories into payer_directory_entries.
+
+For PDF-only plans (e.g. Align Senior Care on AllyAlign). "App-scheduled monthly" without any
+external scheduler: a startup background loop checks staleness daily and reloads when a new month
+arrives (so it's restart-safe — a fresh boot re-checks and catches up). Gated behind the
+ENABLE_DIRECTORY_REFRESH env flag so tests/CI never trigger a 14 MB download.
+"""
+
+from __future__ import annotations
+
+import datetime as _dt
+import os
+import tempfile
+import uuid
+
+import httpx
+from sqlalchemy import delete, func, select
+from sqlalchemy.orm import Session
+
+from network_probe.core._http import DEFAULT_UA
+from network_probe.domain.directory_match import _norm
+from network_probe.domain.directory_pdf import parse_directory_pdf, toc_specialties
+
+# payer_key MUST equal the roster slug (catalogue key) so DbDirectoryAdapter — which queries
+# payer_directory_entries by that key — finds the rows. Each entry has a `format` (parser) and
+# either a static `pdf_url` or a `page_url` + `link_pattern` to discover a date-stamped URL.
+import re as _re  # noqa: E402
+
+PDF_DIRECTORIES: dict[str, dict] = {
+    "align-senior-health-plan-fl-south-florida": {
+        "label": "Align Senior Care",
+        "format": "allyalign",
+        "pdf_url": (
+            "https://prod-websiteapis.allyalign.cc/Api/ProviderDirectory/Download"
+            "?fileName=Provider%20Directory%20PDF%20Align%20Senior%20Care%20FL%20ISNP_FL.pdf"
+        ),
+    },
+    "eternalhealth-az": {
+        "label": "eternalHealth",
+        "format": "aaneel",
+        # the wp-content URL is date-stamped (…ProviderDirectory-AZ-11212025.pdf) and changes each
+        # update — discover the current AZ PDF link from the find-a-provider page.
+        "page_url": "https://www.eternalhealth.com/for-members/find-a-provider-or-pharmacy/",
+        "link_pattern": r"https://www\.eternalhealth\.com/wp-content/uploads/[^\"'<>]*ProviderDirectory-AZ-[^\"'<>]*\.pdf",
+    },
+}
+
+
+def resolve_pdf_url(cfg: dict) -> str:
+    """Return the PDF URL — static `pdf_url`, or discovered from `page_url` via `link_pattern`."""
+    if cfg.get("pdf_url"):
+        return cfg["pdf_url"]
+    page, pat = cfg.get("page_url"), cfg.get("link_pattern")
+    if not (page and pat):
+        raise ValueError("PDF-directory config needs either pdf_url or page_url+link_pattern")
+    with httpx.Client(timeout=60.0, follow_redirects=True, headers={"user-agent": DEFAULT_UA}) as c:
+        html = c.get(page).text
+    m = _re.search(pat, html)
+    if not m:
+        raise ValueError(f"no PDF link matching {pat!r} on {page}")
+    return m.group(0)
+
+
+def _month() -> str:
+    return _dt.date.today().strftime("%Y-%m")
+
+
+def download_pdf(url: str, timeout: float = 180.0) -> bytes:
+    with httpx.Client(timeout=timeout, follow_redirects=True, headers={"user-agent": DEFAULT_UA}) as c:
+        r = c.get(url)
+        r.raise_for_status()
+        return r.content
+
+
+def rows_from_pdf(path: str, payer_key: str, version: str, fmt: str = "allyalign") -> list[dict]:
+    """Parse a directory PDF into flat payer_directory_entries mappings (one per provider-location)."""
+    specs = toc_specialties(path) if fmt == "allyalign" else None
+    now = _dt.datetime.now(_dt.UTC)
+    rows: list[dict] = []
+    for e in parse_directory_pdf(path, fmt=fmt, specialties=specs):
+        for loc in e.locations or [{}]:
+            rows.append(
+                {
+                    "id": uuid.uuid4(),
+                    "tenant_id": None,
+                    "payer_key": payer_key,
+                    "last_name": _norm(e.last_name),
+                    "first_name": _norm(e.first_name),
+                    "full_name": e.name[:240],
+                    "specialty": e.specialty,
+                    "address": (loc.get("address") or None),
+                    "city": (loc.get("city") or None),
+                    "state": (loc.get("state") or None),
+                    "zip": (loc.get("zip") or None),
+                    "accepting_new": e.accepting_new,
+                    "source_version": version,
+                    "loaded_at": now,
+                }
+            )
+    return rows
+
+
+def _replace_rows(payer_key: str, rows: list[dict], engine=None) -> None:
+    from network_probe.db.base import owner_engine  # owner role writes global reference data
+    from network_probe.db.models import PayerDirectoryEntry
+
+    with Session(engine or owner_engine()) as s:
+        s.execute(
+            delete(PayerDirectoryEntry).where(
+                PayerDirectoryEntry.payer_key == payer_key,
+                PayerDirectoryEntry.tenant_id.is_(None),
+            )
+        )
+        if rows:
+            s.bulk_insert_mappings(PayerDirectoryEntry, rows)
+        s.commit()
+
+
+def load_directory(
+    payer_key: str, *, pdf_path: str | None = None, pdf_bytes: bytes | None = None,
+    version: str | None = None, engine=None,
+) -> int:
+    """Download (or use the given) PDF, parse it, and atomically replace this payer's rows.
+    Returns the number of rows loaded."""
+    cfg = PDF_DIRECTORIES.get(payer_key)
+    if cfg is None and pdf_path is None and pdf_bytes is None:
+        raise ValueError(f"unknown PDF-directory payer {payer_key!r}")
+    version = version or _month()
+    fmt = (cfg or {}).get("format", "allyalign")
+    tmp_path = None
+    try:
+        if pdf_path is None:
+            data = pdf_bytes if pdf_bytes is not None else download_pdf(resolve_pdf_url(cfg))
+            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+                tmp.write(data)
+                tmp_path = tmp.name
+            pdf_path = tmp_path
+        rows = rows_from_pdf(pdf_path, payer_key, version, fmt=fmt)
+        _replace_rows(payer_key, rows, engine)
+        return len(rows)
+    finally:
+        if tmp_path:
+            os.unlink(tmp_path)
+
+
+def loaded_version(payer_key: str, engine=None) -> str | None:
+    from network_probe.db.base import app_engine
+    from network_probe.db.models import PayerDirectoryEntry
+
+    with Session(engine or app_engine()) as s:
+        return s.execute(
+            select(func.max(PayerDirectoryEntry.source_version)).where(
+                PayerDirectoryEntry.payer_key == payer_key
+            )
+        ).scalar()
+
+
+def is_stale(payer_key: str, engine=None) -> bool:
+    """Stale = never loaded, or last loaded in a prior calendar month."""
+    return loaded_version(payer_key, engine) != _month()
+
+
+def refresh_if_stale(payer_key: str) -> int | None:
+    return load_directory(payer_key) if is_stale(payer_key) else None
+
+
+async def monthly_refresh_loop(check_interval_seconds: int = 86_400) -> None:
+    """Daily staleness check → reload when a new month's directory is due. Restart-safe."""
+    import asyncio
+
+    while True:
+        for pk in PDF_DIRECTORIES:
+            try:
+                await asyncio.to_thread(refresh_if_stale, pk)
+            except Exception:  # never let a bad download/parse kill the loop
+                pass
+        await asyncio.sleep(check_interval_seconds)
+
+
+def refresh_enabled() -> bool:
+    return os.getenv("ENABLE_DIRECTORY_REFRESH", "").strip() in ("1", "true", "yes")

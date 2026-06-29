@@ -267,6 +267,19 @@ app.add_middleware(
 )
 app.add_middleware(RateLimitHeadersMiddleware)
 app.add_middleware(BodySizeLimitMiddleware)
+
+
+@app.on_event("startup")
+async def _start_pdf_directory_refresh() -> None:
+    """App-scheduled monthly refresh of PDF-only provider directories (e.g. Align Senior Care).
+    Off by default; set ENABLE_DIRECTORY_REFRESH=1 in the deployment to enable. Tests never
+    trigger the 14 MB download because the flag is unset."""
+    import asyncio
+
+    from network_probe.domain.directory_load import monthly_refresh_loop, refresh_enabled
+
+    if refresh_enabled():
+        asyncio.create_task(monthly_refresh_loop())
 app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(review_router)

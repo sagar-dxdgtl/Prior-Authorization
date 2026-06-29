@@ -126,6 +126,32 @@ class UsageCounter(Base):
     count: Mapped[int] = mapped_column(Integer, default=0)
 
 
+class PayerDirectoryEntry(Base):
+    """A single provider-location row parsed from a payer's PDF provider directory.
+
+    For plans that publish their network only as a monthly PDF with no NPI (e.g. Align Senior
+    Care). Global reference data (tenant_id NULL): we never resolve these to NPIs — instead we
+    match *our own* providers (name + state + zip from intake) against these rows. One row per
+    (provider, location) so state/zip filtering is a plain WHERE. See domain/directory_match.py.
+    """
+
+    __tablename__ = "payer_directory_entries"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tenants.id"), nullable=True, index=True)
+    payer_key: Mapped[str] = mapped_column(String(120), index=True)
+    last_name: Mapped[str] = mapped_column(String(120), index=True)  # normalized (upper, A-Z only)
+    first_name: Mapped[str] = mapped_column(String(120), default="")  # normalized
+    full_name: Mapped[str] = mapped_column(String(240))  # as printed
+    specialty: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    address: Mapped[str | None] = mapped_column(String(240), nullable=True)
+    city: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    state: Mapped[str | None] = mapped_column(String(2), nullable=True, index=True)
+    zip: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    accepting_new: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    source_version: Mapped[str | None] = mapped_column(String(40), nullable=True)  # directory "current as of"
+    loaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+
 class ReviewNote(Base):
     __tablename__ = "review_notes"
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)

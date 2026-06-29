@@ -100,7 +100,9 @@ ROSTER = [
 #                      (incl. corporate-family shares, e.g. Centene plans share the Centene index).
 #   directory_url    — the human-facing "find a doctor" page (informational; not machine-queried).
 #   directory_access — "public-fhir" (verified open PDEX or an existing public adapter),
-#                      "needs-authorized-api" (OAuth2/portal registration required), or
+#                      "needs-authorized-api" (OAuth2/portal registration required),
+#                      "pdf-directory" (network published only as a monthly PDF → parsed into
+#                      payer_directory_entries, routed to DbDirectoryAdapter), or
 #                      "none" (govt/Medicaid/MAC — the program IS the network; no PDEX/TiC).
 # Anything absent from this map gets all-None columns (see _BLANK_SOURCE).
 _CENTENE_TIC = "https://www.centene.com/price-transparency-files.html"
@@ -133,10 +135,12 @@ SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
         "needs-authorized-api",
     ),
     "Align Senior Health Plan": (
+        # PDF-only network (AllyAlign) — no FHIR, no NPIs. Monthly directory PDF is parsed into
+        # payer_directory_entries and matched by name+state+zip (routes to DbDirectoryAdapter).
         None,
         None,
         "https://alignseniorcare.com/providers/provider-documents/",
-        "needs-authorized-api",
+        "pdf-directory",
     ),
     "Ambetter (Centene)": (
         _CENTENE_FHIR,
@@ -217,10 +221,13 @@ SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
         "needs-authorized-api",
     ),
     "EternalHealth": (
+        # PDF-only network (AaNeel) — no FHIR, no NPIs. Date-stamped monthly PDF (AZ) is
+        # discovered from the find-a-provider page, parsed into payer_directory_entries, and
+        # matched by name+state+zip (DbDirectoryAdapter).
         None,
         None,
-        "https://nhconnect.eternalhealth.com/Provider/PublicPcpSearch",
-        "needs-authorized-api",
+        "https://www.eternalhealth.com/for-members/find-a-provider-or-pharmacy/",
+        "pdf-directory",
     ),
     "Gold Kidney Health Plan": (
         None,

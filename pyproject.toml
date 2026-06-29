@@ -13,6 +13,7 @@ dependencies = [
     "fastapi==0.115.6",
     "uvicorn==0.34.0",
     "pypdf==5.1.0",
+    "pymupdf==1.26.7",
     "python-multipart==0.0.20",
     "sqlalchemy==2.0.36",
     "alembic==1.14.0",
