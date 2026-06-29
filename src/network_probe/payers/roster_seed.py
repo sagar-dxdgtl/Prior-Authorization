@@ -283,10 +283,14 @@ SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
         "public-fhir",
     ),
     "Scan": (
-        None,
+        # Public PDEX directory (InterSystems FHIR R4, no auth). Presence-based only: SCAN
+        # exposes no network linkage (no PractitionerRole network-reference; OrganizationAffiliation
+        # .network + InsurancePlan.network unpopulated), so the engine routes it to the
+        # presence-based ScanDirectoryAdapter (see service._fhir_class_for).
+        "https://providerdirectory.scanhealthplan.com",
         None,
         "https://www.scanhealthplan.com/helpful-tools/provider-search",
-        "needs-authorized-api",
+        "public-fhir",
     ),
     "SelectHealth": (
         None,

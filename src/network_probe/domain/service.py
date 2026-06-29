@@ -8,6 +8,7 @@ from network_probe.payers.adapters.devoted import DevotedAdapter
 from network_probe.payers.adapters.fhir_pdex import KNOWN_ENDPOINTS as _FHIR_ENDPOINTS
 from network_probe.payers.adapters.fhir_pdex import FhirPdexAdapter
 from network_probe.payers.adapters.oscar import OscarAdapter
+from network_probe.payers.adapters.scan import ScanDirectoryAdapter
 
 
 def _fhir_factory(payer_key: str):
@@ -50,18 +51,27 @@ def _catalogue_fhir_base_url(payer: str, catalogue) -> str | None:
     return getattr(row, "fhir_base_url", None) if row is not None else None
 
 
+def _fhir_class_for(base_url: str):
+    """Pick the FHIR adapter for a catalogue base_url. Most PDEX Plan-Net servers use the
+    generic adapter; servers with a non-standard shape get a specialised one (e.g. SCAN's
+    directory has no traversable network linkage → presence-based ScanDirectoryAdapter)."""
+    if base_url and "scanhealthplan.com" in base_url:
+        return ScanDirectoryAdapter
+    return FhirPdexAdapter
+
+
 def get_adapter(payer: str, catalogue=None, **kwargs) -> PayerAdapter:
     key = (payer or "").strip().lower()
     factory = _ADAPTER_FACTORIES.get(key)
     if factory is not None:
         return factory(**kwargs)
-    # No more-specific registered adapter: route the directory leg to the generic FHIR PDEX
-    # adapter when we have a verified-public base_url — passed explicitly, or recorded for this
-    # payer in the catalogue (the multi-source `fhir_base_url` column).
+    # No more-specific registered adapter: route the directory leg to a FHIR adapter when we
+    # have a verified-public base_url — passed explicitly, or recorded for this payer in the
+    # catalogue (the multi-source `fhir_base_url` column).
     base_url = kwargs.get("base_url") or _catalogue_fhir_base_url(payer, catalogue)
     if base_url:
         kwargs["base_url"] = base_url
-        return FhirPdexAdapter(payer_name=key or "fhir", **kwargs)
+        return _fhir_class_for(base_url)(payer_name=key or "fhir", **kwargs)
     supported = ", ".join(sorted(_ADAPTER_FACTORIES)) or "(none)"
     raise ValueError(f"No adapter for payer {payer!r}. Supported: {supported}.")
 

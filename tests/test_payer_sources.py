@@ -91,6 +91,27 @@ def test_centene_family_routes_directory_leg_to_pdex():
         assert adapter.base_url == CENTENE_FHIR, label
 
 
+SCAN = "Scan"
+SCAN_FHIR = "https://providerdirectory.scanhealthplan.com"
+
+
+def test_scan_routes_to_presence_adapter():
+    # SCAN's directory has no traversable network linkage → presence-based ScanDirectoryAdapter,
+    # NOT the generic FhirPdexAdapter.
+    from network_probe.payers.adapters.scan import ScanDirectoryAdapter
+
+    adapter = svc.get_adapter(SCAN, catalogue=_FakeCatalogue(SCAN_FHIR), client=_offline_client())
+    assert isinstance(adapter, ScanDirectoryAdapter)
+    assert not isinstance(adapter, FhirPdexAdapter)
+    assert adapter.base_url == SCAN_FHIR
+
+
+def test_scan_seeded_public_fhir():
+    row = {r["label"]: r for r in payer_rows()}["Scan"]
+    assert row["fhir_base_url"] == SCAN_FHIR
+    assert row["directory_access"] == "public-fhir"
+
+
 def test_no_fhir_base_url_and_no_adapter_raises_no_live_call():
     # A payer the catalogue can't help with stays a clean ValueError — never a live request.
     with pytest.raises(ValueError, match="No adapter"):

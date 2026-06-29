@@ -38,7 +38,7 @@ Machine-generated from `src/network_probe/payers/roster_seed.py` (the catalogue 
 | Molina Healthcare | AZ | Managed Medicaid | — | `https://api.interop.molinahealthcare.com/ProviderDirectory` (verified) | — | public-fhir | Verified public PDEX Plan-Net (FHIR 4.0.1) — no auth/registration; 605k practitioners. Inline network names (MHMS CHIP, Molina Marketplace, …). review: Stedi id still open — resolver's 20934 (Molina Illinois) wrong-state; AZ medical routes via Availity/Emdeon. |
 | Noridian Healthcare Solutions, LLC | AZ | Traditional Medicare | — | — | — | none | review: Traditional Medicare uses per-state ids; resolver's 03302 (Medicare North Dakota) is wrong. CMS-owned data (NPPES). |
 | Oscar | AZ | ACA | OSCAR | via existing adapter | — | public-fhir | Existing OscarAdapter (public). Stedi OSCAR — supported. |
-| Scan | AZ | Medicare Advantage | SPSCN | — | — | needs-authorized-api | SPSCN — resolver + research agree. |
+| Scan | AZ | Medicare Advantage | SPSCN | `https://providerdirectory.scanhealthplan.com` (verified) | — | public-fhir | Verified public PDEX (InterSystems FHIR R4, no auth) — **presence-based**: SCAN exposes no network linkage (no PractitionerRole network-ref; OrganizationAffiliation.network + InsurancePlan.network unpopulated — 76 plans, 0 networks). Routes to ScanDirectoryAdapter (present in directory = in-network for SCAN; best-effort state check). Rate-limits hard. Stedi SPSCN. |
 | UnitedHealthcare | AZ | ACA | 87726 | via existing adapter | `https://transparency-in-coverage.uhc.com/` | public-fhir | Existing public Optum FHIR adapter (uhc). Stedi 87726 — supported. |
 | UnitedHealthcare | AZ | Commercial | 87726 | via existing adapter | `https://transparency-in-coverage.uhc.com/` | public-fhir | Existing public Optum FHIR adapter (uhc). Stedi 87726 — supported. |
 | UnitedHealthcare | AZ | Medicare Advantage | 87726 | via existing adapter | `https://transparency-in-coverage.uhc.com/` | public-fhir | Existing public Optum FHIR adapter (uhc). Stedi 87726 — supported. |
@@ -57,12 +57,12 @@ Machine-generated from `src/network_probe/payers/roster_seed.py` (the catalogue 
 | Kaiser Permanente | CO-Denver | Commercial | — | `https://kpx-service-bus.kp.org/service/hp/mhpo/healthplanproviderv1rc` (verified) | `https://healthy.kaiserpermanente.org/support/transparency-coverage` | public-fhir | Verified public PDEX Plan-Net (Smile CDR, FHIR 4.0.1) — no auth/registration; national incl. CO (24k locations). Networks resolve to Commercial/Medicaid/Medicare orgs. review: Stedi id still open — regional ids (NorCal 94135, SoCal 94285); CO id unconfirmed. |
 | Kaiser Permanente | CO-Denver | Medicare Advantage | — | `https://kpx-service-bus.kp.org/service/hp/mhpo/healthplanproviderv1rc` (verified) | `https://healthy.kaiserpermanente.org/support/transparency-coverage` | public-fhir | Verified public PDEX Plan-Net (Smile CDR, FHIR 4.0.1) — no auth/registration; national incl. CO (24k locations). Networks resolve to Commercial/Medicaid/Medicare orgs. review: Stedi id still open — regional ids (NorCal 94135, SoCal 94285); CO id unconfirmed. |
 | Novitas Solutions, Inc. | CO-Denver | Traditional Medicare | — | — | — | none | review: Traditional Medicare per-state ids; resolver's 04312 (Medicare Oklahoma) wrong for CO. CMS-owned data (NPPES). |
-| SelectHealth | CO-Denver | ACA | — | — | `https://selecthealth.org/disclaimers/machine-readable-data` | needs-authorized-api | review: research candidate SX107/TLTBQ; resolver found no confident match — left for review. |
-| SelectHealth | CO-Denver | Medicare Advantage | — | — | `https://selecthealth.org/disclaimers/machine-readable-data` | needs-authorized-api | review: research candidate SX107/TLTBQ; resolver found no confident match — left for review. |
+| SelectHealth | CO-Denver | ACA | — | — | `https://selecthealth.org/disclaimers/machine-readable-data` | needs-authorized-api | **Registered** (MuleSoft portal). Base `https://api.selecthealth.org/provider-directory/v1/fhir` → 401 without creds. Uses STANDARD PDEX `network-reference` model → wires via FhirPdexAdapter + client-credentials auth once creds land. review: Stedi id SX107/TLTBQ unconfirmed. |
+| SelectHealth | CO-Denver | Medicare Advantage | — | — | `https://selecthealth.org/disclaimers/machine-readable-data` | needs-authorized-api | **Registered** (MuleSoft portal). Base `https://api.selecthealth.org/provider-directory/v1/fhir` → 401 without creds. Uses STANDARD PDEX `network-reference` model → wires via FhirPdexAdapter + client-credentials auth once creds land. review: Stedi id SX107/TLTBQ unconfirmed. |
 | UnitedHealthcare | CO-Denver | Commercial | 87726 | via existing adapter | `https://transparency-in-coverage.uhc.com/` | public-fhir | Existing public Optum FHIR adapter (uhc). Stedi 87726 — supported. |
 | UnitedHealthcare | CO-Denver | Dual Eligible (FIDE SNP) | 87726 | via existing adapter | `https://transparency-in-coverage.uhc.com/` | public-fhir | Existing public Optum FHIR adapter (uhc). Stedi 87726 — supported. |
 | UnitedHealthcare | CO-Denver | Medicare Advantage | 87726 | via existing adapter | `https://transparency-in-coverage.uhc.com/` | public-fhir | Existing public Optum FHIR adapter (uhc). Stedi 87726 — supported. |
-| EmblemHealth | NY | Commercial | 13551 | — | `https://transparency.emblemhealth.com/` | needs-authorized-api | 13551 — resolver + research agree. FHIR via HealthTranzform (registration). |
+| EmblemHealth | NY | Commercial | 13551 | — | `https://transparency.emblemhealth.com/` | needs-authorized-api | 13551 — resolver + research agree. HealthTranzform endpoint (`prodtzinterop.healthtranzformdev.com/providerdirectory`) is open/no-auth with real practitioners, but **network data is broken** — `plannet-ParticipatingNetwork` Orgs resolve to *person names* and `Organization?type=network` is empty, so in-network can't be determined. NOT wireable until clean network data. Eligibility via Stedi 13551. |
 | Aetna | FL-South Florida | Commercial | 60054 | — | `https://health1.aetna.com/app/public/` | needs-authorized-api | Stedi 60054; provider-directory FHIR is OAuth2-gated (needs-authorized-api). |
 | Aetna | FL-South Florida | Medicare Advantage | 60054 | — | `https://health1.aetna.com/app/public/` | needs-authorized-api | Stedi 60054; provider-directory FHIR is OAuth2-gated (needs-authorized-api). |
 | Aetna Better Health | FL-South Florida | Managed Medicaid | ABH01 | — | — | needs-authorized-api | ABH01 — resolver + research agree. |
@@ -85,10 +85,10 @@ Machine-generated from `src/network_probe/payers/roster_seed.py` (the catalogue 
 ## Counts
 
 - Total roster rows: **67**
-- Rows with `fhir_base_url`: **21** (Cigna 6, Humana 2, Devoted 1, Healthspring 2, AmeriHealth Caritas 2, Kaiser 2, Molina 2, Centene 4).
+- Rows with `fhir_base_url`: **22** (Cigna 6, Humana 2, Devoted 1, Healthspring 2, AmeriHealth Caritas 2, Kaiser 2, Molina 2, Centene 4, Scan 1).
 - Rows with `tic_url`: **42**
 - Rows with a Stedi id: **36**
-- By `directory_access`: `needs-authorized-api` 31 · `none` 8 · `public-fhir` 28
+- By `directory_access`: `needs-authorized-api` 30 · `none` 8 · `public-fhir` 29
 
 ## Needs authorized API / no public source
 
@@ -105,11 +105,10 @@ Payers with **no machine-queryable public directory** today (the engine cannot r
 - **Wellpoint / Amerigroup (Elevance)** (needs-authorized-api) — auth-gated: registered-path FHIR returns 403 without OAuth2 creds. Register at wellpoint.com/developers.
 - **Mercy Care** (none) — review: resolver's 22248 (AmeriHealth Caritas PA) is wrong; no confirmed AZ id. Govt/Medicaid MCO.
 - **Noridian Healthcare Solutions, LLC** (none) — review: Traditional Medicare uses per-state ids; resolver's 03302 (Medicare North Dakota) is wrong. CMS-owned data (NPPES).
-- **Scan** (needs-authorized-api) — SPSCN — resolver + research agree.
 - **Colorado Department of Health Care Policy & Financing** (none) — SKCO0 — authoritative CO Medicaid id. Govt program: no PDEX/TiC.
 - **Novitas Solutions, Inc.** (none) — review: Traditional Medicare per-state ids; resolver's 04312 (Medicare Oklahoma) wrong for CO. CMS-owned data (NPPES).
-- **SelectHealth** (needs-authorized-api) — review: research candidate SX107/TLTBQ; resolver found no confident match — left for review.
-- **EmblemHealth** (needs-authorized-api) — 13551 — resolver + research agree. FHIR via HealthTranzform (registration).
+- **SelectHealth** (needs-authorized-api) — **registered**; base `api.selecthealth.org/provider-directory/v1/fhir` (401 without creds); STANDARD PDEX `network-reference` model → wires via FhirPdexAdapter + client-credentials once creds land. Stedi id SX107/TLTBQ unconfirmed.
+- **EmblemHealth** (needs-authorized-api) — 13551. HealthTranzform endpoint open/no-auth but **network data broken** (ParticipatingNetwork Orgs → person names; no network-type orgs) → not wireable until clean data.
 - **Aetna Better Health** (needs-authorized-api) — ABH01 — resolver + research agree.
 - **Align Senior Health Plan** (needs-authorized-api) — review: per-state ids; FL=ASFL1 (research); resolver gave ASCA1 (CA), wrong-state.
 - **AvMed** (needs-authorized-api) — 59274 — resolver + research agree. FHIR endpoint stale (TLS expired) → not seeded.
