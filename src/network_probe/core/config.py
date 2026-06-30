@@ -26,6 +26,13 @@ class Settings(BaseSettings):
     member_id_pepper: str = "dev-pepper"
     stedi_api_key: str | None = None
     stedi_eligibility_url: str = "https://healthcare.us.stedi.com/2024-04-01/change/medicalnetwork/eligibility/v3"
+    # Anthem / Elevance provider-directory FHIR (OAuth2 client-credentials). The same CMS-mandated
+    # PDEX Plan-Net API as the public payers, but token-gated — creds come from the Elevance portal.
+    anthem_fhir_base_url: str | None = None
+    anthem_fhir_token_url: str | None = None
+    anthem_fhir_client_id: str | None = None
+    anthem_fhir_client_secret: str | None = None
+    anthem_fhir_scope: str | None = None
     # Kept as a raw str (not list[str]) so pydantic-settings does not attempt to
     # JSON-decode it at the source level. Plain, comma-separated, and JSON-array
     # forms are all supported via the `cors_origins` property below.
@@ -55,6 +62,16 @@ class Settings(BaseSettings):
         if raw.startswith("["):
             return [str(x) for x in json.loads(raw)]
         return [x.strip() for x in raw.split(",") if x.strip()]
+
+    @property
+    def anthem_fhir_ready(self) -> bool:
+        """True only when every credential needed to call the Anthem OAuth2 FHIR directory is set."""
+        return bool(
+            self.anthem_fhir_base_url
+            and self.anthem_fhir_token_url
+            and self.anthem_fhir_client_id
+            and self.anthem_fhir_client_secret
+        )
 
     @property
     def fernet_key_list(self) -> list[str]:

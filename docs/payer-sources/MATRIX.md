@@ -7,7 +7,7 @@ Machine-generated from `src/network_probe/payers/roster_seed.py` (the catalogue 
 - **Stedi ID** — primary EDI payer id used for 270/271. Blank = `needs_payer_id` (no confident id; see note).
 - **FHIR base URL** — verified-public PDEX Plan-Net server that the engine routes the directory leg to. `(verified)` = research confirmed a live CapabilityStatement + unauthenticated query. `via existing adapter` = UHC (public Optum FHIR) / Oscar (web) are wired by adapter key, not a catalogue URL. `—` = none public.
 - **TiC URL** — Transparency-in-Coverage machine-readable-file index, only where research verified it (incl. corporate-family shares, e.g. Centene/Cigna).
-- **Dir access** — `public-fhir` (open PDEX or existing public adapter) · `needs-authorized-api` (OAuth2 / portal registration) · `pdf-directory` (network published only as a monthly PDF → parsed into `payer_directory_entries`, matched by name+state+zip via DbDirectoryAdapter) · `none` (govt/Medicaid/MAC: the program is the network; no PDEX/TiC).
+- **Dir access** — `public-fhir` (open PDEX or existing public adapter) · `authorized-fhir` (verified PDEX **behind OAuth2** — creds in `.env`; routed to FhirPdexAdapter through a bearer-token client, e.g. Anthem/Elevance) · `needs-authorized-api` (OAuth2 / portal registration required, not yet wired) · `pdf-directory` (network published only as a monthly PDF → parsed into `payer_directory_entries`, matched by name+state+zip via DbDirectoryAdapter) · `none` (govt/Medicaid/MAC: the program is the network; no PDEX/TiC).
 - **review** in a note = an unresolved Stedi id left for a human; the matrix records why the fuzzy resolver proposal was *not* baked.
 
 ## Matrix
@@ -46,9 +46,9 @@ Machine-generated from `src/network_probe/payers/roster_seed.py` (the catalogue 
 | Wellpoint / Amerigroup (Elevance) | AZ | Medicare Advantage | — | — | — | needs-authorized-api | Auth-gated: metadata is public but data queries on the registered path return 403 without OAuth2 creds. Register at wellpoint.com/developers. review: WLPNT/RUWTL vs resolver 26375 (Amerigroup) unreconciled — Stedi id left for review. |
 | Aetna | CO-Denver | Commercial | 60054 | — | `https://health1.aetna.com/app/public/` | needs-authorized-api | Stedi 60054; provider-directory FHIR is OAuth2-gated (needs-authorized-api). |
 | Aetna | CO-Denver | Medicare Advantage | 60054 | — | `https://health1.aetna.com/app/public/` | needs-authorized-api | Stedi 60054; provider-directory FHIR is OAuth2-gated (needs-authorized-api). |
-| BCBS / Empire (Anthem / Elevance) | CO-Denver | ACA | — | — | `https://www.anthem.com/machine-readable-file` | needs-authorized-api | review: Stedi id varies by state BCBS affiliate (CA 040); resolver's 81508 (Empire/SOMOS) unconfirmed — left for review. |
-| BCBS / Empire (Anthem / Elevance) | CO-Denver | Medicare Advantage | — | — | `https://www.anthem.com/machine-readable-file` | needs-authorized-api | review: Stedi id varies by state BCBS affiliate (CA 040); resolver's 81508 (Empire/SOMOS) unconfirmed — left for review. |
-| BCBS / Empire (Anthem / Elevance) | CO-Denver | Commercial | — | — | `https://www.anthem.com/machine-readable-file` | needs-authorized-api | review: Stedi id varies by state BCBS affiliate (CA 040); resolver's 81508 (Empire/SOMOS) unconfirmed — left for review. |
+| BCBS / Empire (Anthem / Elevance) | CO-Denver | ACA | — | `https://totalview.healthos.elevancehealth.com/resources/unregistered/api/v1/fhir/cms_mandate/mcd` (authorized, verified) | `https://www.anthem.com/machine-readable-file` | authorized-fhir | **Directory LIVE** — Anthem BCBS Colorado IS Elevance. OAuth2 authorized-FHIR wired (`ANTHEM_FHIR_*`) + verified live 2026-06-30 (token → Practitioner → PractitionerRole networks). review: Stedi id varies by state BCBS affiliate — left for review. |
+| BCBS / Empire (Anthem / Elevance) | CO-Denver | Medicare Advantage | — | `https://totalview.healthos.elevancehealth.com/resources/unregistered/api/v1/fhir/cms_mandate/mcd` (authorized, verified) | `https://www.anthem.com/machine-readable-file` | authorized-fhir | **Directory LIVE** — Anthem BCBS Colorado IS Elevance. OAuth2 authorized-FHIR wired (`ANTHEM_FHIR_*`) + verified live 2026-06-30 (token → Practitioner → PractitionerRole networks). review: Stedi id varies by state BCBS affiliate — left for review. |
+| BCBS / Empire (Anthem / Elevance) | CO-Denver | Commercial | — | `https://totalview.healthos.elevancehealth.com/resources/unregistered/api/v1/fhir/cms_mandate/mcd` (authorized, verified) | `https://www.anthem.com/machine-readable-file` | authorized-fhir | **Directory LIVE** — Anthem BCBS Colorado IS Elevance. OAuth2 authorized-FHIR wired (`ANTHEM_FHIR_*`) + verified live 2026-06-30 (token → Practitioner → PractitionerRole networks). review: Stedi id varies by state BCBS affiliate — left for review. |
 | Cigna Healthcare | CO-Denver | ACA | 62308 | `https://fhir.cigna.com/ProviderDirectory/v1` (verified) | `https://www.cigna.com/legal/compliance/machine-readable-files` | public-fhir | Verified public FHIR + existing cigna-fhir adapter. Stedi 62308 (enrollment required before live 270/271). |
 | Cigna Healthcare | CO-Denver | Commercial | 62308 | `https://fhir.cigna.com/ProviderDirectory/v1` (verified) | `https://www.cigna.com/legal/compliance/machine-readable-files` | public-fhir | Verified public FHIR + existing cigna-fhir adapter. Stedi 62308 (enrollment required before live 270/271). |
 | Colorado Department of Health Care Policy & Financing | CO-Denver | Traditional Medicaid | SKCO0 | — | — | none | SKCO0 — authoritative CO Medicaid id. Govt program: no PDEX/TiC. |
@@ -85,10 +85,10 @@ Machine-generated from `src/network_probe/payers/roster_seed.py` (the catalogue 
 ## Counts
 
 - Total roster rows: **67**
-- Rows with `fhir_base_url`: **22** (Cigna 6, Humana 2, Devoted 1, Healthspring 2, AmeriHealth Caritas 2, Kaiser 2, Molina 2, Centene 4, Scan 1).
+- Rows with `fhir_base_url`: **25** (Cigna 6, Humana 2, Devoted 1, Healthspring 2, AmeriHealth Caritas 2, Kaiser 2, Molina 2, Centene 4, Scan 1, **Anthem/Elevance CO 3**).
 - Rows with `tic_url`: **42**
 - Rows with a Stedi id: **36**
-- By `directory_access`: `needs-authorized-api` 28 · `none` 8 · `public-fhir` 29 · `pdf-directory` 2
+- By `directory_access`: `needs-authorized-api` 25 · `authorized-fhir` 3 · `none` 8 · `public-fhir` 29 · `pdf-directory` 2
 
 ## Needs authorized API / no public source
 
@@ -97,7 +97,7 @@ Payers with **no machine-queryable public directory** today (the engine cannot r
 - **Aetna** (needs-authorized-api) — Stedi 60054; provider-directory FHIR is OAuth2-gated (needs-authorized-api).
 - **Alignment Health Plan** (needs-authorized-api) — CCHPC — resolver + research agree.
 - **Arizona Health Care Cost Containment System (AHCCCS)** (none) — BEUZA — authoritative AZ Medicaid id. Govt program: no PDEX/TiC (the program IS the network).
-- **BCBS / Empire (Anthem / Elevance)** (needs-authorized-api) — review: Stedi id varies by state BCBS affiliate (CA 040); resolver's 81508 (Empire/SOMOS) unconfirmed — left for review.
+- **BCBS / Empire (Anthem / Elevance)** — **CO-Denver is now LIVE** (`authorized-fhir`: OAuth2 PDEX wired + verified 2026-06-30). AZ & FL rows stay `needs-authorized-api`: those states' "BCBS" are **independent licensees** (BCBSAZ, Florida Blue) — NOT Elevance, so they are absent from the Elevance endpoint and routing them there would false-OON every real local provider. review: Stedi id varies by state BCBS affiliate (CA 040); resolver's 81508 (Empire/SOMOS) unconfirmed — left for review.
 - **DES/Division of Developmental Disabilities** (none) — review: no standalone EDI payer id; ALTCS eligibility routes through AHCCCS (BEUZA).
 - **Gold Kidney Health Plan** (needs-authorized-api) — A6865. On **AaNeel Connect** PDEX FHIR (shared with EternalHealth) — registered 2026-06-29, awaiting `Ocp-Apim-Subscription-Key` + payer-id; wires via FhirPdexAdapter once keys land.
 - **Health Choice / BCBS / (Anthem / Elevance)** (needs-authorized-api) — review: BCBSAZ-administered; resolver's 130 (Anthem Indiana) is wrong-state — left for review.

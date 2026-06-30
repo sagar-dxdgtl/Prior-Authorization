@@ -100,7 +100,9 @@ ROSTER = [
 #                      (incl. corporate-family shares, e.g. Centene plans share the Centene index).
 #   directory_url    — the human-facing "find a doctor" page (informational; not machine-queried).
 #   directory_access — "public-fhir" (verified open PDEX or an existing public adapter),
-#                      "needs-authorized-api" (OAuth2/portal registration required),
+#                      "authorized-fhir" (verified PDEX behind OAuth2 — creds in .env; routed to the
+#                      FhirPdexAdapter through an OAuth2 bearer-token client, e.g. Anthem/Elevance),
+#                      "needs-authorized-api" (OAuth2/portal registration required, not yet wired),
 #                      "pdf-directory" (network published only as a monthly PDF → parsed into
 #                      payer_directory_entries, routed to DbDirectoryAdapter), or
 #                      "none" (govt/Medicaid/MAC — the program IS the network; no PDEX/TiC).
@@ -327,15 +329,35 @@ SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
 
 _BLANK_SOURCE: tuple[None, None, None, None] = (None, None, None, None)
 
+# Anthem / Elevance OAuth2-gated PDEX directory (CMS-mandate path). Verified live: token endpoint
+# takes form client_credentials, FHIR base is a national multi-LoB PDEX R4 server (creds in .env as
+# ANTHEM_FHIR_*). It's Elevance's directory, so it's authoritative ONLY for Blues that ARE Elevance.
+_ANTHEM_FHIR = "https://totalview.healthos.elevancehealth.com/resources/unregistered/api/v1/fhir/cms_mandate/mcd"
+_ANTHEM_TIC = "https://www.anthem.com/machine-readable-file"
+_ANTHEM_DIR = "https://www.anthem.com/find-a-doctor"
+
+# Per-(label, state) source overrides — for payers whose directory source differs by market. The
+# roster labels several independent Blues uniformly as "BCBS / Empire (Anthem / Elevance)", but only
+# some states' Blue IS Elevance. Anthem BCBS Colorado is genuinely Elevance, so its CO rows route to
+# the live OAuth2 endpoint; AZ ("BCBS"=BCBSAZ) and FL ("BCBS"=Florida Blue) are independent licensees
+# NOT in this directory, so they keep needs-authorized-api (routing them here would false-OON every
+# real local provider). Each value fully replaces the label-level SOURCES tuple for that one row.
+SOURCE_OVERRIDES: dict[tuple[str, str], tuple[str | None, str | None, str | None, str]] = {
+    ("BCBS / Empire (Anthem / Elevance)", "CO-Denver"): (_ANTHEM_FHIR, _ANTHEM_TIC, _ANTHEM_DIR, "authorized-fhir"),
+}
+
 
 def slug(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", (s or "").lower()).strip("-")
 
 
 def payer_rows():
-    """Yield dict kwargs for one GLOBAL Payer row per ROSTER entry, with source columns merged."""
+    """Yield dict kwargs for one GLOBAL Payer row per ROSTER entry, with source columns merged.
+    A per-(label, state) SOURCE_OVERRIDES entry takes precedence over the label-level SOURCES tuple."""
     for label, btype, state, sid, enroll in ROSTER:
-        fhir_base_url, tic_url, directory_url, directory_access = SOURCES.get(label, _BLANK_SOURCE)
+        fhir_base_url, tic_url, directory_url, directory_access = SOURCE_OVERRIDES.get(
+            (label, state)
+        ) or SOURCES.get(label, _BLANK_SOURCE)
         yield {
             "tenant_id": None,
             "key": f"{slug(label)}-{slug(state)}",

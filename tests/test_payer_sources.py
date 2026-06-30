@@ -36,7 +36,10 @@ _FHIR_PAYERS = {
     "Arizona Complete Health - Complete Care Plan (Centene)": CENTENE_FHIR,
     "Wellcare (Centene)": CENTENE_FHIR,
 }
-_DIRECTORY_ACCESS = {"public-fhir", "needs-authorized-api", "none", "pdf-directory"}
+_DIRECTORY_ACCESS = {"public-fhir", "authorized-fhir", "needs-authorized-api", "none", "pdf-directory"}
+
+ANTHEM_LABEL = "BCBS / Empire (Anthem / Elevance)"
+ANTHEM_FHIR = "https://totalview.healthos.elevancehealth.com/resources/unregistered/api/v1/fhir/cms_mandate/mcd"
 
 
 class _FakeRow:
@@ -150,6 +153,53 @@ def test_registered_adapter_wins_over_catalogue():
     assert not isinstance(adapter, FhirPdexAdapter)
 
 
+# ---- authorized-FHIR (OAuth2-gated PDEX, e.g. Anthem) routing --------------------------------
+
+
+class _AnthemRow:
+    fhir_base_url = ANTHEM_FHIR
+    directory_access = "authorized-fhir"
+    key = "bcbs-empire-anthem-elevance-co-denver"
+    label = ANTHEM_LABEL
+
+
+class _AnthemCat:
+    def resolve(self, payer):
+        return _AnthemRow()
+
+
+def test_direct_anthem_key_builds_oauth_adapter(monkeypatch):
+    sentinel = object()
+    monkeypatch.setattr(svc, "_build_anthem_adapter", lambda base_url=None, year=None: sentinel)
+    assert svc.get_adapter("anthem") is sentinel
+
+
+def test_direct_anthem_key_without_creds_raises(monkeypatch):
+    monkeypatch.setattr(svc, "_build_anthem_adapter", lambda base_url=None, year=None: None)
+    with pytest.raises(ValueError, match="ANTHEM_FHIR_"):
+        svc.get_adapter("anthem")
+
+
+def test_authorized_fhir_catalogue_row_routes_to_oauth_builder(monkeypatch):
+    captured = {}
+
+    def fake(base_url=None, year=None):
+        captured["base_url"] = base_url
+        return "anthem-adapter"
+
+    monkeypatch.setattr(svc, "_build_anthem_adapter", fake)
+    out = svc.get_adapter(ANTHEM_LABEL, catalogue=_AnthemCat())
+    assert out == "anthem-adapter"
+    assert captured["base_url"] == ANTHEM_FHIR  # the gated endpoint is passed to the OAuth2 builder
+
+
+def test_authorized_fhir_without_creds_refuses_unauthenticated(monkeypatch):
+    # No creds configured → builder returns None → refuse rather than hit the gated endpoint anon.
+    monkeypatch.setattr(svc, "_build_anthem_adapter", lambda base_url=None, year=None: None)
+    with pytest.raises(ValueError, match="authorized-FHIR"):
+        svc.get_adapter(ANTHEM_LABEL, catalogue=_AnthemCat())
+
+
 # ---- (b) the seeded catalogue exposes fhir_base_url for the verified-public payers -----------
 
 
@@ -159,7 +209,14 @@ def test_seeded_fhir_base_urls_present():
         assert by_label.get(label) == url, label
     # everything else has no baked FHIR base URL (honest: only verified-public servers)
     assert by_label["Aetna"] is None
-    assert by_label["BCBS / Empire (Anthem / Elevance)"] is None
+    # Anthem/Elevance: CO-Denver routes to the authorized OAuth2 endpoint (Anthem BCBS Colorado IS
+    # Elevance); AZ ("BCBS"=BCBSAZ) and FL ("BCBS"=Florida Blue) are independent licensees → unrouted.
+    anthem_by_state = {r["state"]: r for r in payer_rows() if r["label"] == ANTHEM_LABEL}
+    assert anthem_by_state["CO-Denver"]["fhir_base_url"] == ANTHEM_FHIR
+    assert anthem_by_state["CO-Denver"]["directory_access"] == "authorized-fhir"
+    assert anthem_by_state["AZ"]["fhir_base_url"] is None
+    assert anthem_by_state["AZ"]["directory_access"] == "needs-authorized-api"
+    assert anthem_by_state["FL-South Florida"]["fhir_base_url"] is None
     # Wellpoint is auth-gated (registered path returns 403) — must NOT carry a public fhir_base_url
     assert by_label[WELLPOINT] is None, "Wellpoint must not have a public fhir_base_url"
 

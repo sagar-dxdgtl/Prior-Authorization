@@ -56,7 +56,8 @@ class Payer(Base):
     # fhir_base_url      — verified public PDEX Plan-Net base URL (routes the directory leg) or None.
     # tic_url            — verified Transparency-in-Coverage machine-readable-file index URL or None.
     # directory_url      — human-facing "find a doctor" page (informational).
-    # directory_access   — "public-fhir" | "needs-authorized-api" | "none".
+    # directory_access   — "public-fhir" | "authorized-fhir" | "needs-authorized-api" | "pdf-directory" | "none".
+    #                      ("authorized-fhir" = verified PDEX behind OAuth2; creds in .env, e.g. Anthem.)
     fhir_base_url: Mapped[str | None] = mapped_column(String, nullable=True)
     tic_url: Mapped[str | None] = mapped_column(String, nullable=True)
     directory_url: Mapped[str | None] = mapped_column(String, nullable=True)
