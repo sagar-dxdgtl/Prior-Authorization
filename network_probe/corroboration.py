@@ -227,9 +227,9 @@ class StediSource:
             return None  # not configured — stay silent
         payer_id = self.PAYER_IDS.get(q.payer)
         if not payer_id:
-            return Signal(self.name, "inconclusive", f"No Stedi payer id mapped for {q.payer!r}.")
+            return Signal(self.name, "inconclusive", f"No eligibility payer id mapped for {q.payer!r}.")
         if not (q.member_id or q.dob or q.last_name):
-            return Signal(self.name, "inconclusive", "Stedi needs member id / DOB / last name.")
+            return Signal(self.name, "inconclusive", "Eligibility check needs member id / DOB / last name.")
         body = {
             "tradingPartnerServiceId": payer_id,
             "provider": {k: v for k, v in {"npi": q.npi, "lastName": q.last_name}.items() if v},
@@ -243,17 +243,44 @@ class StediSource:
                 self.BASE, content=json.dumps(body),
                 headers={"Authorization": self.api_key, "content-type": "application/json"})
         except Exception:
-            return Signal(self.name, "inconclusive", "Stedi eligibility call failed.")
+            return Signal(self.name, "inconclusive", "Eligibility check failed.")
         return self._interpret(data)
 
     @staticmethod
     def _interpret(data: dict) -> Signal:
+        """Read a 271. Two independent facts live here:
+
+        1. **Active coverage** (planStatus statusCode "1") — the 271's reliable eligibility signal.
+        2. **Benefit-tier network codes** (EB12 inPlanNetworkIndicatorCode). In a plan-level 271
+           these describe which benefit *tiers* the plan quotes (in-network / out-of-network /
+           not-applicable), NOT whether the queried provider is contracted. So a lone in-network
+           tier is a soft corroboration; only an out-of-network-*only* quote is a real contradiction.
+        """
+        statuses = data.get("planStatus") or []
+        active = any(str(s.get("statusCode")) == "1" or "active" in (s.get("status") or "").lower()
+                     for s in statuses)
+        plan = next((s.get("planDetails") for s in statuses if s.get("planDetails")), None) \
+            or (data.get("planInformation") or {}).get("groupDescription")
+        grp = (data.get("planInformation") or {}).get("groupNumber")
+        cov = ("Active coverage" + (f" — {plan}" if plan else "") + (f" (group {grp})" if grp else "")) \
+            if active else ""
         codes = {b.get("inPlanNetworkIndicatorCode") for b in (data.get("benefitsInformation") or [])
                  if b.get("inPlanNetworkIndicatorCode")}
-        if "Y" in codes and "N" not in codes:
-            return Signal("Stedi", "corroborates", "271 returned in-network benefits for the plan.")
-        if "N" in codes and "Y" not in codes:
-            return Signal("Stedi", "contradicts", "271 returned only out-of-network benefits.")
+        has_in, has_out = "Y" in codes, "N" in codes
+        if has_out and not has_in:
+            return Signal("Stedi", "contradicts",
+                          f"271 quotes out-of-network benefit tiers only{(' — ' + cov) if cov else ''}.")
+        if has_in and not has_out:
+            return Signal("Stedi", "corroborates",
+                          (f"{cov}; " if cov else "")
+                          + "benefits quoted at the in-network tier (no out-of-network pricing returned).")
+        if has_in and has_out:
+            return Signal("Stedi", "inconclusive",
+                          (f"{cov}; " if cov else "")
+                          + "271 quotes both in- and out-of-network benefit tiers — no provider-specific determination.")
+        if cov:
+            return Signal("Stedi", "inconclusive",
+                          f"{cov}; 271 carries no provider-specific network indicator (payer-dependent).")
         return Signal("Stedi", "inconclusive",
                       "271 carried no provider-specific in-network signal (payer-dependent).")
 
@@ -269,10 +296,10 @@ _STEDI_FIXTURE_271: dict[str, dict] = {
 
 
 class StediMockSource:
-    """Fixture-backed Stedi 270/271 cross-check used when no STEDI_API_KEY is configured.
+    """Fixture-backed Stedi 270/271 cross-check (canned `_STEDI_FIXTURE_271`).
 
-    Presented in the UI with a LIVE badge (product decision); the payload is canned but flows
-    through the real StediSource._interpret, so the verdict semantics are genuine.
+    The payload is canned but flows through the real StediSource._interpret, so the semantics are
+    genuine. Used as the last-resort fallback when there's neither a live key nor a saved live 271.
     """
     name = "Stedi"
 
@@ -284,13 +311,29 @@ class StediMockSource:
         return StediSource._interpret(data)
 
 
+class StediCachedSource:
+    """Stedi 270/271 cross-check served from a saved *live* call
+    (`.cache/stedi_271/<npi>.json`, populated once by the OON prefetch). Lets the app show the
+    genuine eligibility determination without a live key at runtime — same "fetch once, serve from
+    saved" pattern as the OON benefits. Falls back to the canned fixture, then honest inconclusive.
+    """
+    name = "Stedi"
+
+    def check(self, q: ProviderQuery, verdict: NetworkVerdict) -> Optional[Signal]:
+        from .oon_benefits import load_271
+        saved = load_271(q.npi)
+        if saved and saved.get("response_271"):
+            return StediSource._interpret(saved["response_271"])
+        return StediMockSource().check(q, verdict)   # fixture, else honest inconclusive
+
+
 def default_sources(client: Optional[CachedClient] = None) -> list:
-    sources: list = [NppesSource(client), TinScopeSource(), FreshnessSource()]
-    if os.environ.get("STEDI_API_KEY"):
-        sources.append(StediSource(client=client))   # real clearinghouse
-    else:
-        sources.append(StediMockSource())            # fixture stand-in (LIVE badge in UI)
-    return sources
+    # Eligibility (270/271) is fetched ONCE offline (oon_benefits prefetch) and served from the
+    # saved 271 — the app never makes a live eligibility call. A live 270 from the UI would fail
+    # anyway (the form carries no member id / DOB, which are PHI), so StediCachedSource serves the
+    # saved live response (else the canned fixture, else honest inconclusive). Same "fetch once,
+    # serve saved" model as the OON tab. The live StediSource is used only by the offline prefetch.
+    return [NppesSource(client), TinScopeSource(), FreshnessSource(), StediCachedSource()]
 
 
 def run_display_signals(verdict: NetworkVerdict, q: ProviderQuery, sources: list) -> list[Signal]:

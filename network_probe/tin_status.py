@@ -45,9 +45,18 @@ class TinStatus:
 # Verified from Cigna's Network Status portal (pVerify OON examples PDF, p.3):
 #   TIN 463812940 / WAZNI PLLC · KIANG WILLIAM (NPI 1184610453) -> "You are Out-Of-Network for
 #   this patient." (Cigna HMO FL, Plan ID 3346355)
+#
+# Verified from the UnitedHealthcare Transparency-in-Coverage MRF (TX exchange slice, 2026-06):
+#   group NPI 1972941318 / TIN 412049581 (Srinivas Rao MD PA dba Texas Vein & Wellness Institute,
+#   TX-Houston) is NOT present in the network file (0 occurrences) -> out-of-network. This is the
+#   OON counterpart to the in-network Texas UVC Dallas TIN 933510922 (see tin_crosswalk.py seed).
 _SEED = [
     TinStatus(payer="cigna-fhir", npi="1184610453", tin="463812940", status="OUT_OF_NETWORK",
               group="Wazni PLLC", source="Cigna Network Status portal", verified_at="2026-05-28"),
+    TinStatus(payer="uhc", npi="1972941318", tin="412049581", status="OUT_OF_NETWORK",
+              group="Srinivas Rao MD PA dba Texas Vein & Wellness Institute",
+              source="UHC Transparency-in-Coverage MRF (TX exchange) — not present (0 occurrences)",
+              verified_at="2026-06"),
 ]
 
 

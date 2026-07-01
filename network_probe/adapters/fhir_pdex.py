@@ -47,6 +47,11 @@ KNOWN_ENDPOINTS = {
     "cigna-fhir": "https://p-hi2.digitaledge.cigna.com/ProviderDirectory/v1",
     # UnitedHealthcare's public PDEX directory (Optum FHIR Layer Exchange) — no auth/login.
     "uhc": "https://flex.optum.com/fhirpublic/R4",
+    # Devoted Health's compliant CMS Provider Directory (HAPI FHIR R4, no auth). Distinct from the
+    # marketing "Find a Doctor" Algolia widget used by DevotedAdapter — this is the regulated one,
+    # and for Rodriguez/Li (NPI 1629339312) it returns OON directly (provider absent) where Algolia
+    # is stale. The OAuth api.prod.devoted.com/fhir is the *patient-access* API, not this directory.
+    "devoted-fhir": "https://fhir.devoted.com/fhir",
 }
 
 # IN if the best network match clears these (combined = net-token-recall + hint-token-recall, max 2.0)

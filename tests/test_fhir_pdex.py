@@ -175,6 +175,31 @@ def test_uhc_bronze_essential_resolves_in_network_via_alias():
     assert "alias" in v.notes.lower()
 
 
+# --- Devoted's compliant FHIR directory: payer_name resolves the endpoint; Li is absent -> OON ---
+
+def _devoted_absent_handler(request: httpx.Request) -> httpx.Response:
+    """Devoted's HAPI server: identifier + name search both return an empty bundle for Li."""
+    u = urlsplit(str(request.url))
+    if u.path.endswith("/Practitioner"):
+        return httpx.Response(200, json={"resourceType": "Bundle", "total": 0, "entry": []})
+    return httpx.Response(404, json={})
+
+
+def test_devoted_fhir_endpoint_resolves_and_absent_npi_is_oon():
+    """payer_name='devoted-fhir' binds to fhir.devoted.com via KNOWN_ENDPOINTS; NPI 1629339312 is
+    absent from the compliant directory, so the verdict is OON (agreeing with Availity + phone)."""
+    from network_probe.adapters.fhir_pdex import KNOWN_ENDPOINTS
+    assert KNOWN_ENDPOINTS["devoted-fhir"] == "https://fhir.devoted.com/fhir"
+    mock = httpx.Client(transport=httpx.MockTransport(_devoted_absent_handler))
+    a = FhirPdexAdapter(payer_name="devoted-fhir",  # base_url resolved from KNOWN_ENDPOINTS
+                        client=CachedClient(cache_dir=None, delay_seconds=0, client=mock))
+    assert a.base_url == "https://fhir.devoted.com/fhir"
+    v = a.check_network(ProviderQuery(payer="devoted-fhir", plan_hint="PPO",
+                                      npi="1629339312", first_name="Jing", last_name="Li"))
+    assert v.status == NetworkStatus.OUT_OF_NETWORK
+    assert "fhir.devoted.com" in v.source_url
+
+
 # ---- live (real Humana CMS Provider Directory API) --------------------------
 
 @pytest.mark.live
@@ -195,6 +220,21 @@ def test_unknown_npi_oon_live():
     except httpx.HTTPError as exc:
         pytest.skip(f"live FHIR unreachable: {exc}")
     assert v.status == NetworkStatus.OUT_OF_NETWORK, v.notes
+
+
+@pytest.mark.live
+def test_devoted_compliant_fhir_directory_li_absent_live():
+    """Devoted's public FHIR directory (fhir.devoted.com, no auth): Jing Li (NPI 1629339312) is
+    absent → OON, independently confirming the Availity + phone finding and contradicting Devoted's
+    own Algolia 'Find a Doctor' widget (which lists him as IN)."""
+    a = FhirPdexAdapter(payer_name="devoted-fhir", client=CachedClient(cache_dir=None, delay_seconds=0.3))
+    try:
+        v = a.check_network(ProviderQuery(payer="devoted-fhir", plan_hint="PPO",
+                                          npi="1629339312", first_name="Jing", last_name="Li"))
+    except httpx.HTTPError as exc:
+        pytest.skip(f"live Devoted FHIR unreachable: {exc}")
+    assert v.status == NetworkStatus.OUT_OF_NETWORK, v.notes
+    assert "fhir.devoted.com" in v.source_url
 
 
 @pytest.mark.live

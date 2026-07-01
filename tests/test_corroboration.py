@@ -224,6 +224,24 @@ def test_stedi_interpret_network_codes():
     assert f({"benefitsInformation": []}).result == "inconclusive"
 
 
+def test_stedi_interpret_reads_active_coverage_and_plan():
+    # a real UHC-shaped 271: active coverage + a lone in-network benefit tier, no OON pricing.
+    resp = {"planStatus": [{"statusCode": "1", "status": "Active Coverage", "planDetails": "UHC BRONZE ESSENTIAL"}],
+            "planInformation": {"groupNumber": "TXONEX"},
+            "benefitsInformation": [{"inPlanNetworkIndicatorCode": "Y"}, {"inPlanNetworkIndicatorCode": "W"}]}
+    s = StediSource._interpret(resp)
+    assert s.result == "corroborates"
+    assert "Active coverage" in s.detail and "UHC BRONZE ESSENTIAL" in s.detail
+    assert "TXONEX" in s.detail and "in-network tier" in s.detail
+
+
+def test_stedi_interpret_active_coverage_without_tier_is_inconclusive():
+    # coverage confirmed but only Not-Applicable tiers -> no provider-specific determination.
+    s = StediSource._interpret({"planStatus": [{"statusCode": "1", "planDetails": "DEVOTED HMO"}],
+                                "benefitsInformation": [{"inPlanNetworkIndicatorCode": "W"}]})
+    assert s.result == "inconclusive" and "Active coverage" in s.detail and "DEVOTED HMO" in s.detail
+
+
 def test_stedi_check_corroborates(monkeypatch):
     monkeypatch.setattr(StediSource, "PAYER_IDS", {"oscar": "00007"})
     def handler(request):
@@ -236,12 +254,29 @@ def test_stedi_check_corroborates(monkeypatch):
 
 # ---- Stedi fixture / mock source -------------------------------------------
 
-from network_probe.corroboration import (StediMockSource, run_display_signals,  # noqa: E402
-                                          default_sources)
+from network_probe.corroboration import (StediMockSource, StediCachedSource,  # noqa: E402
+                                          run_display_signals, default_sources)
+from network_probe import oon_benefits as _ob  # noqa: E402
 
 
 def test_stedi_mock_contradicts_for_rodriguez():
     s = StediMockSource().check(_q(npi="1629339312"), _verdict(NetworkStatus.IN_NETWORK))
+    assert s.source == "Stedi" and s.result == "contradicts"
+
+
+def test_stedi_cached_source_interprets_saved_271(monkeypatch):
+    # a saved live 271 wins over the fixture and is interpreted honestly.
+    saved = {"response_271": {"planStatus": [{"statusCode": "1", "planDetails": "UHC BRONZE ESSENTIAL"}],
+                              "benefitsInformation": [{"inPlanNetworkIndicatorCode": "Y"}]}}
+    monkeypatch.setattr(_ob, "load_271", lambda npi: saved)
+    s = StediCachedSource().check(_q(npi="1972603934"), _verdict(NetworkStatus.IN_NETWORK))
+    assert s.source == "Stedi" and s.result == "corroborates" and "UHC BRONZE ESSENTIAL" in s.detail
+
+
+def test_stedi_cached_source_falls_back_to_fixture(monkeypatch):
+    # no saved 271 -> fixture stand-in (Rodriguez -> contradicts).
+    monkeypatch.setattr(_ob, "load_271", lambda npi: None)
+    s = StediCachedSource().check(_q(npi="1629339312"), _verdict(NetworkStatus.IN_NETWORK))
     assert s.source == "Stedi" and s.result == "contradicts"
 
 

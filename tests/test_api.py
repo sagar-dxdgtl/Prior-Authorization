@@ -95,6 +95,28 @@ def test_uhc_sample_carries_billing_tin_and_ground_truth():
     assert gt["truth"] == "IN_NETWORK" and "933510922" in gt["note"]
 
 
+def test_uhc_houston_oon_sample_and_ground_truth():
+    hou = next(s for s in api_mod.SAMPLES if "Srinivas Rao" in s["label"])
+    assert hou["payer"] == "uhc" and hou["npi"] == "1972941318" and hou["tin"] == "412049581"
+    assert "OON" in hou["label"]
+    gt = api_mod.GROUND_TRUTH[("uhc", "1972941318")]
+    assert gt["truth"] == "OUT_OF_NETWORK" and "412049581" in gt["note"]
+
+
+def test_oon_alias_resolves_houston_to_cached_member(monkeypatch):
+    # OON is the member's; the Houston rendering NPI aliases to the NPI Salman's benefits were
+    # cached under, so the OON tab still populates for the OON example.
+    from network_probe import oon_benefits as oon_mod
+    cache = {"1972603934": {"npi": "1972603934", "patient": "Sobia Salman", "payer_key": "uhc",
+                            "benefits": [{"network_code": "Y"}], "oon_count": 0}}
+    monkeypatch.setattr(oon_mod, "load_oon", lambda npi=None: cache if npi is None else cache.get(npi))
+    body = client.get("/api/oon", params={"npi": "1972941318"}).json()
+    assert body["available"] is True and body["patient"] == "Sobia Salman" and body["npi"] == "1972603934"
+    # a member with no cache entry and no alias stays unavailable
+    miss = client.get("/api/oon", params={"npi": "0000000000"}).json()
+    assert miss["available"] is False
+
+
 def test_benchmark_lists_four_cases_all_caught():
     r = client.get("/api/benchmark")
     assert r.status_code == 200
@@ -102,7 +124,19 @@ def test_benchmark_lists_four_cases_all_caught():
     assert len(rows) == 4
     assert all(row["caught"] for row in rows)
     rod = next(row for row in rows if "Rodriguez" in row["case"])
-    assert rod["our_status"] == "OUT_OF_NETWORK" and "override" in rod["how"].lower()
+    # Rodriguez is now caught by Devoted's compliant FHIR directory (OON directly), not the override.
+    assert rod["our_status"] == "OUT_OF_NETWORK" and "fhir" in rod["how"].lower()
+
+
+def test_rodriguez_sample_uses_compliant_fhir_directory():
+    rod = next(s for s in api_mod.SAMPLES if "Rodriguez" in s["label"])
+    assert rod["payer"] == "devoted-fhir" and rod["npi"] == "1629339312"
+    # ground truth exists for the FHIR-directory routing and cites the compliant directory
+    gt = api_mod.GROUND_TRUTH[("devoted-fhir", "1629339312")]
+    assert gt["truth"] == "OUT_OF_NETWORK" and "fhir.devoted.com" in gt["note"]
+    # devoted-fhir is an offered payer bound to the public CMS FHIR endpoint
+    from network_probe.adapters.fhir_pdex import KNOWN_ENDPOINTS
+    assert KNOWN_ENDPOINTS["devoted-fhir"] == "https://fhir.devoted.com/fhir"
 
 
 def test_index_has_evidence_markers():

@@ -51,6 +51,13 @@ PAYERS = [
         "example_label": "Kyle A Herron · HMO",
     },
     {
+        "key": "devoted-fhir",
+        "label": "Devoted Health — FHIR Provider Directory (compliant CMS API)",
+        "needs": ["plan", "npi"],
+        "example": {"npi": "1629339312", "last_name": "Li", "plan": "PPO"},
+        "example_label": "Jing Li · CO PPO",
+    },
+    {
         "key": "humana-fhir",
         "label": "Humana — FHIR Provider Directory (compliant CMS API)",
         "needs": ["plan", "npi"],
@@ -90,8 +97,11 @@ SAMPLES = [
     {"label": "Craig, Duana · Devoted TX HMO · Dr George",
      "payer": "devoted", "plan": "HMO", "npi": "1720209885", "last_name": "George",
      "first_name": "Jojy", "state": "TX", "zip": ""},
+    # Checked against Devoted's *compliant* FHIR provider directory (fhir.devoted.com), which returns
+    # OON directly — Li is absent. Devoted's Algolia "Find a Doctor" widget still lists him as IN
+    # (stale); see GROUND_TRUTH note. The `devoted` (Algolia) payer key stays available separately.
     {"label": "Rodriguez, Aurelia · Devoted CO PPO · Dr Li",
-     "payer": "devoted", "plan": "PPO", "npi": "1629339312", "last_name": "Li",
+     "payer": "devoted-fhir", "plan": "PPO", "npi": "1629339312", "last_name": "Li",
      "first_name": "Jing", "state": "CO", "zip": ""},
     {"label": "Franz, Robert · Humana Medicare PPO · Dr Friedman",
      "payer": "humana-fhir", "plan": "Medicare PPO", "npi": "1336160274",
@@ -105,6 +115,12 @@ SAMPLES = [
     {"label": "Salman, Sobia · UnitedHealthcare · Dr Fradkin",
      "payer": "uhc", "plan": "Bronze Essential", "npi": "1972603934", "last_name": "Fradkin",
      "first_name": "Kevin", "state": "TX", "zip": "", "tin": "933510922"},
+    # OON counterpart of the Fradkin/Dallas case: same member, but the rendering group is Texas
+    # UVC's Houston entity (Srinivas Rao MD PA), whose billing TIN 41-2049581 is absent from the
+    # UHC TX-exchange MRF (0 occurrences) -> out-of-network per TiC (see tin_status.py seed).
+    {"label": "Salman, Sobia · UnitedHealthcare · Srinivas Rao MD PA (Houston, OON)",
+     "payer": "uhc", "plan": "Bronze Essential", "npi": "1972941318", "last_name": "Rao",
+     "first_name": "Srinivas", "state": "TX", "zip": "", "tin": "412049581"},
 ]
 
 # Independently-confirmed truth (Availity / payer portal / phone) for the demo cases, keyed by
@@ -113,17 +129,25 @@ GROUND_TRUTH: dict[tuple[str, str], dict] = {
     ("oscar", "1679766943"): {"truth": "OUT_OF_NETWORK", "source": "Availity / payer portal",
                               "note": "Absent from Oscar network 066."},
     ("devoted", "1629339312"): {"truth": "OUT_OF_NETWORK", "source": "Availity / payer portal",
-                                "note": "Devoted directory lists Dr Li as IN for CO PPO — stale."},
+                                "note": "Devoted's Algolia 'Find a Doctor' widget lists Dr Li as IN for CO PPO — stale."},
+    ("devoted-fhir", "1629339312"): {"truth": "OUT_OF_NETWORK", "source": "Availity + phone",
+                                     "note": "Confirmed by Devoted's own compliant FHIR directory "
+                                             "(fhir.devoted.com): NPI 1629339312 absent — provider not listed "
+                                             "in the CO PPO network. Devoted's Algolia widget still says IN (stale)."},
     ("humana-fhir", "1336160274"): {"truth": "OUT_OF_NETWORK", "source": "Availity / payer portal",
                                     "note": "Not in the queried Medicare PPO network."},
     ("cigna-fhir", "1184610453"): {"truth": "OUT_OF_NETWORK", "source": "Cigna portal (TIN-level)",
                                    "note": "Out-of-network for this patient's TIN."},
     ("uhc", "1972603934"): {"truth": "IN_NETWORK", "source": "UHC Transparency-in-Coverage MRF (TX exchange)",
                             "note": "In-network under billing TIN 933510922 (Texas UVC Medical, PLLC)."},
+    ("uhc", "1972941318"): {"truth": "OUT_OF_NETWORK", "source": "UHC Transparency-in-Coverage MRF (TX exchange)",
+                            "note": "Not present in the UHC TX-exchange network (0 occurrences) under billing "
+                                    "TIN 412049581 (Srinivas Rao MD PA dba Texas Vein & Wellness Institute)."},
 }
 
 # Seeded accuracy scorecard for the 4 pVerify OON examples (see TODO-network-accuracy.md).
-# Not a live re-run — documented results, with Rodriguez corrected by the golden-record override.
+# Not a live re-run — documented results. Rodriguez is now caught by Devoted's compliant FHIR
+# directory (fhir.devoted.com) returning OON directly, not by the golden-record override.
 BENCHMARK = [
     {"case": "Ochoa · Oscar · Herron", "truth": "OUT_OF_NETWORK",
      "our_status": "OUT_OF_NETWORK", "our_confidence": "high", "caught": True,
@@ -135,8 +159,9 @@ BENCHMARK = [
      "our_status": "OUT_OF_NETWORK", "our_confidence": "medium", "caught": True,
      "how": "directory absence (primary signal)"},
     {"case": "Rodriguez · Devoted CO PPO · Li", "truth": "OUT_OF_NETWORK",
-     "our_status": "OUT_OF_NETWORK", "our_confidence": "high", "caught": True,
-     "how": "golden-record override (Availity); directory still lists Li as IN — stale"},
+     "our_status": "OUT_OF_NETWORK", "our_confidence": "medium", "caught": True,
+     "how": "compliant FHIR directory (fhir.devoted.com) absence — provider not listed; "
+            "Devoted's Algolia widget still lists Li as IN (stale)"},
 ]
 
 app = FastAPI(title="Network-Status Verification Probe", version="1.0")
@@ -187,6 +212,13 @@ def benchmark() -> list[dict]:
     return BENCHMARK
 
 
+# OON benefits are the *member's* (subscriber-level), but the cache is keyed by the rendering NPI
+# from that member's report. When the same member appears under a different rendering provider (e.g.
+# Salman checked against the Houston group NPI 1972941318 instead of Dr Fradkin 1972603934), alias
+# the lookup to the NPI her benefits were cached under. Kept in code so it survives cache re-prefetch.
+OON_NPI_ALIASES = {"1972941318": "1972603934"}
+
+
 @app.get("/api/oon")
 def oon(npi: Optional[str] = None):
     """Saved out-of-network benefits (Stedi 271), prefetched into `.cache/oon_benefits.json`.
@@ -195,7 +227,7 @@ def oon(npi: Optional[str] = None):
     from .oon_benefits import load_oon
     if npi is None:
         return load_oon() or {}
-    entry = load_oon(npi)
+    entry = load_oon(npi) or load_oon(OON_NPI_ALIASES.get(npi, ""))
     if not entry:
         return {"npi": npi, "available": False, "benefits": [], "oon_count": 0}
     return {**entry, "available": True}

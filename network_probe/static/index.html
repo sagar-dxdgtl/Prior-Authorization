@@ -340,8 +340,8 @@ function renderLanes(d){
   // Stedi (LIVE badge per product decision)
   const st = sigBy(d,'Stedi');
   const stBody = st? `<span class="res ${esc(st.result)}">${esc(st.result)}</span>${esc(st.detail)}`
-                   : '<span class="sub">no Stedi response</span>';
-  const lStedi = laneCard('Stedi 270/271 eligibility', 'LIVE', 'live', stBody, '');
+                   : '<span class="sub">no eligibility response</span>';
+  const lStedi = laneCard('QuickFlows eligibility (270/271)', 'LIVE', 'live', stBody, '');
   // TIN-scope (dynamic badge)
   const tin = sigBy(d,'TIN-scope');
   const tinLive = tin && (tin.result==='corroborates' || tin.result==='contradicts');
@@ -442,7 +442,7 @@ function render(d){
   </div>`;
   r.querySelectorAll('.tab').forEach(t=>t.onclick=()=>selectTab(t.dataset.pane));
   const npi=(d.matched_provider&&d.matched_provider.npi)||(LAST&&LAST.npi)||'';
-  loadOON(npi);
+  loadOON(npi, d.status);
 }
 
 function selectTab(name){
@@ -451,16 +451,24 @@ function selectTab(name){
 }
 
 // OON benefits — read the prefetched, saved 271 (never a live call from the app).
-const OON_GROUPS=[['N','Out of Network','oon'],['Y','In Network',''],['W','Not Applicable','']];
-async function loadOON(npi){
+// Each tier is labelled by WHO it applies to, because a 271 is member-level: the in-network tier is
+// the plan's benefits for in-network providers, the out-of-network tier is what the member owes for
+// an OON provider. Neither says whether *this* provider is contracted — that's the verdict above.
+const OON_GROUPS=[
+  ['N','Out-of-network benefits','oon','what the member owes for an out-of-network provider'],
+  ['Y','In-network benefits','','apply only when the provider is in-network'],
+  ['W','Not applicable',''],
+];
+async function loadOON(npi, status){
   const pane=$('pane-oon'); if(!pane) return;
   if(!npi){ pane.innerHTML=`<div class="oon-note">No provider NPI to look up benefits for.</div>`; return; }
   let d; try{ d=await (await fetch('/api/oon?npi='+encodeURIComponent(npi))).json(); }
   catch(e){ d={available:false,benefits:[]}; }
-  renderOON(pane, d);
+  renderOON(pane, d, status);
 }
-function oonTable(label,cls,g){
+function oonTable(label,cls,g,note){
   return `<div class="grp ${cls}"><h4>${esc(label)} <span class="n">${g.length}</span></h4>
+    ${note?`<div class="oon-note" style="padding:0 0 6px">${esc(note)}</div>`:''}
     <table class="oon"><thead><tr><th>Benefit</th><th>Service</th><th>Coverage</th><th>Period</th><th>Amount</th></tr></thead>
     <tbody>${g.map(x=>`<tr>
       <td>${esc(x.type||'')}</td>
@@ -469,7 +477,23 @@ function oonTable(label,cls,g){
       <td>${esc(x.time||'')||'—'}</td>
       <td class="val">${esc(x.value||'')||'—'}</td></tr>`).join('')}</tbody></table></div>`;
 }
-function renderOON(pane, d){
+// A real cost-share benefit carries an amount/percent. No-value lines (Active Coverage, Primary
+// Care Provider, contact info) are plan-status echoes — NOT a provider-network signal, so they are
+// shown separately rather than counted as in/out-of-network benefits.
+const isBenefit = x => x.value!=null && x.value!=='';
+
+function statusStrip(rows){
+  const byType=new Map();
+  rows.forEach(x=>{ const k=x.type||'—', s=byType.get(k)||new Set();
+    (x.service_types||[]).forEach(t=>s.add(t)); byType.set(k,s); });
+  const items=[...byType.entries()].map(([t,svc])=>
+    `<div class="xc"><span>${esc(t)}</span>${svc.size?`<span class="svc">${esc([...svc].join(', '))}</span>`:''}</div>`).join('');
+  return `<div class="grp"><h4>Plan status / coverage <span class="n">${rows.length}</span></h4>
+    <div class="oon-note" style="padding:2px 0 8px">Eligibility status lines from the 271 (no cost-share amount) — plan structure, not the rendering provider's network status.</div>
+    ${items}</div>`;
+}
+
+function renderOON(pane, d, status){
   const rows=d.benefits||[];
   const cnt=$('oonCnt');
   if(!d.available || !rows.length){
@@ -480,19 +504,29 @@ function renderOON(pane, d){
          Populate the demo cache with:<br><br><code>python -m network_probe.oon_benefits test-data/*.pdf</code></div>`;
     return;
   }
-  const oonN=rows.filter(x=>x.network_code==='N').length;
+  const benefits=rows.filter(isBenefit), statusRows=rows.filter(x=>!isBenefit(x));
+  const oonN=benefits.filter(x=>x.network_code==='N').length;
   if(cnt){ if(oonN){ cnt.textContent=oonN; cnt.hidden=false; } else cnt.hidden=true; }
   const head=`<div class="oon-head"><b>${esc(d.patient||'')}</b>
      <span>${esc(d.payer||'')}${d.plan?' · '+esc(d.plan):''}</span>
-     <span>${rows.length} benefit lines · ${oonN} out-of-network</span></div>`;
+     <span>${benefits.length} benefit lines · ${oonN} out-of-network</span></div>
+     <div class="oon-note" style="padding:8px 0 2px">Member-level plan benefits from the eligibility 271. The tiers below describe the <b>plan's</b> benefit structure — the rendering provider's network status is the verdict above.</div>`;
+  // For an out-of-network verdict the OON tier is what actually applies, so lead with it — and if
+  // the plan returned no OON tier at all, that's the headline (member has no OON coverage).
+  const oonVerdict = status==='OUT_OF_NETWORK';
+  let banner='';
+  if(oonVerdict && !oonN)
+    banner=`<div class="oon-note" style="padding:8px 0 2px"><b>This plan returned no out-of-network benefits.</b> For an out-of-network provider the member typically has no OON coverage (liable for billed charges, emergencies aside) — the in-network benefits below do <b>not</b> apply to this provider.</div>`;
+  const order = oonVerdict ? OON_GROUPS : [OON_GROUPS[1],OON_GROUPS[0],OON_GROUPS[2]]; // IN verdict → in-network tier first
   let body='', used=new Set();
-  for(const [code,label,cls] of OON_GROUPS){
-    const g=rows.filter(x=>x.network_code===code); if(!g.length) continue;
-    g.forEach(x=>used.add(x)); body+=oonTable(label,cls,g);
+  for(const [code,label,cls,note] of order){
+    const g=benefits.filter(x=>x.network_code===code); if(!g.length) continue;
+    g.forEach(x=>used.add(x)); body+=oonTable(label,cls,g,note);
   }
-  const other=rows.filter(x=>!used.has(x));
+  const other=benefits.filter(x=>!used.has(x));
   if(other.length) body+=oonTable('Other / not specified','',other);
-  pane.innerHTML=head+body;
+  if(statusRows.length) body+=statusStrip(statusRows);
+  pane.innerHTML=head+banner+body;
 }
 
 // Staged loader mirroring the real pipeline; runs in parallel with the fetch so the verdict
@@ -501,7 +535,7 @@ const PROBE_STEPS = [
   'Parsing eligibility intake (271)',
   'Querying payer directory (live)',
   'Cross-checking NPPES identity registry',
-  'Running Stedi 270/271 eligibility',
+  'Running QuickFlows eligibility (270/271)',
   'Checking TIN-scope (group billing)',
   'Finalizing — corroboration + golden record',
 ];

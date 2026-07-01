@@ -33,3 +33,19 @@ def test_tinscope_reports_verified_status_even_when_oon():
     sig = TinScopeSource().check(q, _oon_verdict())
     assert sig.result == "corroborates"
     assert "Cigna Network Status portal" in sig.detail
+
+
+def test_seed_has_uhc_srinivas_rao_oon_record():
+    s = default_tin_status().lookup("uhc", "1972941318", "412049581")
+    assert s is not None and s.status == "OUT_OF_NETWORK"
+    assert "Srinivas Rao" in (s.group or "") and "Transparency-in-Coverage" in (s.source or "")
+
+
+def test_tinscope_reports_uhc_tic_oon_even_when_provider_unlisted():
+    # provider isn't in the UHC directory (0 occurrences), yet the verified TiC TIN status still
+    # yields a real group-level OON answer that corroborates the absence-based verdict.
+    verdict = NetworkVerdict(NetworkStatus.OUT_OF_NETWORK, None, "uhc", "u", "high", "not listed")
+    q = ProviderQuery(payer="uhc", plan_hint="", npi="1972941318", last_name="Rao", tin="412049581")
+    sig = TinScopeSource().check(q, verdict)
+    assert sig.result == "corroborates"
+    assert "OUT-OF-NETWORK" in sig.detail and "Transparency-in-Coverage" in sig.detail

@@ -36,6 +36,10 @@ from .report_ingest import _extract_text, _nppes_name, parse_report
 
 CACHE_DIR = Path(".cache")
 OON_INDEX = CACHE_DIR / "oon_benefits.json"
+# Saved live 270/271 pairs, one file per rendering NPI. Populated once from a live Stedi call so
+# the app can show the *real* eligibility determination without a live key at runtime (same
+# "fetch once, serve from saved" pattern as the OON index).
+RAW_271_DIR = CACHE_DIR / "stedi_271"
 
 # X12 271 EB12 in-plan-network indicator -> human label.
 _NET = {"Y": "In Network", "N": "Out of Network", "W": "Not Applicable"}
@@ -125,19 +129,47 @@ def subscriber_identity(pdf_path, text: Optional[str] = None) -> dict:
 
 # --------------------------------------------------------------------------- fetch
 
-def fetch_271(payer_id: str, provider: dict, subscriber: dict,
-              client: CachedClient, service_types=("30",), api_key: Optional[str] = None) -> dict:
-    """One 270 -> 271 via Stedi, through CachedClient (so a repeat member is a cache hit)."""
-    api_key = api_key or os.environ.get("STEDI_API_KEY")
-    body = {
+def stedi_270_body(payer_id: str, provider: dict, subscriber: dict, service_types=("30",)) -> dict:
+    """The 270 request body sent to Stedi (single source of truth for the request shape)."""
+    return {
         "tradingPartnerServiceId": payer_id,
         "provider": {k: v for k, v in provider.items() if v},
         "subscriber": {k: v for k, v in subscriber.items() if v},
         "encounter": {"serviceTypeCodes": list(service_types)},
     }
+
+
+def fetch_271(payer_id: str, provider: dict, subscriber: dict,
+              client: CachedClient, service_types=("30",), api_key: Optional[str] = None) -> dict:
+    """One 270 -> 271 via Stedi, through CachedClient (so a repeat member is a cache hit)."""
+    api_key = api_key or os.environ.get("STEDI_API_KEY")
+    body = stedi_270_body(payer_id, provider, subscriber, service_types)
     return client.post_json(
         StediSource.BASE, content=json.dumps(body),
         headers={"Authorization": api_key, "content-type": "application/json"})
+
+
+def save_271(npi: str, request_270: dict, response_271: dict, meta: Optional[dict] = None) -> Path:
+    """Persist a live 270/271 pair for one rendering NPI to `.cache/stedi_271/<npi>.json`."""
+    RAW_271_DIR.mkdir(parents=True, exist_ok=True)
+    path = RAW_271_DIR / f"{npi}.json"
+    path.write_text(json.dumps({"npi": npi, **(meta or {}),
+                                "request_270": request_270, "response_271": response_271},
+                               indent=2), encoding="utf-8")
+    return path
+
+
+def load_271(npi: Optional[str]) -> Optional[dict]:
+    """Read a saved live 270/271 pair for one rendering NPI (None when not fetched)."""
+    if not npi:
+        return None
+    p = RAW_271_DIR / f"{npi}.json"
+    if not p.exists():
+        return None
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return None
 
 
 def prefetch(paths: list[str], client: Optional[CachedClient] = None,
@@ -162,12 +194,20 @@ def prefetch(paths: list[str], client: Optional[CachedClient] = None,
         provider = {"npi": npi, "firstName": pf, "lastName": pl or idn["last_name"]}
         subscriber = {"memberId": idn["member_id"], "dateOfBirth": idn["dob"],
                       "firstName": idn["first_name"], "lastName": idn["last_name"]}
+        body = stedi_270_body(payer_id, provider, subscriber)
         try:
-            resp = fetch_271(payer_id, provider, subscriber, client, api_key=api_key)
+            resp = client.post_json(
+                StediSource.BASE, content=json.dumps(body),
+                headers={"Authorization": api_key or os.environ.get("STEDI_API_KEY"),
+                         "content-type": "application/json"})
         except Exception as exc:
             print(f"error {name}: {exc}")
             continue
         rows = parse_oon(resp)
+        # persist the raw 270/271 pair so the Stedi evidence lane can be served from the saved
+        # live call (no runtime key needed).
+        save_271(npi, body, resp, meta={"patient": idn["patient"], "payer_key": payer_key,
+                                        "plan": parsed.get("plan_name") or parsed.get("policy_type")})
         index[npi] = {
             "npi": npi,
             "patient": idn["patient"],

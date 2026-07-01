@@ -5,11 +5,15 @@ All fixtures are synthetic (no PHI). The 271 shapes mirror what Stedi returns li
 - coinsurance carries `benefitPercent` ("0.40"); copay/deductible/OOP carry `benefitAmount`.
 """
 
+from network_probe import oon_benefits as ob
 from network_probe.oon_benefits import (
     parse_oon,
     oon_only,
     network_label,
     subscriber_identity,
+    stedi_270_body,
+    save_271,
+    load_271,
 )
 
 
@@ -103,3 +107,25 @@ def test_subscriber_identity_dependent_case_uses_subscriber_name_and_first_dob()
     assert idn["dob"] == "19680702"            # the subscriber's (first) DOB, not the patient's
     assert idn["first_name"] == "MOHAMMAD"     # subscriber, not the patient "Sobia"
     assert idn["last_name"] == "Salman"
+
+
+# --- saved live 270/271 pair (served to the Stedi evidence lane without a runtime key) ---
+
+def test_stedi_270_body_drops_empty_fields():
+    body = stedi_270_body("87726", {"npi": "1", "firstName": None}, {"memberId": "M1", "lastName": ""})
+    assert body["tradingPartnerServiceId"] == "87726"
+    assert body["provider"] == {"npi": "1"}                 # None dropped
+    assert body["subscriber"] == {"memberId": "M1"}         # empty dropped
+    assert body["encounter"] == {"serviceTypeCodes": ["30"]}
+
+
+def test_save_and_load_271_roundtrip(tmp_path, monkeypatch):
+    monkeypatch.setattr(ob, "RAW_271_DIR", tmp_path / "stedi_271")
+    save_271("1972603934", {"provider": {"npi": "1972603934"}},
+             {"benefitsInformation": [{"inPlanNetworkIndicatorCode": "Y"}]},
+             meta={"patient": "Sobia Salman", "payer_key": "uhc"})
+    got = load_271("1972603934")
+    assert got["npi"] == "1972603934" and got["patient"] == "Sobia Salman"
+    assert got["response_271"]["benefitsInformation"][0]["inPlanNetworkIndicatorCode"] == "Y"
+    assert load_271("0000000000") is None    # not fetched
+    assert load_271(None) is None
