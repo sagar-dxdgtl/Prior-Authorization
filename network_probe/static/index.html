@@ -134,6 +134,8 @@
   @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
   /* OON / Details tabs */
+  .det-sticky{position:sticky;top:0;z-index:6;background:var(--surface);
+              box-shadow:0 6px 10px -10px rgba(15,30,50,.28)}
   .tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);padding:16px 0 0}
   .tab{appearance:none;background:none;border:0;border-bottom:2px solid transparent;cursor:pointer;
        font:inherit;font-size:12.5px;font-weight:600;color:var(--soft);padding:9px 15px;
@@ -409,11 +411,9 @@ function render(d){
   const extraHtml=extra.length?`<div class="fact"><div class="k">Additional cross-checks</div>
      ${extra.map(s=>`<div class="xc"><span class="r ${esc(s.result)}">${esc(s.result)}</span><span>${esc(s.source)} — ${esc(s.detail)}</span></div>`).join('')}</div>`:'';
 
-  const detailsHtml=`<div class="verdict">
-    <div class="vhead">
-      <span class="lozenge ${v.cls}">${ICON[d.status]||''}${v.text}</span>
-      <span class="conf">confidence <span class="meter">${meter}</span> ${esc(d.confidence||'')}</span>
-    </div>
+  // The verdict + confidence live ABOVE the tabs (sticky) so they stay visible on every tab and
+  // while scrolling a long benefit list — the determination is the headline, never tab-scoped.
+  const detailsHtml=`
     ${renderGroundTruth(d)}
     <div class="facts">
       <div class="fact"><div class="k">Plan / network checked</div><div class="v">${esc(d.plan_or_network_checked)}</div></div>
@@ -424,15 +424,22 @@ function render(d){
     <div class="fact"><div class="k">Evidence by source</div></div>
     ${renderLanes(d)}
     ${extraHtml}
-    <details><summary>Raw response</summary><pre>${esc(JSON.stringify(d,null,2))}</pre></details>
-  </div>`;
+    <details><summary>Raw response</summary><pre>${esc(JSON.stringify(d,null,2))}</pre></details>`;
 
-  r.innerHTML=`<div class="tabs">
-      <button class="tab" data-pane="oon">OON benefits<span class="cnt" id="oonCnt" hidden></span></button>
-      <button class="tab active" data-pane="details">Determination details</button>
+  r.innerHTML=`<div class="verdict">
+    <div class="det-sticky">
+      <div class="vhead">
+        <span class="lozenge ${v.cls}">${ICON[d.status]||''}${v.text}</span>
+        <span class="conf">confidence <span class="meter">${meter}</span> ${esc(d.confidence||'')}</span>
+      </div>
+      <div class="tabs">
+        <button class="tab" data-pane="oon">OON benefits<span class="cnt" id="oonCnt" hidden></span></button>
+        <button class="tab active" data-pane="details">Determination details</button>
+      </div>
     </div>
     <div class="pane" id="pane-oon" hidden><div class="oon-note">Loading benefits…</div></div>
-    <div class="pane" id="pane-details">${detailsHtml}</div>`;
+    <div class="pane" id="pane-details">${detailsHtml}</div>
+  </div>`;
   r.querySelectorAll('.tab').forEach(t=>t.onclick=()=>selectTab(t.dataset.pane));
   const npi=(d.matched_provider&&d.matched_provider.npi)||(LAST&&LAST.npi)||'';
   loadOON(npi);
