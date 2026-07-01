@@ -61,6 +61,31 @@ def test_default_crosswalk_has_seeded_uhc_uvc():
     assert default_crosswalk().tins_for("uhc", "1710305735") == ["933510922"]
 
 
+def test_roster_group_npi_resolves_its_tin_for_any_payer():
+    # The UVC roster lets a query on a billing group NPI resolve its EIN on every payer.
+    from network_probe.tin_crosswalk import default_crosswalk
+    # Texas UVC Medical, PLLC — group NPI 1447023528 → EIN 93-3510922
+    assert default_crosswalk().tins_for("cigna-fhir", "1447023528") == ["933510922"]
+
+
+def test_shared_group_npi_keeps_both_entities_tins():
+    # Group NPI 1053977801 is shared by NJ UVC Medical (93-1867629) and Vascular Health LLC
+    # (83-4407175) — both TINs must survive.
+    from network_probe.tin_crosswalk import default_crosswalk
+    assert default_crosswalk().tins_for("uhc", "1053977801") == sorted(["931867629", "834407175"])
+
+
+def test_ingest_tic_cache_normalizes_dashed_eins():
+    from network_probe.tin_crosswalk import TinCrosswalk, _ingest_tic_cache
+    cw = TinCrosswalk()
+    _ingest_tic_cache(cw, {
+        "roster": [{"group_npi": "1447023528", "tin": "93-3510922", "state": "TX"}],
+        "records": [{"payer": "cigna-fhir", "npi": "1184610453", "tin": "46-3812940"}],
+    })
+    assert cw.tins_for("anything", "1447023528") == ["933510922"]   # roster wildcard, dashes stripped
+    assert cw.tins_for("cigna-fhir", "1184610453") == ["463812940"]  # explicit record
+
+
 def test_tinscope_corroborates_uhc_fradkin_via_seed():
     # IN directory verdict + billing TIN 933510922 matched against the seeded crosswalk -> corroborates
     q = ProviderQuery(payer="uhc", plan_hint="Bronze Essential", npi="1972603934",

@@ -133,6 +133,35 @@
   .foot code{font-family:var(--mono);color:var(--muted)}
   @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
+  /* OON / Details tabs */
+  .tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);padding:16px 0 0}
+  .tab{appearance:none;background:none;border:0;border-bottom:2px solid transparent;cursor:pointer;
+       font:inherit;font-size:12.5px;font-weight:600;color:var(--soft);padding:9px 15px;
+       display:flex;align-items:center;gap:8px;margin-bottom:-1px}
+  .tab:hover{color:var(--ink)}
+  .tab.active{color:var(--accent-deep);border-bottom-color:var(--accent)}
+  .tab .cnt{font-family:var(--mono);font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;
+            background:var(--oon-wash);color:var(--oon);border:1px solid #f3c9c4}
+  .pane{animation:rise .22s ease both;padding-top:6px}
+  .pane[hidden]{display:none}
+  .oon-head{display:flex;flex-wrap:wrap;gap:5px 18px;padding:16px 0 6px;font-size:13px;align-items:baseline}
+  .oon-head b{color:var(--ink);font-size:14px} .oon-head span{color:var(--muted)}
+  .oon-note{padding:24px 2px;color:var(--soft);font-size:13px;line-height:1.7}
+  .oon-note code{font-family:var(--mono);background:#f1f4f8;padding:2px 7px;border-radius:6px;color:var(--muted)}
+  .grp{margin-top:18px}
+  .grp h4{margin:0 0 7px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;
+          color:var(--soft);display:flex;align-items:center;gap:9px}
+  .grp h4 .n{font-family:var(--mono);font-size:9.5px;font-weight:600;padding:2px 7px;border-radius:6px;
+             background:#eef1f5;color:var(--muted)}
+  .grp.oon h4{color:var(--oon)}
+  .grp.oon h4 .n{background:var(--oon-wash);color:var(--oon);border:1px solid #f3c9c4}
+  table.oon{width:100%;border-collapse:collapse;font-size:12.5px}
+  table.oon th{text-align:left;font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--soft);
+               font-weight:600;padding:6px 12px 6px 0;border-bottom:1px solid var(--line)}
+  table.oon td{padding:8px 12px 8px 0;border-bottom:1px solid var(--line);color:var(--ink);vertical-align:top}
+  table.oon td.val{font-family:var(--mono);font-weight:600;white-space:nowrap;color:var(--accent-deep)}
+  table.oon td.svc{color:var(--muted);font-size:11.5px}
+
   /* evidence lanes */
   .lanes{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:18px}
   @media(max-width:520px){.lanes{grid-template-columns:1fr}}
@@ -380,7 +409,7 @@ function render(d){
   const extraHtml=extra.length?`<div class="fact"><div class="k">Additional cross-checks</div>
      ${extra.map(s=>`<div class="xc"><span class="r ${esc(s.result)}">${esc(s.result)}</span><span>${esc(s.source)} — ${esc(s.detail)}</span></div>`).join('')}</div>`:'';
 
-  r.innerHTML=`<div class="verdict">
+  const detailsHtml=`<div class="verdict">
     <div class="vhead">
       <span class="lozenge ${v.cls}">${ICON[d.status]||''}${v.text}</span>
       <span class="conf">confidence <span class="meter">${meter}</span> ${esc(d.confidence||'')}</span>
@@ -397,6 +426,66 @@ function render(d){
     ${extraHtml}
     <details><summary>Raw response</summary><pre>${esc(JSON.stringify(d,null,2))}</pre></details>
   </div>`;
+
+  r.innerHTML=`<div class="tabs">
+      <button class="tab" data-pane="oon">OON benefits<span class="cnt" id="oonCnt" hidden></span></button>
+      <button class="tab active" data-pane="details">Determination details</button>
+    </div>
+    <div class="pane" id="pane-oon" hidden><div class="oon-note">Loading benefits…</div></div>
+    <div class="pane" id="pane-details">${detailsHtml}</div>`;
+  r.querySelectorAll('.tab').forEach(t=>t.onclick=()=>selectTab(t.dataset.pane));
+  const npi=(d.matched_provider&&d.matched_provider.npi)||(LAST&&LAST.npi)||'';
+  loadOON(npi);
+}
+
+function selectTab(name){
+  document.querySelectorAll('#result .tab').forEach(t=>t.classList.toggle('active',t.dataset.pane===name));
+  document.querySelectorAll('#result .pane').forEach(p=>p.hidden=(p.id!=='pane-'+name));
+}
+
+// OON benefits — read the prefetched, saved 271 (never a live call from the app).
+const OON_GROUPS=[['N','Out of Network','oon'],['Y','In Network',''],['W','Not Applicable','']];
+async function loadOON(npi){
+  const pane=$('pane-oon'); if(!pane) return;
+  if(!npi){ pane.innerHTML=`<div class="oon-note">No provider NPI to look up benefits for.</div>`; return; }
+  let d; try{ d=await (await fetch('/api/oon?npi='+encodeURIComponent(npi))).json(); }
+  catch(e){ d={available:false,benefits:[]}; }
+  renderOON(pane, d);
+}
+function oonTable(label,cls,g){
+  return `<div class="grp ${cls}"><h4>${esc(label)} <span class="n">${g.length}</span></h4>
+    <table class="oon"><thead><tr><th>Benefit</th><th>Service</th><th>Coverage</th><th>Period</th><th>Amount</th></tr></thead>
+    <tbody>${g.map(x=>`<tr>
+      <td>${esc(x.type||'')}</td>
+      <td class="svc">${esc((x.service_types||[]).join(', '))||'—'}</td>
+      <td>${esc(x.coverage_level||'')||'—'}</td>
+      <td>${esc(x.time||'')||'—'}</td>
+      <td class="val">${esc(x.value||'')||'—'}</td></tr>`).join('')}</tbody></table></div>`;
+}
+function renderOON(pane, d){
+  const rows=d.benefits||[];
+  const cnt=$('oonCnt');
+  if(!d.available || !rows.length){
+    if(cnt) cnt.hidden=true;
+    pane.innerHTML = d.available
+      ? `<div class="oon-note">The payer returned no benefit lines for this member.</div>`
+      : `<div class="oon-note">No saved out-of-network benefits for this member yet.<br>
+         Populate the demo cache with:<br><br><code>python -m network_probe.oon_benefits test-data/*.pdf</code></div>`;
+    return;
+  }
+  const oonN=rows.filter(x=>x.network_code==='N').length;
+  if(cnt){ if(oonN){ cnt.textContent=oonN; cnt.hidden=false; } else cnt.hidden=true; }
+  const head=`<div class="oon-head"><b>${esc(d.patient||'')}</b>
+     <span>${esc(d.payer||'')}${d.plan?' · '+esc(d.plan):''}</span>
+     <span>${rows.length} benefit lines · ${oonN} out-of-network</span></div>`;
+  let body='', used=new Set();
+  for(const [code,label,cls] of OON_GROUPS){
+    const g=rows.filter(x=>x.network_code===code); if(!g.length) continue;
+    g.forEach(x=>used.add(x)); body+=oonTable(label,cls,g);
+  }
+  const other=rows.filter(x=>!used.has(x));
+  if(other.length) body+=oonTable('Other / not specified','',other);
+  pane.innerHTML=head+body;
 }
 
 // Staged loader mirroring the real pipeline; runs in parallel with the fetch so the verdict

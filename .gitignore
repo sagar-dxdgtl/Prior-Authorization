@@ -6,6 +6,10 @@ __pycache__/
 *.pyc
 .pytest_cache/
 ui-*.png
+oon-tab-*.png
 test-data/
+test-data.zip
 .overrides/
 .DS_Store
+.env
+.idea/

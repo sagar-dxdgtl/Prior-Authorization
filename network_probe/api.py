@@ -187,6 +187,20 @@ def benchmark() -> list[dict]:
     return BENCHMARK
 
 
+@app.get("/api/oon")
+def oon(npi: Optional[str] = None):
+    """Saved out-of-network benefits (Stedi 271), prefetched into `.cache/oon_benefits.json`.
+    Demo-only: no live fetch here — populate with `python -m network_probe.oon_benefits
+    test-data/*.pdf`. Returns `available=False` when a member hasn't been prefetched."""
+    from .oon_benefits import load_oon
+    if npi is None:
+        return load_oon() or {}
+    entry = load_oon(npi)
+    if not entry:
+        return {"npi": npi, "available": False, "benefits": [], "oon_count": 0}
+    return {**entry, "available": True}
+
+
 # sync `def` so FastAPI runs the blocking httpx calls in a threadpool
 @app.post("/api/check")
 def check(req: CheckRequest):
