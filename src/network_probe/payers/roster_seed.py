@@ -294,6 +294,13 @@ SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
         "none",
     ),
     "AvMed": (
+        # RE-CHECKED 2026-07-06: the old `myfhir.avmed.org` endpoint has regressed from expired-TLS
+        # to a full TLS-handshake failure (dead). A newer endpoint was found —
+        # avmp.interop.avmed.com/api/v1/avmp/metadata (Sentara Health-hosted, reflecting AvMed's
+        # 2023 acquisition by Sentara; cert valid) — but it's Patient-Access-only (read-by-id, no
+        # search, no PractitionerRole/Location/OrganizationAffiliation) and cannot answer network-
+        # participation queries. No live directory path exists; Stedi 59274 (eligibility only)
+        # remains the only usable channel.
         None,
         None,
         "https://www.avmed.org/find-doctors-facilities/",
@@ -357,6 +364,14 @@ SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
         "pdf-directory",
     ),
     "Gold Kidney Health Plan": (
+        # SANDBOX CONFIRMED LIVE 2026-07-06 — independently re-verified: `curl -H "payer-id:
+        # f24482f7e98e49f7a141bf503e0b3b20" https://api-sandbox.aaneelconnect.com/cms/r4/
+        # providerdirectory/Practitioner` returns a real HTTP 200 FHIR Bundle (no subscription key,
+        # login, or approval needed — the sandbox `payer-id` header is all it takes). AaNeel's own
+        # portal states Provider Directory sandbox APIs need no authentication at all. This runs on
+        # a separate Azure APIM instance from production, which is still pending its subscription
+        # key — pull real Gold Kidney network data from the sandbox NOW rather than waiting.
+        # Production stays needs-authorized-api until the prod key lands.
         None,
         None,
         "https://www.goldkidney.com/provider-search/",
@@ -445,6 +460,21 @@ SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
         "public-fhir",
     ),
     "Wellpoint / Amerigroup (Elevance)": (
+        # TESTED LIVE 2026-07-06 — hypothesis DISPROVEN for data access, but useful finding.
+        # wellpoint.com/developers requires a full legal/compliance intake ("several weeks" per
+        # their own site) — confirmed not self-serve. Tried reusing the existing ANTHEM_FHIR_*
+        # credentials (same Elevance backend, same "hos-fhir-server v1.0.0" fingerprint) directly
+        # against Wellpoint's registered path: `/metadata` is public either way (200), but
+        # `/Practitioner` returns 401 "Unable to find scope associated with the operation" no
+        # matter which Elevance token endpoint issues the bearer token (tried the standard Anthem
+        # token URL AND a second "registered/api/v1/token" endpoint that also accepts our creds).
+        # Decoding the token confirms it's genuinely OUR existing approved Elevance app
+        # ("entity_name":"Quickflows AI", "entityType":"Third Party App", "sor_cd":"Provider
+        # Directory") — so the OAuth backend is shared, but Wellpoint access is a SEPARATE
+        # per-resource entitlement layered on top of the same app registration, not a different
+        # credential set. ACTIONABLE: email Elevance asking them to add the Wellpoint/Amerigroup
+        # provider-directory scope to our EXISTING "Quickflows AI" app registration — likely faster
+        # than filing a brand-new registration from scratch via wellpoint.com/developers.
         None,
         None,
         "https://findcaresecure.wellpoint.com/",
@@ -498,9 +528,11 @@ SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
     "Provider Partners": (
         # "Provider Partners Health Plan(s)" — institutional SNP (nursing-facility/assisted-living
         # network only), CMS H3800-001-0 for IL. No FHIR endpoint found (guessed metadata paths all
-        # 404). Dev portal `pphpfhirapp.prod.healthaxis.net/Login` is a HealthAxis-hosted login page
-        # — may be a real Patient-Access/Provider-Directory API registration point, not fully
-        # confirmed reachable pre-login. Narrow network, limited relevance to an outpatient clinic.
+        # 404). RE-CHECKED 2026-07-06: `pphpfhirapp.prod.healthaxis.net/Login` has a confirmed real
+        # "Sign Up" link -> /register — genuine OPEN self-service signup (email/password/phone/ToS,
+        # no invite code, no approval gate to create an account). What credentials/base URL appear
+        # post-signup is unverified since that requires completing registration — worth actually
+        # doing. Narrow SNP network, limited relevance to an outpatient clinic either way.
         None, None, "https://pphealthplan.com/provider-directory/", "needs-authorized-api",
     ),
     "Zing Health": (
@@ -585,16 +617,31 @@ SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
     "Memorial Hermann HP": (
         # Memorial Hermann Health Plan, Inc. (MA, CMS H7115) + Memorial Hermann Commercial Health
         # Plan, Inc. — TDI-licensed, Greater Houston only (Harris/Brazoria/Ft.Bend/Montgomery/
-        # Galveston/Waller/Walker/Wharton). Documented FHIR base
-        # (apigateway.memorialhermann.org:7443/infor/CustomerApi/public) does NOT resolve (NXDOMAIN)
-        # — desk-research-only, not live. Stedi id PGRAJ confirmed live, BUT Stedi's own record
-        # shows eligibilityCheck: NOT_SUPPORTED (837 claims only, no 270/271) — enrolling won't
-        # unlock eligibility checks via Stedi for this payer.
+        # Galveston/Waller/Walker/Wharton). RE-CHECKED 2026-07-06: found their OWN developer docs
+        # page (healthplan.memorialhermann.org/about-us/cmstpadev-documentation), which documents
+        # BOTH prod (apigateway.memorialhermann.org:7443/.../public) AND test
+        # (apigatewaytest.memorialhermann.org:7443/.../public) endpoints + OAuth2 token URLs — but
+        # `dig` confirms BOTH subdomains are NXDOMAIN (no A/CNAME at all), while the parent domain
+        # resolves fine. This isn't a resolver fluke — the documented API infrastructure itself is
+        # dead/decommissioned. Registration still requires a paper "Third Party App Developer
+        # Application Form" targeting infrastructure that doesn't exist. Stedi id PGRAJ confirmed
+        # live, BUT shows eligibilityCheck: NOT_SUPPORTED (837 claims only, no 270/271).
         None, None, "https://healthplan.memorialhermann.org/find-a-doctor", "needs-authorized-api",
     ),
     "Superior HealthPlan (Centene)": (
         # Centene's TX Medicaid brand — unlike Ambetter/Wellcare/Peach State, this product's FHIR
         # is gated behind the Centene Partner Portal login, NOT the shared public national endpoint.
+        # RE-CHECKED 2026-07-06: Centene's own official developer reference doc ("Centene Health
+        # Plan and Brands for Third Party Application Developers," content.centene.com, linked from
+        # partners.centene.com) lists Superior HealthPlan (Medicaid) and Ambetter from Superior
+        # HealthPlan (Marketplace) in the SAME unified national table as Ambetter/Wellcare/Peach
+        # State/Home State/Buckeye — already-confirmed brands on the shared public
+        # iopc-pd.api.centene.com endpoint. No separate Superior-only document, no note of
+        # different infrastructure. Strongly suggests Superior is just a plan-name value in the
+        # SAME shared national FHIR API, not a separate technical system — once the prod egress IP
+        # is Centene-allowlisted (already required for Ambetter/Wellcare), try querying
+        # `Organization?name=Superior HealthPlan` there BEFORE pursuing a separate Partner Portal
+        # login.
         None, None, "https://findaprovider.superiorhealthplan.com", "needs-authorized-api",
     ),
     "Texas Health and Human Services Commission (HHSC)": (

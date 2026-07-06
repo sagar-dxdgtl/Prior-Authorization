@@ -11,6 +11,46 @@ non-PHI live directory lookup) and flip that payer to live. Never commit `.env`.
 
 ---
 
+## Quick wins found 2026-07-06 (skip the queue for these)
+
+A pass looking specifically for shortcuts past the standard business-registration process turned up
+four real leads, in order of how actionable they are right now:
+
+1. **Gold Kidney Health Plan — already usable, no signup needed.** Its AaNeel Connect **sandbox** is
+   confirmed live: `curl -H "payer-id: f24482f7e98e49f7a141bf503e0b3b20" https://api-sandbox.aaneelconnect.com/cms/r4/providerdirectory/Practitioner`
+   returns a real FHIR Bundle today, no auth at all. Production is still pending its subscription key,
+   but the sandbox itself needs nothing from you — pull real Gold Kidney data now instead of waiting.
+2. **Provider Partners — genuine open self-serve signup.** `pphpfhirapp.prod.healthaxis.net/register`
+   is a real, no-approval-gate signup form (email/password/phone/ToS only). Worth registering to see
+   what credentials/base URL land — narrow SNP network though, so low priority unless needed.
+3. **Superior HealthPlan (Centene) — may not need separate registration at all.** Centene's own
+   developer reference doc lists Superior in the same national brand table as Ambetter/Wellcare/Peach
+   State — all on the one shared `iopc-pd.api.centene.com` endpoint. Once our prod IP is
+   Centene-allowlisted (already required for Ambetter/Wellcare — see the Centene row below), try
+   `Organization?name=Superior HealthPlan` there before pursuing the separate Partner Portal login.
+4. **Wellpoint/Amerigroup — tested live 2026-07-06, doesn't work as-is, but points to a faster fix.**
+   Reused the existing `ANTHEM_FHIR_CLIENT_ID`/`SECRET` against Wellpoint's registered path:
+   `/metadata` is public either way, but `/Practitioner` returns `401 "Unable to find scope
+   associated with the operation"` — tried this against both the standard Anthem token URL and a
+   second `client.oauth2/registered/api/v1/token` endpoint that also accepted our credentials.
+   Decoding the returned token confirms it genuinely is our existing approved Elevance app
+   (`entity_name: "Quickflows AI"`, `entityType: "Third Party App"`) — so the OAuth backend really
+   is shared, but Wellpoint access is a separate per-resource entitlement on top of the same app
+   registration, not a different credential set. **Next step: email Elevance/Anthem support asking
+   them to add the Wellpoint/Amerigroup provider-directory scope to our existing "Quickflows AI"
+   app registration** — likely faster than filing Wellpoint's own from-scratch registration
+   (`wellpoint.com/developers`, "several weeks" per their site).
+
+**Confirmed dead ends this pass** (don't re-search): Aetna, Aetna Better Health, Alignment Health Plan,
+HCSC, Health Choice AZ, EmblemHealth, and Curative all confirmed manual-approval-only or no path at
+all — no sandbox/instant-key tier exists for any of them. **AvMed got worse**: its old endpoint is now
+fully TLS-dead (not just expired), and the newer Sentara-hosted replacement is Patient-Access-only
+(no directory search) — there is no live directory path for AvMed at all, Stedi 59274 is eligibility-
+only. **Memorial Hermann HP's own documented test endpoint is confirmed DNS-dead** — the infrastructure
+itself is decommissioned, not just hard to find.
+
+---
+
 ## Env-var naming convention (so one adapter reads them all)
 
 **OAuth2 client-credentials payers:**
