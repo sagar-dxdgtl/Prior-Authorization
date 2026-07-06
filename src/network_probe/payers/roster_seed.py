@@ -90,6 +90,131 @@ ROSTER = [
     ("Cigna Healthcare", "Commercial", "FL-South Florida", "62308", "needs_enrollment"),
     ("Community Care Plan", "Managed Medicaid", "FL-South Florida", None, "needs_payer_id"),
     ("Curative", "Commercial", "FL-South Florida", "CURTV", "needs_enrollment"),
+    # --- Illinois --- (added from client benefit list; researched via 3 parallel agent passes,
+    # 2026-07-06 — see docs/payer-sources/MATRIX.md "Illinois" section for full sourcing notes)
+    ("Aetna", "Commercial", "IL", "60054", "needs_enrollment"),
+    ("Aetna", "Medicare Advantage", "IL", "60054", "needs_enrollment"),
+    ("Aetna Better Health", "Managed Medicaid", "IL", None, "needs_payer_id"),
+    ("Ambetter (Centene)", "ACA", "IL", "68069", "needs_enrollment"),
+    ("BCBS (Anthem)", "Medicare Advantage", "IL", None, "needs_payer_id"),
+    ("BCBS / Empire (Anthem / Elevance)(HCSC)", "ACA", "IL", None, "needs_payer_id"),
+    ("BCBS / Empire (Anthem / Elevance)(HCSC)", "Commercial", "IL", None, "needs_payer_id"),
+    ("BCBS / Empire (Anthem / Elevance)(HCSC)", "Medicare Advantage", "IL", None, "needs_payer_id"),
+    ("Cigna Healthcare", "Commercial", "IL", "62308", "needs_enrollment"),
+    ("Essence Healthcare", "Medicare Advantage", "IL", None, "needs_payer_id"),
+    ("Humana", "Dual Eligible (FIDE SNP)", "IL", "61101", "supported"),
+    ("Humana", "Medicare Advantage", "IL", "61101", "supported"),
+    ("Illinois Department of Healthcare and Family Services (HFS)", "Traditional Medicaid", "IL", None, "needs_payer_id"),
+    ("Longevity Health Plan", "Medicare Advantage", "IL", "LIL01", "needs_enrollment"),
+    ("National Government Services, Inc. (NGS)", "Traditional Medicare", "IL", None, "needs_payer_id"),
+    ("Provider Partners", "Medicare Advantage", "IL", None, "needs_payer_id"),
+    ("UnitedHealthcare", "Commercial", "IL", "87726", "supported"),
+    ("UnitedHealthcare", "Medicare Advantage", "IL", "87726", "supported"),
+    ("Zing Health", "Medicare Advantage", "IL", None, "needs_payer_id"),
+    ("Wellcare (Centene)", "Dual Eligible (FIDE SNP)", "IL", None, "needs_payer_id"),
+    ("Wellcare (Centene)", "Medicare Advantage", "IL", None, "needs_payer_id"),
+    ("Clear Spring Health", "Medicare Advantage", "IL", None, "needs_payer_id"),
+    # --- Georgia (Atlanta) ---
+    ("Aetna", "Commercial", "GA-Atlanta", "60054", "needs_enrollment"),
+    ("Aetna", "Medicare Advantage", "GA-Atlanta", "60054", "needs_enrollment"),
+    ("Alliant Health Plans", "Commercial", "GA-Atlanta", None, "needs_payer_id"),
+    ("Ambetter (Centene)", "ACA", "GA-Atlanta", "68069", "needs_enrollment"),
+    ("BCBS / Empire (Anthem / Elevance)", "ACA", "GA-Atlanta", None, "needs_payer_id"),
+    ("BCBS / Empire (Anthem / Elevance)", "Commercial", "GA-Atlanta", None, "needs_payer_id"),
+    ("BCBS / Empire (Anthem / Elevance)", "Medicare Advantage", "GA-Atlanta", None, "needs_payer_id"),
+    ("CareSource", "Medicare Advantage", "GA-Atlanta", None, "needs_payer_id"),
+    ("Cigna Healthcare", "ACA", "GA-Atlanta", "62308", "needs_enrollment"),
+    ("Cigna Healthcare", "Commercial", "GA-Atlanta", "62308", "needs_enrollment"),
+    ("Curative", "Commercial", "GA-Atlanta", "CURTV", "needs_enrollment"),
+    ("Devoted Health", "Medicare Advantage", "GA-Atlanta", "DEVOT", "supported"),
+    ("Healthspring", "Medicare Advantage", "GA-Atlanta", None, "needs_payer_id"),
+    ("Humana", "Medicare Advantage", "GA-Atlanta", "61101", "supported"),
+    ("Kaiser Foundation Health Plan of Georgia", "Medicare Advantage", "GA-Atlanta", None, "needs_payer_id"),
+    ("Novitas Solutions, Inc.", "Traditional Medicare", "GA-Atlanta", None, "needs_payer_id"),
+    ("Oscar", "ACA", "GA-Atlanta", "OSCAR", "supported"),
+    # NOTE: client list tagged this "Traditional Medicaid" — corrected to Traditional Medicare;
+    # Palmetto GBA is the CMS Medicare Administrative Contractor for GA (Jurisdiction J), never a
+    # Medicaid entity. Flagged for client confirmation, see MATRIX.md.
+    ("Palmetto GBA, LLC", "Traditional Medicare", "GA-Atlanta", None, "needs_payer_id"),
+    ("Peach State Health Plan (Centene)", "Managed Medicaid", "GA-Atlanta", "68069", "needs_enrollment"),
+    ("UnitedHealthcare", "Commercial", "GA-Atlanta", "87726", "supported"),
+    ("UnitedHealthcare", "Dual Eligible (FIDE SNP)", "GA-Atlanta", "87726", "supported"),
+    ("UnitedHealthcare", "Medicare Advantage", "GA-Atlanta", "87726", "supported"),
+    ("Clear Spring Health", "Medicare Advantage", "GA-Atlanta", None, "needs_payer_id"),
+    # --- Texas (Houston) ---
+    ("Abilis Health Plan", "Medicare Advantage", "TX-Houston", None, "needs_payer_id"),
+    ("MCC Health", "Commercial", "TX-Houston", None, "needs_payer_id"),
+    ("Aetna", "Commercial", "TX-Houston", "60054", "needs_enrollment"),
+    ("Aetna", "Medicare Advantage", "TX-Houston", "60054", "needs_enrollment"),
+    ("Aetna Better Health", "Managed Medicaid", "TX-Houston", "TMDSA", "needs_enrollment"),
+    ("Ambetter (Centene)", "ACA", "TX-Houston", "68069", "needs_enrollment"),
+    ("BCBS / Empire (Anthem / Elevance)(HCSC)", "ACA", "TX-Houston", None, "needs_payer_id"),
+    ("BCBS / Empire (Anthem / Elevance)(HCSC)", "Commercial", "TX-Houston", None, "needs_payer_id"),
+    ("BCBS / Empire (Anthem / Elevance)(HCSC)", "Managed Medicaid", "TX-Houston", None, "needs_payer_id"),
+    ("BCBS / Empire (Anthem / Elevance)(HCSC)", "Medicare Advantage", "TX-Houston", None, "needs_payer_id"),
+    ("Cigna Healthcare", "ACA", "TX-Houston", "62308", "needs_enrollment"),
+    ("Cigna Healthcare", "Commercial", "TX-Houston", "62308", "needs_enrollment"),
+    ("Community Health Choice (CHC)", "ACA", "TX-Houston", None, "needs_payer_id"),
+    ("Community Health Choice (CHC)", "Dual Eligible (FIDE SNP)", "TX-Houston", None, "needs_payer_id"),
+    ("Community Health Choice (CHC)", "Managed Medicaid", "TX-Houston", None, "needs_payer_id"),
+    ("Curative", "Commercial", "TX-Houston", "CURTV", "needs_enrollment"),
+    ("Devoted Health", "Medicare Advantage", "TX-Houston", "DEVOT", "supported"),
+    ("Healthspring", "Medicare Advantage", "TX-Houston", None, "needs_payer_id"),
+    ("Humana", "Medicare Advantage", "TX-Houston", "61101", "supported"),
+    ("Memorial Hermann HP", "Commercial", "TX-Houston", "PGRAJ", "needs_enrollment"),
+    ("Memorial Hermann HP", "Medicare Advantage", "TX-Houston", "PGRAJ", "needs_enrollment"),
+    ("Molina Healthcare", "ACA", "TX-Houston", None, "needs_payer_id"),
+    ("Molina Healthcare", "Managed Medicaid", "TX-Houston", None, "needs_payer_id"),
+    ("Molina Healthcare", "Medicare Advantage", "TX-Houston", None, "needs_payer_id"),
+    ("Novitas Solutions, Inc.", "Traditional Medicare", "TX-Houston", None, "needs_payer_id"),
+    ("Oscar", "ACA", "TX-Houston", "OSCAR", "supported"),
+    ("Superior HealthPlan (Centene)", "Managed Medicaid", "TX-Houston", None, "needs_payer_id"),
+    ("Texas Health and Human Services Commission (HHSC)", "Traditional Medicaid", "TX-Houston", None, "needs_payer_id"),
+    ("UnitedHealthcare", "Commercial", "TX-Houston", "87726", "supported"),
+    ("UnitedHealthcare", "Dual Eligible (FIDE SNP)", "TX-Houston", "87726", "supported"),
+    ("UnitedHealthcare", "Medicare Advantage", "TX-Houston", "87726", "supported"),
+    ("UnitedHealthcare Community Plan", "Managed Medicaid", "TX-Houston", None, "needs_payer_id"),
+    ("Wellcare (Centene)", "Medicare Advantage", "TX-Houston", None, "needs_payer_id"),
+    ("WellCare / AllWell (Centene)", "Dual Eligible (FIDE SNP)", "TX-Houston", None, "needs_payer_id"),
+    ("Wellpoint / Amerigroup (Elevance)", "ACA", "TX-Houston", None, "needs_payer_id"),
+    ("Wellpoint / Amerigroup (Elevance)", "Managed Medicaid", "TX-Houston", None, "needs_payer_id"),
+    ("Wellpoint / Amerigroup (Elevance)", "Medicare Advantage", "TX-Houston", None, "needs_payer_id"),
+    # --- Texas (Dallas) --- NOTE: HHSC service-delivery-area caveat — Mansfield sits mostly in
+    # Tarrant County, which is a SEPARATE SDA from "Dallas" SDA for STAR/STAR+PLUS/CHIP. Superior
+    # HealthPlan's Medicaid book covers Dallas SDA but explicitly EXCLUDES Tarrant; other Medicaid
+    # MCOs below were confirmed for "Dallas" SDA but not individually re-checked for Tarrant. Verify
+    # against the clinic's exact service area before treating any Dallas-market Medicaid row as live.
+    ("Aetna", "Commercial", "TX-Dallas", "60054", "needs_enrollment"),
+    ("Aetna", "Medicare Advantage", "TX-Dallas", "60054", "needs_enrollment"),
+    ("Aetna Better Health", "Managed Medicaid", "TX-Dallas", "TMDSA", "needs_enrollment"),
+    ("Ambetter (Centene)", "ACA", "TX-Dallas", "68069", "needs_enrollment"),
+    ("Baylor Scott & White Health Plan", "Commercial", "TX-Dallas", "88030", "needs_enrollment"),
+    ("Baylor Scott & White Health Plan", "Medicare Advantage", "TX-Dallas", "88030", "needs_enrollment"),
+    ("BCBS / Empire (Anthem / Elevance)(HCSC)", "ACA", "TX-Dallas", None, "needs_payer_id"),
+    ("BCBS / Empire (Anthem / Elevance)(HCSC)", "Commercial", "TX-Dallas", None, "needs_payer_id"),
+    ("Abilis Health Plan", "Medicare Advantage", "TX-Dallas", None, "needs_payer_id"),
+    ("BCBS / Empire (Anthem / Elevance)(HCSC)", "Medicare Advantage", "TX-Dallas", None, "needs_payer_id"),
+    ("MCC Health", "Commercial", "TX-Dallas", None, "needs_payer_id"),
+    ("Cigna Healthcare", "ACA", "TX-Dallas", "62308", "needs_enrollment"),
+    ("Cigna Healthcare", "Commercial", "TX-Dallas", "62308", "needs_enrollment"),
+    ("Curative", "Commercial", "TX-Dallas", "CURTV", "needs_enrollment"),
+    ("Healthspring", "Medicare Advantage", "TX-Dallas", None, "needs_payer_id"),
+    ("Humana", "Medicare Advantage", "TX-Dallas", "61101", "supported"),
+    ("Molina Healthcare", "ACA", "TX-Dallas", None, "needs_payer_id"),
+    ("Molina Healthcare", "Managed Medicaid", "TX-Dallas", None, "needs_payer_id"),
+    ("Molina Healthcare", "Medicare Advantage", "TX-Dallas", None, "needs_payer_id"),
+    ("Novitas Solutions, Inc.", "Traditional Medicare", "TX-Dallas", None, "needs_payer_id"),
+    ("Superior HealthPlan (Centene)", "Managed Medicaid", "TX-Dallas", None, "needs_payer_id"),
+    ("Texas Health and Human Services Commission (HHSC)", "Traditional Medicaid", "TX-Dallas", None, "needs_payer_id"),
+    ("UnitedHealthcare", "ACA", "TX-Dallas", "87726", "supported"),
+    ("UnitedHealthcare", "Commercial", "TX-Dallas", "87726", "supported"),
+    ("UnitedHealthcare", "Dual Eligible (FIDE SNP)", "TX-Dallas", "87726", "supported"),
+    ("UnitedHealthcare", "Medicare Advantage", "TX-Dallas", "87726", "supported"),
+    ("UnitedHealthcare Community Plan", "Managed Medicaid", "TX-Dallas", None, "needs_payer_id"),
+    ("Wellcare (Centene)", "Medicare Advantage", "TX-Dallas", None, "needs_payer_id"),
+    ("Wellpoint / Amerigroup (Elevance)", "ACA", "TX-Dallas", None, "needs_payer_id"),
+    ("Wellpoint / Amerigroup (Elevance)", "Managed Medicaid", "TX-Dallas", None, "needs_payer_id"),
+    ("Wellpoint / Amerigroup (Elevance)", "Medicare Advantage", "TX-Dallas", None, "needs_payer_id"),
 ]
 
 
@@ -325,6 +450,173 @@ SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
         "https://findcaresecure.wellpoint.com/",
         "needs-authorized-api",
     ),
+    # --- Added for IL / GA-Atlanta / TX-Houston / TX-Dallas, 2026-07-06 ---
+    "BCBS (Anthem)": (
+        # RESEARCHED, high-confidence determination: almost certainly a data-entry duplicate of
+        # "BCBS / Empire (Anthem / Elevance)(HCSC)" Medicare Advantage for IL, NOT a genuine
+        # Anthem/Elevance product. BCBSA Blue licenses are exclusive per state; HCSC holds the
+        # exclusive IL license and directly sells "Blue Cross Medicare Advantage" HMO/HMO-POS/PPO
+        # there. Elevance's own newsroom list of its affiliated 2025 MA brands (Anthem, Wellpoint,
+        # HealthSun, Simply Healthcare, Freedom Health, Optimum HealthCare, MMM) never mentions
+        # Illinois, and Elevance holds no Blue license in IL at all (its Blue states are CA/CO/CT/
+        # GA/IN/KY/ME/MO/NV/NH/NY/OH/VA/WI). Recommend merging this row into the HCSC row rather
+        # than pursuing it as separate registration work.
+        None, None, None, "needs-authorized-api",
+    ),
+    "BCBS / Empire (Anthem / Elevance)(HCSC)": (
+        # HCSC (Health Care Service Corp) owns BCBS in IL/TX/MT/NM/OK — an independent licensee, NOT
+        # Elevance, same pattern as BCBSAZ/Florida Blue (do NOT route through _ANTHEM_FHIR). Medicaid
+        # product "Blue Cross Community Health Plans" has a confirmed Stedi id (G00621, IL) but its
+        # FHIR endpoint (api.hcsc.net/providerfinder/sapphire/fhir) returned 401 even on /metadata —
+        # tighter-gated than Aetna. Dev portal: interoperability.hcsc.com.
+        None, None, None, "needs-authorized-api",
+    ),
+    "Essence Healthcare": (
+        # Lumeris-owned, St. Louis MO. Confirmed CMS-regulated (H2610/H6200/H3189/H4620), sells in
+        # IL. `essencehealthcare.healthlx.com/{metadata,fhir/metadata}` returns HTTP 200 but it's a
+        # React SPA page, NOT a real CapabilityStatement — confirmed false positive, do not reuse.
+        # No developer/interoperability portal found despite targeted search.
+        None, None, "https://essencehealthcare.com/find-a-doctor/", "needs-authorized-api",
+    ),
+    "Illinois Department of Healthcare and Family Services (HFS)": (
+        None, None, "https://ext2.hfs.illinois.gov/hfsindprovdirectory", "none",
+    ),
+    "Longevity Health Plan": (
+        # Longevity Health Plan Inc. (IL entity; per-state sister entities elsewhere). No FHIR
+        # endpoint found (fhir./api.longevityhealthplan.com don't resolve). No dev portal — only
+        # Compliance@longevityhealthplan.com. IL Stedi id LIL01 confirmed live on Stedi's own site.
+        # NOTE: Longevity has NO direct Georgia plan of its own — GA is served via a separate
+        # "National Carriers" partner brand, so the GA-Atlanta row for this label is likely
+        # mislabeled; flag for client confirmation before treating it as real.
+        None, None, "https://longevityhealthplan.com/find-a-provider/", "needs-authorized-api",
+    ),
+    "National Government Services, Inc. (NGS)": (
+        # Traditional Medicare MAC, Jurisdiction 6 (IL/MN/WI) — same treatment as Noridian(AZ)/
+        # Novitas(CO): govt program IS the network, no PDEX/TiC/Stedi id.
+        None, None, "https://npiregistry.cms.hhs.gov", "none",
+    ),
+    "Provider Partners": (
+        # "Provider Partners Health Plan(s)" — institutional SNP (nursing-facility/assisted-living
+        # network only), CMS H3800-001-0 for IL. No FHIR endpoint found (guessed metadata paths all
+        # 404). Dev portal `pphpfhirapp.prod.healthaxis.net/Login` is a HealthAxis-hosted login page
+        # — may be a real Patient-Access/Provider-Directory API registration point, not fully
+        # confirmed reachable pre-login. Narrow network, limited relevance to an outpatient clinic.
+        None, None, "https://pphealthplan.com/provider-directory/", "needs-authorized-api",
+    ),
+    "Zing Health": (
+        # Zing Health Plan, Inc. (dba Zing Health), Chicago IL, founded 2019, no parent co.
+        # Multi-state (IL/IN/MI/MS/OH/TN), not IL-only. `myzinghealth.com/metadata` and
+        # `zinghealthdev.azurewebsites.net/metadata` return HTTP 200 but are marketing-site HTML,
+        # NOT CapabilityStatements — confirmed false positives. No dev portal found; only a general
+        # provider-relations inbox (provider.services@myzinghealth.com), untested for API access.
+        None, None, "https://myzinghealth.com/search-provider", "needs-authorized-api",
+    ),
+    "Clear Spring Health": (
+        # MA brand of Group One Thousand One, LLC ("Group 1001"). **Already exited Medicare
+        # Advantage entirely as of 2026-06-01** (benefits ran through 2026-05-31, ~12k enrollees
+        # affected) — this plan no longer exists as an active MA offering as of this research
+        # (2026-07-06). Deprioritize rather than pursue integration. Hosted by AaNeel Infotech (same
+        # vendor as this repo's existing Gold Kidney/EternalHealth rows) — dev portal reachable at
+        # developers.aaneelconnect.com/home?payerCode=aead93d7-3b6f-467a-8376-c30119c0503a, but its
+        # own providerdirectory/metadata endpoint 404s (alive, not live-verified).
+        None, None, "https://clearspringhealthcare.com/find-a-provider/", "needs-authorized-api",
+    ),
+    "Alliant Health Plans": (
+        # Regional NW Georgia insurer (Dalton, GA / Whitfield County). Confirmed service area is
+        # ~24k-provider "4Corners Alliant Network" across north GA counties (Whitfield, Murray,
+        # Catoosa, Walker, Gordon, Floyd, Polk, Pickens, Gilmer, Fannin, Union, Lumpkin, Dawson,
+        # Towns, White, Hall, Rabun, Habersham, Banks, Stephens, Franklin, Hart, Barrow) — **Cobb
+        # County/Kennesaw does NOT appear in any confirmed county list**; likely does not actually
+        # serve this clinic's market — flag for client confirmation before pursuing. No FHIR/API
+        # found. Not to be confused with "Alliant Health Solutions" (formerly Alliant-Georgia
+        # Medical Care Foundation), an unrelated CMS Quality Improvement Organization.
+        None, "https://alliantplans.com/machine-readable-data/",
+        "https://alliantplans.com/providers/", "needs-authorized-api",
+    ),
+    "CareSource": (
+        # Georgia Medicare Advantage CONFIRMED — sells "CareSource Dual Advantage (HMO D-SNP)" +
+        # "Dual Advantage PLUS", CMS contract H8390-015-0, statewide (159 GA counties), active
+        # 2024-2026. It's specifically the D-SNP line, not a general/standalone MA plan (unlike
+        # CareSource's broader non-D-SNP MA business in OH/IN/KY/WV/NC). No FHIR endpoint found.
+        None, None, "https://findadoctor.caresource.com/", "none",
+    ),
+    "Kaiser Foundation Health Plan of Georgia": (
+        # PRESUMED same national Kaiser PDEX endpoint already verified public for CO ("national
+        # incl. CO" per that SOURCES note) — GA-specific data NOT individually re-verified this
+        # pass. Confirm with a live GA query before fully trusting.
+        "https://kpx-service-bus.kp.org/service/hp/mhpo/healthplanproviderv1rc",
+        "https://healthy.kaiserpermanente.org/support/transparency-coverage",
+        "https://healthy.kaiserpermanente.org/find-a-doctor",
+        "public-fhir",
+    ),
+    "Palmetto GBA, LLC": (
+        # Traditional Medicare MAC, Jurisdiction J (AL/GA/TN) — same treatment as Noridian/Novitas/NGS.
+        None, None, "https://npiregistry.cms.hhs.gov", "none",
+    ),
+    "Peach State Health Plan (Centene)": (
+        _CENTENE_FHIR, _CENTENE_TIC, "https://findaprovider.pshpgeorgia.com/", "public-fhir",
+    ),
+    "Abilis Health Plan": (
+        # CONFIRMED REAL COMPANY, but likely WRONG STATE for these rows: Abilis Health Plan is the
+        # 2026 rebrand of "Signature Advantage" (HMO SNP, CMS H2400, BrightSpring Health Services)
+        # — confirmed operating ONLY in Kentucky (120 counties) and Tennessee (34 counties), an
+        # Institutional SNP (nursing-facility/assisted-living residents only). No TX presence found
+        # in CMS filings, TDI, or the company's own service-area page. The TX-Houston/TX-Dallas
+        # rows for this label appear to be a client-list data error, not an unresearched gap —
+        # flag for client confirmation before pursuing registration at all.
+        None, None, "https://signatureadvantageplan.com/interactive-provider-directory-2/", "needs-authorized-api",
+    ),
+    "MCC Health": (
+        # COULD NOT CONFIRM A MATCHING COMPANY. Closest name match ("MCC Health, PBC" dba Cost Plus
+        # Wellness, Dallas TX, Mark Cuban-backed) is a direct-contracting platform with no member
+        # benefits/claims/provider directory — not an insurer. No "MCC Health" entry in TDI's HMO
+        # listing. Other "MCC" candidates found are brokers/consulting firms, not TX payers.
+        # Recommend flagging this roster row back to whoever sourced the client list to ask what
+        # plan/EOB/member-card actually shows "MCC Health" — no registration path can exist until
+        # the real entity is identified.
+        None, None, None, "needs-authorized-api",
+    ),
+    "Community Health Choice (CHC)": (
+        # Houston/Harris-only nonprofit HMO (Medicaid STAR/STAR+PLUS/CHIP + ACA Marketplace + MA
+        # D-SNP). Dev portal (developers.communityhealthchoice.org) live but sign-up gated; no
+        # reachable /metadata this pass.
+        None, None, "https://providersearch.communityhealthchoice.org", "needs-authorized-api",
+    ),
+    "Memorial Hermann HP": (
+        # Memorial Hermann Health Plan, Inc. (MA, CMS H7115) + Memorial Hermann Commercial Health
+        # Plan, Inc. — TDI-licensed, Greater Houston only (Harris/Brazoria/Ft.Bend/Montgomery/
+        # Galveston/Waller/Walker/Wharton). Documented FHIR base
+        # (apigateway.memorialhermann.org:7443/infor/CustomerApi/public) does NOT resolve (NXDOMAIN)
+        # — desk-research-only, not live. Stedi id PGRAJ confirmed live, BUT Stedi's own record
+        # shows eligibilityCheck: NOT_SUPPORTED (837 claims only, no 270/271) — enrolling won't
+        # unlock eligibility checks via Stedi for this payer.
+        None, None, "https://healthplan.memorialhermann.org/find-a-doctor", "needs-authorized-api",
+    ),
+    "Superior HealthPlan (Centene)": (
+        # Centene's TX Medicaid brand — unlike Ambetter/Wellcare/Peach State, this product's FHIR
+        # is gated behind the Centene Partner Portal login, NOT the shared public national endpoint.
+        None, None, "https://findaprovider.superiorhealthplan.com", "needs-authorized-api",
+    ),
+    "Texas Health and Human Services Commission (HHSC)": (
+        None, None, "https://opl.tmhp.com", "none",
+    ),
+    "UnitedHealthcare Community Plan": (
+        # Same underlying UHC/Optum adapter as other UnitedHealthcare rows — not a separate
+        # technical product, just a distinct Medicaid brand name.
+        None, "https://transparency-in-coverage.uhc.com/", "https://www.uhc.com/communityplan/find-a-doctor", "public-fhir",
+    ),
+    "WellCare / AllWell (Centene)": (
+        _CENTENE_FHIR, _CENTENE_TIC, "https://www.wellcare.com/en/find-a-doctor", "public-fhir",
+    ),
+    "Baylor Scott & White Health Plan": (
+        # Scott and White Health Plan (dba BSW Health Plan) + subsidiaries. Confirmed Dallas/Tarrant/
+        # Collin/Denton/Ellis/Johnson/Rockwall coverage for both Commercial and MA (CMS H8142) —
+        # Mansfield-area coverage confirmed. Stedi id 88030 confirmed live. Interoperability page
+        # points to an Inovalon DataStream OAuth2 portal (JS-rendered, no disclosed base URL
+        # pre-registration — not live-verified). NOTE: exiting TX Medicaid MCO (Aug 2026) and ACA
+        # marketplace (Dec 2026) per news reports — does not affect Commercial-group/MA lines.
+        None, "https://bswhealthplan.com/transparency", "https://bswhealthplan.com/care", "needs-authorized-api",
+    ),
 }
 
 _BLANK_SOURCE: tuple[None, None, None, None] = (None, None, None, None)
@@ -344,6 +636,12 @@ _ANTHEM_DIR = "https://www.anthem.com/find-a-doctor"
 # real local provider). Each value fully replaces the label-level SOURCES tuple for that one row.
 SOURCE_OVERRIDES: dict[tuple[str, str], tuple[str | None, str | None, str | None, str]] = {
     ("BCBS / Empire (Anthem / Elevance)", "CO-Denver"): (_ANTHEM_FHIR, _ANTHEM_TIC, _ANTHEM_DIR, "authorized-fhir"),
+    # Georgia's Anthem BCBS is also a direct Elevance subsidiary (SEC 10-K Exhibit 21: "Blue Cross
+    # Blue Shield Healthcare Plan of Georgia, Inc." dba Anthem BCBS) — confirmed live 2026-07-06 by
+    # querying the existing ANTHEM_FHIR_* creds directly and finding real GA networks (GA_HMO,
+    # GA_PPO, GA Blue Value HIX, Medicare IND - GA PPO/HMO/SNP, Georgia Medicaid, etc). Same
+    # treatment as CO — no new registration needed, just this catalogue row.
+    ("BCBS / Empire (Anthem / Elevance)", "GA-Atlanta"): (_ANTHEM_FHIR, _ANTHEM_TIC, _ANTHEM_DIR, "authorized-fhir"),
 }
 
 
