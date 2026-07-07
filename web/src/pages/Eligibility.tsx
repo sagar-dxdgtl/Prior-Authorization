@@ -251,20 +251,24 @@ export default function Eligibility() {
               >
                 <Input placeholder="Member/subscriber ID" />
               </Form.Item>
-              <Form.Item
-                name="first_name"
-                label="First Name"
-                rules={[{ required: true, message: 'First name is required' }]}
-              >
-                <Input placeholder="Member first name" />
-              </Form.Item>
-              <Form.Item
-                name="last_name"
-                label="Last Name"
-                rules={[{ required: true, message: 'Last name is required' }]}
-              >
-                <Input placeholder="Member last name" />
-              </Form.Item>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <Form.Item
+                  name="first_name"
+                  label="First Name"
+                  rules={[{ required: true, message: 'First name is required' }]}
+                  style={{ flex: 1 }}
+                >
+                  <Input placeholder="Member first name" />
+                </Form.Item>
+                <Form.Item
+                  name="last_name"
+                  label="Last Name"
+                  rules={[{ required: true, message: 'Last name is required' }]}
+                  style={{ flex: 1 }}
+                >
+                  <Input placeholder="Member last name" />
+                </Form.Item>
+              </div>
               <Form.Item name="dob" label="Date of Birth" rules={[{ required: true, message: 'DOB is required' }]}>
                 <Input placeholder="YYYYMMDD" maxLength={8} />
               </Form.Item>
