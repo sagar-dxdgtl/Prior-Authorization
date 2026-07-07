@@ -1445,3 +1445,178 @@ git commit -m "fix(web): address issues found during end-to-end verification"
 ```
 
 If nothing needed fixing, there's nothing to commit for this task.
+
+---
+
+### Task 8: Add TIN input field + surface TIN-scope corroboration result
+
+**Added after Task 7 shipped.** During verification the user asked to expose billing-TIN input and the
+TIN-scope cross-check result — both already fully supported by the backend (`CheckRequest.tin` in
+`src/network_probe/api/app.py:335,350` → `ProviderQuery.tin` → `TinScopeSource` in
+`src/network_probe/domain/corroboration.py:118-193`, `name = "TIN-scope"`) but never exposed in this
+frontend, even before the restyle. No backend changes are needed — this is purely wiring an existing
+optional request field and rendering an existing response field that Task 7's fix already typed
+(`EligibilityResponse.corroboration: CorroborationSignal[] | null`, confirmed populated from
+`verdict.corroboration` in `src/network_probe/domain/eligibility.py:34`).
+
+**Files:**
+- Modify: `web/src/pages/Eligibility.tsx`
+
+**Interfaces:**
+- Consumes: `EligibilityRequest.tin?: string` (already declared), `EligibilityResponse.corroboration:
+  CorroborationSignal[] | null` and `CorroborationSignal { source: string; result: string; detail:
+  string }` (both already declared, from Task 7's fix) — a `TIN-scope` signal appears in this array
+  only when a `tin` was submitted with the request; `result` is one of `"corroborates"` /
+  `"contradicts"` / `"inconclusive"`.
+- Produces: `tinScopeTone(result: string): 'success' | 'warning' | 'danger' | 'neutral'` — a new helper
+  alongside the existing `networkStatusTone`, reusing the existing `TONE_COLORS` map.
+
+- [ ] **Step 1: Pair NPI + Billing TIN in the Provider section**
+
+In `web/src/pages/Eligibility.tsx`, find this exact block (inside the Provider `<div>` of the form
+grid):
+
+```tsx
+              <Form.Item name="npi" label="NPI" rules={[{ required: true, message: 'NPI is required' }]}>
+                <Input placeholder="10-digit NPI" />
+              </Form.Item>
+              <Form.Item name="base_url" label="Payer Base URL (optional)">
+                <Input placeholder="https://..." />
+              </Form.Item>
+```
+
+Replace it with:
+
+```tsx
+              <div style={{ display: 'flex', gap: 12 }}>
+                <Form.Item
+                  name="npi"
+                  label="NPI"
+                  rules={[{ required: true, message: 'NPI is required' }]}
+                  style={{ flex: 1 }}
+                >
+                  <Input placeholder="10-digit NPI" />
+                </Form.Item>
+                <Form.Item name="tin" label="Billing TIN (optional)" style={{ flex: 1 }}>
+                  <Input placeholder="e.g. 463812940" />
+                </Form.Item>
+              </div>
+              <Form.Item name="base_url" label="Payer Base URL (optional)">
+                <Input placeholder="https://..." />
+              </Form.Item>
+```
+
+This keeps the Provider column at 3 rows (Payer ID, NPI+TIN paired, Base URL), matching the Member
+column's 3 rows (Member ID, First+Last paired, DOB) — same balancing pattern already used elsewhere in
+this form, don't leave Provider at 4 stacked rows.
+
+- [ ] **Step 2: Add the `tinScopeTone` helper**
+
+Find `networkStatusTone`:
+
+```tsx
+function networkStatusTone(status: string): 'success' | 'warning' | 'danger' | 'neutral' {
+  if (status === 'IN_NETWORK') return 'success';
+  if (status === 'OUT_OF_NETWORK') return 'danger';
+  if (status === 'REVIEW') return 'warning';
+  return 'neutral';
+}
+```
+
+Add immediately after it:
+
+```tsx
+
+function tinScopeTone(result: string): 'success' | 'warning' | 'danger' | 'neutral' {
+  if (result === 'corroborates') return 'success';
+  if (result === 'contradicts') return 'danger';
+  return 'neutral';
+}
+```
+
+- [ ] **Step 3: Render the TIN-scope result card**
+
+Find the network-verdict banner block, immediately followed by the Cost-Share Matrix `Card`:
+
+```tsx
+          {result.network_verdict && (
+            <div style={styles.verdictBanner}>
+              <div style={styles.verdictTitle}>
+                {result.network_verdict.status.replace(/_/g, ' ')} · confidence:{' '}
+                {result.network_verdict.confidence}
+              </div>
+              {result.network_verdict.notes && (
+                <div style={styles.verdictBody}>{result.network_verdict.notes}</div>
+              )}
+            </div>
+          )}
+
+          <Card style={{ marginBottom: 16 }} styles={{ body: { padding: 0 } }}>
+            <div style={styles.matrixHeader}>
+```
+
+Insert a new block between them (right after the verdict banner's closing `)}`, right before the
+`<Card style={{ marginBottom: 16 }} styles={{ body: { padding: 0 } }}>` that starts the Cost-Share
+Matrix):
+
+```tsx
+          {(() => {
+            const tinSignal = result.corroboration?.find((s) => s.source === 'TIN-scope') ?? null;
+            const tone = tinSignal ? tinScopeTone(tinSignal.result) : 'neutral';
+            const c = TONE_COLORS[tone];
+            return (
+              <Card style={{ marginBottom: 16 }} styles={{ body: { padding: '14px 18px' } }}>
+                <div style={styles.cardHeaderTitle}>TIN-Scope Check (Group Billing)</div>
+                {tinSignal ? (
+                  <div style={{ marginTop: 8 }}>
+                    <span style={{ ...styles.statPill, color: c.text, background: c.bg }}>
+                      {tinSignal.result.toUpperCase()}
+                    </span>
+                    <div style={{ ...styles.verdictBody, marginTop: 6 }}>{tinSignal.detail}</div>
+                  </div>
+                ) : (
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    No billing TIN evaluated for this case.
+                  </Text>
+                )}
+              </Card>
+            );
+          })()}
+
+```
+
+(Leave the existing Cost-Share Matrix `Card` immediately after this exactly as it is — do not merge
+the two cards into one.)
+
+- [ ] **Step 4: Build**
+
+Run: `cd web && npm run build`
+Expected: succeeds with no errors.
+
+- [ ] **Step 5: Lint**
+
+Run: `cd web && npm run lint`
+Expected: no errors.
+
+- [ ] **Step 6: Live verification**
+
+If Postgres/uvicorn/Playwright MCP tools are available (same pattern as Task 7): start
+`source .venv/bin/activate && uvicorn network_probe.api:app --reload --port 8000` and
+`cd web && npm run dev`, log in, and run two cases:
+1. The README ground-truth case (payer `oscar`, npi `1679766943`, Kyle/Herron, plan
+   `SILVERSIMPLEPCPSAVER`, FL/33409) **without** a Billing TIN — confirm the new card renders "No
+   billing TIN evaluated for this case."
+2. The same case **with** a Billing TIN value entered (any value, e.g. `463812940`) — confirm the card
+   now shows a colored pill (CORROBORATES/CONTRADICTS/INCONCLUSIVE) and a detail line. The exact
+   result/tone depends on what real data the crosswalk/status book has for that NPI+TIN pair — the
+   point of this check is that the card renders the real signal, not a specific verdict.
+
+If the environment can't run the live backend, skip to build/lint only and say so plainly rather than
+skipping silently.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add web/src/pages/Eligibility.tsx
+git commit -m "feat(web): add Billing TIN input and TIN-scope result card"
+```
