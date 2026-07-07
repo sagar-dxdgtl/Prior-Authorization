@@ -48,3 +48,8 @@ body {
 .ant-card {
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
+
+.ant-table-thead > tr > th {
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}

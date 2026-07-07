@@ -120,7 +120,7 @@ function buildMatrix(benefits: Benefit[]): MatrixRow[] {
   return Array.from(map.values());
 }
 
-function networkStatusTone(status: string): 'success' | 'warning' | 'danger' | 'neutral' {
+function networkStatusTone(status: EligibilityResponse['network_status']): 'success' | 'warning' | 'danger' | 'neutral' {
   if (status === 'IN_NETWORK') return 'success';
   if (status === 'OUT_OF_NETWORK') return 'danger';
   if (status === 'REVIEW') return 'warning';
@@ -355,7 +355,7 @@ export default function Eligibility() {
             />
             <StatTile
               label="Network Status"
-              value={result.network_status}
+              value={result.network_status.replace(/_/g, ' ')}
               tone={networkStatusTone(result.network_status)}
             />
             <StatTile

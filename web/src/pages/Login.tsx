@@ -64,7 +64,6 @@ export default function Login() {
       toast.success('Password updated. Please log in with your new password.');
       logout();
       setMode('login');
-      loginForm.resetFields();
       changeForm.resetFields();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Password change failed');
