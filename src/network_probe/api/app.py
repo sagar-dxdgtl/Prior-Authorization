@@ -412,12 +412,15 @@ def eligibility(req: CheckRequest, ctx: RequestContext = Depends(enforce_quota))
 # sync `def` so FastAPI runs the blocking httpx calls in a threadpool
 @app.post("/api/check")
 def check(req: CheckRequest, ctx: RequestContext = Depends(enforce_quota)):
+    # /api/check is network-status-only (no Stedi/subscriber concept) and is exclusively called by
+    # the static UI's provider/plan form (index.html posts the physician's name here, e.g. "Herron") --
+    # so first_name/last_name are the PROVIDER's name here, unlike /api/eligibility's subscriber fields.
     q = ProviderQuery(
         payer=req.payer,
         plan_hint=req.plan or "",
         npi=(req.npi or None),
-        first_name=(req.first_name or None),
-        last_name=(req.last_name or None),
+        provider_first_name=(req.first_name or None),
+        provider_last_name=(req.last_name or None),
         state=(req.state or None),
         zip_code=(req.zip or None),
         tin=(req.tin or None),
