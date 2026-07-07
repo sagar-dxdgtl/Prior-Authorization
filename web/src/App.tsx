@@ -4,6 +4,7 @@ import { ToastContainer } from 'react-toastify';
 import Login from './pages/Login';
 import Eligibility from './pages/Eligibility';
 import { isAuthenticated } from './services/auth';
+import { antdTheme } from './theme/tokens';
 
 function PrivateRoute({ element }: { element: React.ReactNode }) {
   if (!isAuthenticated()) {
@@ -14,16 +15,7 @@ function PrivateRoute({ element }: { element: React.ReactNode }) {
 
 export default function App() {
   return (
-    <ConfigProvider
-      theme={{
-        token: {
-          colorPrimary: '#2c5364',
-          borderRadius: 8,
-          fontFamily:
-            "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
-        },
-      }}
-    >
+    <ConfigProvider theme={antdTheme}>
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
