@@ -127,6 +127,12 @@ function networkStatusTone(status: string): 'success' | 'warning' | 'danger' | '
   return 'neutral';
 }
 
+function tinScopeTone(result: string): 'success' | 'warning' | 'danger' | 'neutral' {
+  if (result === 'corroborates') return 'success';
+  if (result === 'contradicts') return 'danger';
+  return 'neutral';
+}
+
 const TONE_COLORS: Record<string, { text: string; bg: string }> = {
   success: { text: palette.success, bg: palette.successBg },
   warning: { text: palette.warning, bg: palette.warningBg },
@@ -252,9 +258,19 @@ export default function Eligibility() {
               <Form.Item name="payer" label="Payer ID" rules={[{ required: true, message: 'Payer is required' }]}>
                 <Input placeholder="e.g. BCBSTX" />
               </Form.Item>
-              <Form.Item name="npi" label="NPI" rules={[{ required: true, message: 'NPI is required' }]}>
-                <Input placeholder="10-digit NPI" />
-              </Form.Item>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <Form.Item
+                  name="npi"
+                  label="NPI"
+                  rules={[{ required: true, message: 'NPI is required' }]}
+                  style={{ flex: 1 }}
+                >
+                  <Input placeholder="10-digit NPI" />
+                </Form.Item>
+                <Form.Item name="tin" label="Billing TIN (optional)" style={{ flex: 1 }}>
+                  <Input placeholder="e.g. 463812940" />
+                </Form.Item>
+              </div>
               <Form.Item name="base_url" label="Payer Base URL (optional)">
                 <Input placeholder="https://..." />
               </Form.Item>
@@ -385,6 +401,29 @@ export default function Eligibility() {
               )}
             </div>
           )}
+
+          {(() => {
+            const tinSignal = result.corroboration?.find((s) => s.source === 'TIN-scope') ?? null;
+            const tone = tinSignal ? tinScopeTone(tinSignal.result) : 'neutral';
+            const c = TONE_COLORS[tone];
+            return (
+              <Card style={{ marginBottom: 16 }} styles={{ body: { padding: '14px 18px' } }}>
+                <div style={styles.cardHeaderTitle}>TIN-Scope Check (Group Billing)</div>
+                {tinSignal ? (
+                  <div style={{ marginTop: 8 }}>
+                    <span style={{ ...styles.statPill, color: c.text, background: c.bg }}>
+                      {tinSignal.result.toUpperCase()}
+                    </span>
+                    <div style={{ ...styles.verdictBody, marginTop: 6 }}>{tinSignal.detail}</div>
+                  </div>
+                ) : (
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    No billing TIN evaluated for this case.
+                  </Text>
+                )}
+              </Card>
+            );
+          })()}
 
           <Card style={{ marginBottom: 16 }} styles={{ body: { padding: 0 } }}>
             <div style={styles.matrixHeader}>
