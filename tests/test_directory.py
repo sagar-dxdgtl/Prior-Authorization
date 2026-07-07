@@ -143,7 +143,15 @@ def test_db_directory_adapter_attaches_our_npi():
         payer_label="Align Senior Care",
         candidates_fn=lambda pk, ln: by_ln.get(_norm(ln), []),
     )
-    q = ProviderQuery(payer="align", plan_hint="", npi="1234567890", first_name="John", last_name="Schmidt", state="FL", zip_code="33914")
+    q = ProviderQuery(
+        payer="align",
+        plan_hint="",
+        npi="1234567890",
+        provider_first_name="John",
+        provider_last_name="Schmidt",
+        state="FL",
+        zip_code="33914",
+    )
     v = a.check_network(q)
     assert v.status == NetworkStatus.IN_NETWORK
     assert v.matched_provider["npi"] == "1234567890"  # NPI comes from OUR side, not the directory

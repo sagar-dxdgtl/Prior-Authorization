@@ -38,7 +38,7 @@ class DbDirectoryAdapter(PayerAdapter):
             )
 
     def check_network(self, q: ProviderQuery) -> NetworkVerdict:
-        if not q.last_name:
+        if not q.provider_last_name:
             return NetworkVerdict(
                 status=NetworkStatus.UNKNOWN,
                 matched_provider=None,
@@ -47,12 +47,12 @@ class DbDirectoryAdapter(PayerAdapter):
                 confidence="low",
                 notes="A provider name is required to match a PDF-only directory (it carries no NPIs).",
             )
-        rows = self._candidates(q.last_name)
+        rows = self._candidates(q.provider_last_name)
         status, matched, conf, note = match_directory(
             rows,
             payer_label=self.payer_label,
-            last_name=q.last_name,
-            first_name=q.first_name,
+            last_name=q.provider_last_name,
+            first_name=q.provider_first_name,
             state=q.state,
             zip_code=q.zip_code,
         )

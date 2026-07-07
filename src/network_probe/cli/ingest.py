@@ -35,7 +35,8 @@ def verify_report(path: str, client: CachedClient) -> dict:
         return {**out, "status": "ERROR", "detail": str(exc)}
     return {
         **out,
-        "provider": (v.matched_provider or {}).get("name") or f"{q.first_name or ''} {q.last_name or ''}".strip(),
+        "provider": (v.matched_provider or {}).get("name")
+        or f"{q.provider_first_name or ''} {q.provider_last_name or ''}".strip(),
         "status": v.status.value,
         "confidence": v.confidence,
         "why": v.notes,

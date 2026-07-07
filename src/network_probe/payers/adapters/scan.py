@@ -124,7 +124,7 @@ class ScanDirectoryAdapter(PayerAdapter):
 
     def check_network(self, q: ProviderQuery) -> NetworkVerdict:
         prac_url = f"{self.base_url}/Practitioner?identifier={q.npi}"
-        if not q.npi and not q.last_name:
+        if not q.npi and not q.provider_last_name:
             return NetworkVerdict(
                 status=NetworkStatus.UNKNOWN,
                 matched_provider=None,
@@ -134,7 +134,7 @@ class ScanDirectoryAdapter(PayerAdapter):
                 notes="An NPI or provider name is required to query SCAN's provider directory.",
             )
 
-        found = self._find_practitioner(q.npi, q.first_name, q.last_name)
+        found = self._find_practitioner(q.npi, q.provider_first_name, q.provider_last_name)
         if not found:
             return NetworkVerdict(
                 status=NetworkStatus.OUT_OF_NETWORK,

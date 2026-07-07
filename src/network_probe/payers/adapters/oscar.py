@@ -305,7 +305,7 @@ class OscarAdapter(PayerAdapter):
             urls.append(resolved["source_url"])
 
         # 2) we need a last name to search (NPI search is unsupported by Oscar)
-        if not q.last_name:
+        if not q.provider_last_name:
             return NetworkVerdict(
                 status=NetworkStatus.UNKNOWN,
                 matched_provider=None,
@@ -315,21 +315,21 @@ class OscarAdapter(PayerAdapter):
                 notes="Oscar directory supports name search only (no NPI lookup); a last name is required.",
             )
 
-        hits = self._autocomplete(nid, q.last_name, state)
+        hits = self._autocomplete(nid, q.provider_last_name, state)
         if hits:
             urls.append(hits[0]["_source_url"])
         else:
             urls.append(
                 f"{BASE}/search/autocomplete/multientity/?network_id={nid}"
-                f"&categories={PROVIDER_CATEGORY}&query={quote(q.last_name)}&state={state}&year={self.year}"
+                f"&categories={PROVIDER_CATEGORY}&query={quote(q.provider_last_name)}&state={state}&year={self.year}"
             )
 
         # 3) match by NPI (exact); fall back to strict first+last name
         match = None
         if q.npi:
             match = next((h for h in hits if (h.get("npi") or "") == q.npi), None)
-        if match is None and q.first_name:
-            fn, ln = q.first_name.strip().lower(), q.last_name.strip().lower()
+        if match is None and q.provider_first_name:
+            fn, ln = q.provider_first_name.strip().lower(), q.provider_last_name.strip().lower()
             match = next(
                 (
                     h
@@ -367,7 +367,7 @@ class OscarAdapter(PayerAdapter):
                 source_url="; ".join(urls),
                 confidence="high" if hits else "medium",
                 notes=(
-                    f"Searched network {nid} for last name {q.last_name!r}: {len(hits)} provider(s) "
+                    f"Searched network {nid} for last name {q.provider_last_name!r}: {len(hits)} provider(s) "
                     f"returned (below the {AUTOCOMPLETE_CAP}-result cap), none matching the target "
                     f"{'NPI ' + q.npi if q.npi else 'name'}. Provider is not in this network's directory."
                 ),
@@ -379,7 +379,7 @@ class OscarAdapter(PayerAdapter):
             source_url="; ".join(urls),
             confidence="low",
             notes=(
-                f"Search for last name {q.last_name!r} hit the {AUTOCOMPLETE_CAP}-result cap and the "
+                f"Search for last name {q.provider_last_name!r} hit the {AUTOCOMPLETE_CAP}-result cap and the "
                 f"target was not among them. Cannot rule out that the provider is hidden behind the "
                 f"cap — returning UNKNOWN rather than a possibly-wrong OON. Narrow by first name."
             ),

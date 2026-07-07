@@ -64,7 +64,9 @@ def test_default_crosswalk_has_seeded_uhc_uvc():
 
 def test_tinscope_corroborates_uhc_fradkin_via_seed():
     # IN directory verdict + billing TIN 933510922 matched against the seeded crosswalk -> corroborates
-    q = ProviderQuery(payer="uhc", plan_hint="Bronze Essential", npi="1972603934", last_name="Fradkin", tin="933510922")
+    q = ProviderQuery(
+        payer="uhc", plan_hint="Bronze Essential", npi="1972603934", provider_last_name="Fradkin", tin="933510922"
+    )
     v = NetworkVerdict(
         NetworkStatus.IN_NETWORK,
         {"npi": "1972603934", "name": "Kevin Fradkin"},

@@ -23,13 +23,13 @@ def _devoted_in_verdict():
 def test_seed_file_exists_and_has_rodriguez():
     assert SEED.exists(), "seed override file missing"
     store = OverrideStore(path=SEED)
-    q = ProviderQuery(payer="devoted", plan_hint="PPO", npi="1629339312", last_name="Li")
+    q = ProviderQuery(payer="devoted", plan_hint="PPO", npi="1629339312", provider_last_name="Li")
     assert store.lookup(q) is not None
 
 
 def test_seed_override_flips_rodriguez_to_oon():
     store = OverrideStore(path=SEED)
-    q = ProviderQuery(payer="devoted", plan_hint="PPO", npi="1629339312", last_name="Li")
+    q = ProviderQuery(payer="devoted", plan_hint="PPO", npi="1629339312", provider_last_name="Li")
     out = finalize(_devoted_in_verdict(), q, override_store=store)
     assert out.status == NetworkStatus.OUT_OF_NETWORK and out.confidence == "high"
     assert "availity" in out.notes.lower()

@@ -66,7 +66,7 @@ def test_report_to_query_uses_report_name_not_nppes():
     p = parse_report(SYNTH)
     q = report_to_query(p, client=None)  # name comes from the report → NPPES not called
     assert q.payer == "oscar" and q.npi == "1679766943"
-    assert q.last_name == "Herron" and q.state == "FL" and q.zip_code == "33409"
+    assert q.provider_last_name == "Herron" and q.state == "FL" and q.zip_code == "33409"
     assert "SILVERSIMPLEPCPSAVER" in q.plan_hint
 
 

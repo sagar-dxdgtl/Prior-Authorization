@@ -96,7 +96,9 @@ def test_check_from_report(monkeypatch, auth_header):
     monkeypatch.setattr(
         api_mod,
         "report_to_query",
-        lambda p, client=None: ProviderQuery(payer="oscar", plan_hint="x", npi="1679766943", last_name="Herron"),
+        lambda p, client=None: ProviderQuery(
+            payer="oscar", plan_hint="x", npi="1679766943", provider_last_name="Herron"
+        ),
     )
     monkeypatch.setattr(api_mod, "check_network", lambda q, **kw: fake)
     r = client.post(

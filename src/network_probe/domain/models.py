@@ -16,8 +16,11 @@ class ProviderQuery:
     payer: str
     plan_hint: str  # e.g. "BASE SILVER CSR 150" / "SILVERSIMPLEPCPSAVER" / network name
     npi: str | None = None
-    first_name: str | None = None
-    last_name: str | None = None
+    first_name: str | None = None  # subscriber/patient first name (Stedi 270/271 + audit) -- NOT the provider's
+    last_name: str | None = None  # subscriber/patient last name -- see first_name
+    provider_first_name: str | None = None  # the provider's first name (name-based directory search /
+    #                                          NPPES identity check) -- NOT the patient's
+    provider_last_name: str | None = None  # the provider's last name -- see provider_first_name
     state: str | None = None
     zip_code: str | None = None
     tin: str | None = None  # provider's billing TIN for the encounter — a known pre-auth input

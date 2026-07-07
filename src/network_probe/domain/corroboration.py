@@ -100,7 +100,9 @@ class NppesSource:
             return Signal(self.name, "contradicts", f"NPPES lists NPI {q.npi} as inactive (status {status}).")
 
         # identity mismatch: NPPES last name not present in the directory's matched name (or query)
-        dir_tokens = _name_tokens((verdict.matched_provider or {}).get("name", "")) or _name_tokens(q.last_name or "")
+        dir_tokens = _name_tokens((verdict.matched_provider or {}).get("name", "")) or _name_tokens(
+            q.provider_last_name or ""
+        )
         if nppes_last and dir_tokens and nppes_last not in dir_tokens:
             return Signal(
                 self.name,
@@ -256,11 +258,19 @@ class StediSource:
         payer_id = self.PAYER_IDS.get(q.payer)
         if not payer_id:
             return Signal(self.name, "inconclusive", f"No Stedi payer id mapped for {q.payer!r}.")
-        if not (q.member_id or q.dob or q.last_name):
+        if not (q.member_id or q.dob or q.last_name or q.provider_last_name):
             return Signal(self.name, "inconclusive", "Stedi needs member id / DOB / last name.")
         body = {
             "tradingPartnerServiceId": payer_id,
-            "provider": {k: v for k, v in {"npi": q.npi, "lastName": q.last_name}.items() if v},
+            "provider": {
+                k: v
+                for k, v in {
+                    "npi": q.npi,
+                    "firstName": q.provider_first_name,
+                    "lastName": q.provider_last_name,
+                }.items()
+                if v
+            },
             "subscriber": {
                 k: v
                 for k, v in {

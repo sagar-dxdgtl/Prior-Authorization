@@ -114,7 +114,7 @@ def _adapter(handler=_handler) -> ScanDirectoryAdapter:
 
 
 def _q(npi=None, state=None, last=None):
-    return ProviderQuery(payer="scan", plan_hint="", npi=npi, last_name=last, state=state)
+    return ProviderQuery(payer="scan", plan_hint="", npi=npi, provider_last_name=last, state=state)
 
 
 def test_present_provider_is_in_network():

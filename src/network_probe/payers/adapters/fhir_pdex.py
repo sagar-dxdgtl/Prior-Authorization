@@ -233,7 +233,7 @@ class FhirPdexAdapter(PayerAdapter):
                 notes="An NPI is required to query a FHIR Provider Directory (identifier search).",
             )
 
-        found = self._find_practitioner(q.npi, q.first_name, q.last_name)
+        found = self._find_practitioner(q.npi, q.provider_first_name, q.provider_last_name)
         if not found:
             return NetworkVerdict(
                 status=NetworkStatus.OUT_OF_NETWORK,

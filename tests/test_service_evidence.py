@@ -37,7 +37,7 @@ def _patch(monkeypatch):
 
 def test_evidence_has_raw_directory_snapshot(monkeypatch):
     _patch(monkeypatch)
-    q = ProviderQuery(payer="oscar", plan_hint="x", npi="1679766943", last_name="Herron")
+    q = ProviderQuery(payer="oscar", plan_hint="x", npi="1679766943", provider_last_name="Herron")
     v = svc.check_network(q)
     assert v.evidence["payer_directory"]["status"] == "IN_NETWORK"
     assert v.evidence["payer_directory"]["matched_provider"]["npi"] == "1679766943"
@@ -45,7 +45,7 @@ def test_evidence_has_raw_directory_snapshot(monkeypatch):
 
 def test_evidence_has_signals(monkeypatch):
     _patch(monkeypatch)
-    q = ProviderQuery(payer="oscar", plan_hint="x", npi="1679766943", last_name="Herron")
+    q = ProviderQuery(payer="oscar", plan_hint="x", npi="1679766943", provider_last_name="Herron")
     v = svc.check_network(q)
     sources = {s["source"] for s in v.evidence["signals"]}
     assert "Stedi" in sources

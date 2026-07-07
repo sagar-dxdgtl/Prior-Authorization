@@ -80,7 +80,7 @@ def _query(npi: str) -> ProviderQuery:
         payer="oscar",
         plan_hint=PLAN_HINT,
         npi=npi,
-        last_name="Herron",
+        provider_last_name="Herron",
         state="FL",
         zip_code="33409",
     )

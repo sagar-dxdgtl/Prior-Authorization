@@ -31,7 +31,7 @@ def test_lookup_is_payer_and_npi_scoped():
 
 
 def test_tinscope_reports_verified_status_even_when_oon():
-    q = ProviderQuery(payer="cigna-fhir", plan_hint="", npi="1184610453", last_name="Kiang", tin="463812940")
+    q = ProviderQuery(payer="cigna-fhir", plan_hint="", npi="1184610453", provider_last_name="Kiang", tin="463812940")
     sig = TinScopeSource().check(q, _oon_verdict())
     assert sig.result == "corroborates"
     assert "Cigna Network Status portal" in sig.detail

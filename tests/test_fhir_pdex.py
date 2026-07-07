@@ -57,7 +57,7 @@ def _offline() -> FhirPdexAdapter:
 
 
 def _q(npi, plan):
-    return ProviderQuery(payer="humana-fhir", plan_hint=plan, npi=npi, last_name="Herron")
+    return ProviderQuery(payer="humana-fhir", plan_hint=plan, npi=npi, provider_last_name="Herron")
 
 
 # ---- offline ----------------------------------------------------------------
@@ -162,7 +162,7 @@ def _refserver() -> FhirPdexAdapter:
 def test_name_fallback_with_org_resolution_in_network():
     """identifier search 400s → name fallback → NPI match → network name via Organization read."""
     v = _refserver().check_network(
-        ProviderQuery(payer="cigna-fhir", plan_hint="Open Access Plus", npi="1234567893", last_name="Smith")
+        ProviderQuery(payer="cigna-fhir", plan_hint="Open Access Plus", npi="1234567893", provider_last_name="Smith")
     )
     assert v.status == NetworkStatus.IN_NETWORK
     assert v.matched_provider["matched_network"] == "Open Access Plus"
@@ -170,7 +170,7 @@ def test_name_fallback_with_org_resolution_in_network():
 
 def test_name_fallback_npi_mismatch_is_oon():
     v = _refserver().check_network(
-        ProviderQuery(payer="cigna-fhir", plan_hint="X", npi="9999999999", last_name="Smith")
+        ProviderQuery(payer="cigna-fhir", plan_hint="X", npi="9999999999", provider_last_name="Smith")
     )
     assert v.status == NetworkStatus.OUT_OF_NETWORK
 
@@ -236,7 +236,9 @@ def test_uhc_bronze_essential_resolves_in_network_via_alias():
         client=CachedClient(cache_dir=None, delay_seconds=0, client=mock),
     )
     v = a.check_network(
-        ProviderQuery(payer="uhc", plan_hint="Bronze Essential", npi="1972603934", last_name="Fradkin", state="TX")
+        ProviderQuery(
+            payer="uhc", plan_hint="Bronze Essential", npi="1972603934", provider_last_name="Fradkin", state="TX"
+        )
     )
     assert v.status == NetworkStatus.IN_NETWORK
     assert v.matched_provider["matched_network"] == "TX Individual Exchange Benefit Plan"
@@ -271,7 +273,7 @@ def test_uhc_optum_public_fhir_live():
     """UnitedHealthcare via its public Optum FHIR endpoint (no login). Org-resolved networks."""
     a = FhirPdexAdapter(payer_name="uhc", client=CachedClient(cache_dir=None, delay_seconds=0.3))
     try:
-        v = a.check_network(ProviderQuery(payer="uhc", plan_hint="", npi="1972603934", last_name="Fradkin"))
+        v = a.check_network(ProviderQuery(payer="uhc", plan_hint="", npi="1972603934", provider_last_name="Fradkin"))
     except httpx.HTTPError as exc:
         pytest.skip(f"live UHC FHIR unreachable: {exc}")
     assert v.status == NetworkStatus.IN_NETWORK, v.notes

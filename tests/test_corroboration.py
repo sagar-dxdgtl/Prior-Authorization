@@ -38,7 +38,7 @@ def _verdict(status, conf="high", name="Jing Li, MD", npi="1629339312"):
 
 
 def _q(npi="1629339312", last="Li", state="CO"):
-    return ProviderQuery(payer="devoted", plan_hint="PPO", npi=npi, last_name=last, state=state)
+    return ProviderQuery(payer="devoted", plan_hint="PPO", npi=npi, provider_last_name=last, state=state)
 
 
 class _FakeSource:
@@ -168,7 +168,9 @@ def test_tin_matches_corroborates():
 
 def test_tin_shown_when_provider_not_in_directory():
     # OON provider + a billing TIN with NO verified record + no crosswalk -> honestly inconclusive
-    q = ProviderQuery(payer="humana-fhir", plan_hint="", npi="1336160274", last_name="Friedman", tin="999000111")
+    q = ProviderQuery(
+        payer="humana-fhir", plan_hint="", npi="1336160274", provider_last_name="Friedman", tin="999000111"
+    )
     s = TinScopeSource().check(q, _verdict(NetworkStatus.OUT_OF_NETWORK))
     assert s is not None and s.result == "inconclusive" and "999000111" in s.detail
 
@@ -176,7 +178,7 @@ def test_tin_shown_when_provider_not_in_directory():
 def test_verified_tin_status_corroborates_oon_for_cigna_kiang():
     # Cigna's TIN portal confirms NPI 1184610453 under TIN 463812940 (Wazni PLLC) is OON;
     # with the directory also OON this is a real corroborating group-level check, not a guess.
-    q = ProviderQuery(payer="cigna-fhir", plan_hint="", npi="1184610453", last_name="Kiang", tin="463812940")
+    q = ProviderQuery(payer="cigna-fhir", plan_hint="", npi="1184610453", provider_last_name="Kiang", tin="463812940")
     s = TinScopeSource().check(q, _verdict(NetworkStatus.OUT_OF_NETWORK))
     assert s.result == "corroborates"
     assert "463812940" in s.detail and "Wazni" in s.detail and "OUT-OF-NETWORK" in s.detail
@@ -185,7 +187,7 @@ def test_verified_tin_status_corroborates_oon_for_cigna_kiang():
 def test_verified_tin_status_contradicts_when_directory_says_in():
     # If the directory had listed the provider as IN but the billing TIN is verified OON,
     # that's the "individual listed, billing TIN OON" catch -> contradiction -> finalize REVIEW.
-    q = ProviderQuery(payer="cigna-fhir", plan_hint="", npi="1184610453", last_name="Kiang", tin="463812940")
+    q = ProviderQuery(payer="cigna-fhir", plan_hint="", npi="1184610453", provider_last_name="Kiang", tin="463812940")
     s = TinScopeSource().check(q, _verdict(NetworkStatus.IN_NETWORK, name="William Kiang", npi="1184610453"))
     assert s.result == "contradicts"
     out = finalize(
@@ -280,7 +282,9 @@ def test_stedi_check_corroborates(monkeypatch):
 
     cc = CachedClient(cache_dir=None, delay_seconds=0, client=httpx.Client(transport=httpx.MockTransport(handler)))
     s = StediSource(api_key="test_x", client=cc)
-    q = ProviderQuery(payer="oscar", plan_hint="x", npi="1", last_name="Herron", member_id="M1", dob="01/02/1970")
+    q = ProviderQuery(
+        payer="oscar", plan_hint="x", npi="1", provider_last_name="Herron", member_id="M1", dob="01/02/1970"
+    )
     assert s.check(q, _verdict(NetworkStatus.IN_NETWORK)).result == "corroborates"
 
 
@@ -332,7 +336,7 @@ def test_finalize_accepts_precomputed_signals_without_rerunning():
 @pytest.mark.live
 def test_nppes_live_active_provider():
     s = NppesSource(client=CachedClient(cache_dir=None, delay_seconds=0.3)).check(
-        ProviderQuery(payer="oscar", plan_hint="x", npi="1679766943", last_name="Herron"),
+        ProviderQuery(payer="oscar", plan_hint="x", npi="1679766943", provider_last_name="Herron"),
         _verdict(NetworkStatus.IN_NETWORK, name="Kyle A Herron, MD", npi="1679766943"),
     )
     if s.result == "inconclusive":

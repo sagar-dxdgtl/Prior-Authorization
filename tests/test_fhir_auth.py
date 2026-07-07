@@ -165,7 +165,7 @@ def test_missing_access_token_raises():
 def test_in_network_through_authed_adapter():
     counter = {"n": 0}
     a = _adapter(token_counter=counter)
-    v = a.check_network(ProviderQuery(payer="anthem", plan_hint="Blue Priority", npi=NPI, last_name="Anthem"))
+    v = a.check_network(ProviderQuery(payer="anthem", plan_hint="Blue Priority", npi=NPI, provider_last_name="Anthem"))
     assert v.status == NetworkStatus.IN_NETWORK
     assert v.matched_provider["matched_network"] == "Blue Priority PPO"
     assert counter["n"] == 1  # one token served, then reused across Practitioner + PractitionerRole
@@ -181,7 +181,7 @@ def test_401_triggers_one_refresh_and_succeeds():
     # FHIR server rejects the first token (tok-1) → auth flow refreshes to tok-2 → request succeeds.
     counter = {"n": 0}
     a = _adapter(token_counter=counter, reject_tokens={"tok-1"})
-    v = a.check_network(ProviderQuery(payer="anthem", plan_hint="Blue Priority", npi=NPI, last_name="Anthem"))
+    v = a.check_network(ProviderQuery(payer="anthem", plan_hint="Blue Priority", npi=NPI, provider_last_name="Anthem"))
     assert v.status == NetworkStatus.IN_NETWORK
     assert counter["n"] >= 2  # refreshed at least once after the 401
 
@@ -209,7 +209,7 @@ def test_anthem_live_practitioner_lookup():
     # A provider known to be present in the Elevance directory (verified via discovery probe).
     live_npi = os.environ.get("ANTHEM_LIVE_NPI", "1023054806")  # 'John D Smith, MD' (GA Medicaid networks)
     try:
-        v = a.check_network(ProviderQuery(payer="anthem", plan_hint="", npi=live_npi, last_name="Smith"))
+        v = a.check_network(ProviderQuery(payer="anthem", plan_hint="", npi=live_npi, provider_last_name="Smith"))
     except httpx.HTTPError as exc:
         pytest.skip(f"live Anthem FHIR unreachable: {exc}")
     assert v.status == NetworkStatus.IN_NETWORK, v.notes

@@ -79,7 +79,11 @@ class StediEligibilityClient:
             "tradingPartnerServiceId": self.payer_id,
             "provider": {
                 k: v
-                for k, v in {"npi": q.npi, "firstName": q.first_name, "lastName": q.last_name}.items()
+                for k, v in {
+                    "npi": q.npi,
+                    "firstName": q.provider_first_name,
+                    "lastName": q.provider_last_name,
+                }.items()
                 if v
             },
             "subscriber": {

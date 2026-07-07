@@ -64,7 +64,9 @@ def _offline_adapter() -> DevotedAdapter:
 
 
 def _query(npi: str) -> ProviderQuery:
-    return ProviderQuery(payer="devoted", plan_hint="HMO", npi=npi, last_name="Herron", state="FL", zip_code="33409")
+    return ProviderQuery(
+        payer="devoted", plan_hint="HMO", npi=npi, provider_last_name="Herron", state="FL", zip_code="33409"
+    )
 
 
 # ---- offline tests ----------------------------------------------------------
@@ -101,7 +103,7 @@ def test_jessica_out_of_network():
 
 def test_missing_npi_is_unknown():
     a = _offline_adapter()
-    q = ProviderQuery(payer="devoted", plan_hint="HMO", last_name="Herron", state="FL")
+    q = ProviderQuery(payer="devoted", plan_hint="HMO", provider_last_name="Herron", state="FL")
     assert a.check_network(q).status == NetworkStatus.UNKNOWN
 
 

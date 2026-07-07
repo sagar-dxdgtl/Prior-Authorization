@@ -46,7 +46,11 @@ def test_provider_body_includes_first_name():
 
     client = CachedClient(cache_dir=None, delay_seconds=0, client=httpx.Client(transport=httpx.MockTransport(handler)))
     c = StediEligibilityClient(api_key="k", client=client, payer_id="CIGNA")
-    c.check(ProviderQuery(payer="cigna", plan_hint="", npi="1629339312", first_name="Jing", last_name="Li"))
+    c.check(
+        ProviderQuery(
+            payer="cigna", plan_hint="", npi="1629339312", provider_first_name="Jing", provider_last_name="Li"
+        )
+    )
     assert captured["body"]["provider"]["firstName"] == "Jing"
     assert captured["body"]["provider"]["lastName"] == "Li"
     assert captured["body"]["provider"]["npi"] == "1629339312"
