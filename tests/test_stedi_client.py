@@ -1,3 +1,5 @@
+import json
+
 import httpx
 
 from network_probe.core._http import CachedClient
@@ -31,6 +33,23 @@ def test_no_payer_id_returns_unknown():
     c = StediEligibilityClient(api_key="k", payer_id=None)
     res = c.check(ProviderQuery(payer="mystery", plan_hint="", npi="1"))
     assert res.coverage_active is None
+
+
+def test_provider_body_includes_first_name():
+    # Some payers reject a 270 with only NPI + provider lastName (AAA-44 "Provider Not Found") --
+    # the provider's firstName must be sent too, same as the subscriber block already does.
+    captured = {}
+
+    def handler(req):
+        captured["body"] = json.loads(req.content)
+        return httpx.Response(200, json={"benefitsInformation": []})
+
+    client = CachedClient(cache_dir=None, delay_seconds=0, client=httpx.Client(transport=httpx.MockTransport(handler)))
+    c = StediEligibilityClient(api_key="k", client=client, payer_id="CIGNA")
+    c.check(ProviderQuery(payer="cigna", plan_hint="", npi="1629339312", first_name="Jing", last_name="Li"))
+    assert captured["body"]["provider"]["firstName"] == "Jing"
+    assert captured["body"]["provider"]["lastName"] == "Li"
+    assert captured["body"]["provider"]["npi"] == "1629339312"
 
 
 def test_dob_normalization():

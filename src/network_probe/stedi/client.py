@@ -77,7 +77,11 @@ class StediEligibilityClient:
             return _unknown(f"no Stedi payer id for {q.payer!r}")
         body = {
             "tradingPartnerServiceId": self.payer_id,
-            "provider": {k: v for k, v in {"npi": q.npi, "lastName": q.last_name}.items() if v},
+            "provider": {
+                k: v
+                for k, v in {"npi": q.npi, "firstName": q.first_name, "lastName": q.last_name}.items()
+                if v
+            },
             "subscriber": {
                 k: v
                 for k, v in {
