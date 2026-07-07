@@ -32,6 +32,7 @@ export default function Login() {
   const navigate = useNavigate();
   const [mode, setMode] = useState<ScreenMode>('login');
   const [loading, setLoading] = useState(false);
+  const [pendingPassword, setPendingPassword] = useState('');
   const [loginForm] = Form.useForm<LoginFormValues>();
   const [changeForm] = Form.useForm<ChangePassFormValues>();
 
@@ -41,7 +42,10 @@ export default function Login() {
       const result = await login(values.username, values.password);
       if (result.must_change_password) {
         toast.info('Please set a new password before continuing.');
-        changeForm.setFieldsValue({ current_password: values.password });
+        // changeForm's <Form> isn't mounted yet while mode === 'login', so an imperative
+        // setFieldsValue() here would silently no-op; pass the value in as initialValues
+        // once the change-password Form mounts instead.
+        setPendingPassword(values.password);
         setMode('change_password');
       } else {
         navigate('/');
@@ -108,6 +112,7 @@ export default function Login() {
                 Enter your credentials to continue
               </Text>
               <Form
+                key="login-form"
                 form={loginForm}
                 layout="vertical"
                 onFinish={handleLogin}
@@ -143,11 +148,13 @@ export default function Login() {
                 Your account requires a password change before you can continue.
               </Text>
               <Form
+                key="change-password-form"
                 form={changeForm}
                 layout="vertical"
                 onFinish={handleChangePassword}
                 style={{ marginTop: 24 }}
                 requiredMark={false}
+                initialValues={{ current_password: pendingPassword }}
               >
                 <Form.Item
                   name="current_password"

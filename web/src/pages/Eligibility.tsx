@@ -35,6 +35,23 @@ interface Benefit {
   remaining: number | null;
 }
 
+interface CorroborationSignal {
+  source: string;
+  result: string;
+  detail: string;
+}
+
+interface NetworkVerdict {
+  status: string;
+  matched_provider: Record<string, unknown> | null;
+  plan_or_network_checked: string;
+  source_url: string;
+  confidence: string;
+  notes: string;
+  corroboration: CorroborationSignal[] | null;
+  evidence: Record<string, unknown> | null;
+}
+
 interface EligibilityResponse {
   request_id: string;
   coverage_active: boolean;
@@ -46,8 +63,8 @@ interface EligibilityResponse {
   prior_auth_required: boolean | null;
   referral_required: boolean | null;
   cob: boolean | null;
-  network_verdict: string | null;
-  corroboration: string | null;
+  network_verdict: NetworkVerdict | null;
+  corroboration: CorroborationSignal[] | null;
 }
 
 interface MatrixRow {
@@ -359,8 +376,13 @@ export default function Eligibility() {
 
           {result.network_verdict && (
             <div style={styles.verdictBanner}>
-              <div style={styles.verdictTitle}>{result.network_verdict}</div>
-              {result.corroboration && <div style={styles.verdictBody}>{result.corroboration}</div>}
+              <div style={styles.verdictTitle}>
+                {result.network_verdict.status.replace(/_/g, ' ')} · confidence:{' '}
+                {result.network_verdict.confidence}
+              </div>
+              {result.network_verdict.notes && (
+                <div style={styles.verdictBody}>{result.network_verdict.notes}</div>
+              )}
             </div>
           )}
 
