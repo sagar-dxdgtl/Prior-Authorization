@@ -1,24 +1,12 @@
 import { useState } from 'react';
-import {
-  Form,
-  Input,
-  Button,
-  Table,
-  Tag,
-  Space,
-  Typography,
-  Divider,
-  Row,
-  Col,
-  Card,
-  Alert,
-} from 'antd';
+import { Form, Input, Button, Table, Card, Typography, Divider } from 'antd';
 import type { TableColumnsType } from 'antd';
-import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { apiFetch, logout, getUser } from '../services/auth';
+import { apiFetch } from '../services/auth';
+import AppShell from '../components/AppShell';
+import { palette } from '../theme/tokens';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 interface EligibilityRequest {
   payer: string;
@@ -115,11 +103,36 @@ function buildMatrix(benefits: Benefit[]): MatrixRow[] {
   return Array.from(map.values());
 }
 
-function networkStatusColor(status: string): string {
-  if (status === 'IN') return 'green';
-  if (status === 'OON') return 'red';
-  if (status === 'REVIEW') return 'orange';
-  return 'default';
+function networkStatusTone(status: string): 'success' | 'warning' | 'danger' | 'neutral' {
+  if (status === 'IN') return 'success';
+  if (status === 'OON') return 'danger';
+  if (status === 'REVIEW') return 'warning';
+  return 'neutral';
+}
+
+const TONE_COLORS: Record<string, { text: string; bg: string }> = {
+  success: { text: palette.success, bg: palette.successBg },
+  warning: { text: palette.warning, bg: palette.warningBg },
+  danger: { text: palette.danger, bg: palette.dangerBg },
+  neutral: { text: palette.slate500, bg: palette.slate100 },
+};
+
+function StatTile({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: 'success' | 'warning' | 'danger' | 'neutral';
+}) {
+  const c = TONE_COLORS[tone];
+  return (
+    <div style={styles.statTile}>
+      <div style={styles.statLabel}>{label}</div>
+      <span style={{ ...styles.statPill, color: c.text, background: c.bg }}>{value}</span>
+    </div>
+  );
 }
 
 function CostCell({ value, met, remaining }: { value: string; met: number | null; remaining: number | null }) {
@@ -127,12 +140,12 @@ function CostCell({ value, met, remaining }: { value: string; met: number | null
     <div>
       <div style={{ fontWeight: 600 }}>{value}</div>
       {met != null && (
-        <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>
+        <div style={{ fontSize: 11, color: palette.slate400, marginTop: 2 }}>
           Met: ${met.toLocaleString()}
         </div>
       )}
       {remaining != null && (
-        <div style={{ fontSize: 11, color: '#888' }}>
+        <div style={{ fontSize: 11, color: palette.slate400 }}>
           Rem: ${remaining.toLocaleString()}
         </div>
       )}
@@ -187,16 +200,9 @@ const matrixColumns: TableColumnsType<MatrixRow> = [
 ];
 
 export default function Eligibility() {
-  const navigate = useNavigate();
-  const user = getUser();
   const [form] = Form.useForm<EligibilityRequest>();
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<EligibilityResponse | null>(null);
-
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
 
   const handleSubmit = async (values: EligibilityRequest) => {
     setLoading(true);
@@ -219,276 +225,296 @@ export default function Eligibility() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f5f7fa' }}>
-      {/* Top nav */}
-      <div style={navStyle}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 20 }}>⚕</span>
-          <Title level={4} style={{ margin: 0, color: '#fff' }}>
-            PriorAuth
-          </Title>
-          <Tag color="blue" style={{ marginLeft: 8 }}>
-            Eligibility
-          </Tag>
-        </div>
-        <Space>
-          {user && (
-            <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13 }}>
-              {user.username}
-              {user.role ? ` · ${user.role}` : ''}
-            </Text>
-          )}
-          <Button size="small" onClick={handleLogout} style={{ color: '#fff', borderColor: 'rgba(255,255,255,0.4)' }}>
-            Sign out
-          </Button>
-        </Space>
-      </div>
-
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px' }}>
-        {/* Request form */}
-        <Card
-          title={<Title level={5} style={{ margin: 0 }}>Member Eligibility Check</Title>}
-          style={{ marginBottom: 24, borderRadius: 12 }}
-        >
-          <Form
-            form={form}
-            layout="vertical"
-            onFinish={handleSubmit}
-            requiredMark={false}
-          >
-            <Row gutter={[16, 0]}>
-              <Col span={8}>
-                <Form.Item
-                  name="payer"
-                  label="Payer ID"
-                  rules={[{ required: true, message: 'Payer is required' }]}
-                >
-                  <Input placeholder="e.g. BCBSTX" />
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item
-                  name="npi"
-                  label="NPI"
-                  rules={[{ required: true, message: 'NPI is required' }]}
-                >
-                  <Input placeholder="10-digit NPI" />
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item
-                  name="member_id"
-                  label="Member ID"
-                  rules={[{ required: true, message: 'Member ID is required' }]}
-                >
-                  <Input placeholder="Member/subscriber ID" />
-                </Form.Item>
-              </Col>
-            </Row>
-            <Row gutter={[16, 0]}>
-              <Col span={8}>
-                <Form.Item
-                  name="first_name"
-                  label="First Name"
-                  rules={[{ required: true, message: 'First name is required' }]}
-                >
-                  <Input placeholder="Member first name" />
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item
-                  name="last_name"
-                  label="Last Name"
-                  rules={[{ required: true, message: 'Last name is required' }]}
-                >
-                  <Input placeholder="Member last name" />
-                </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item
-                  name="dob"
-                  label="Date of Birth"
-                  rules={[{ required: true, message: 'DOB is required' }]}
-                >
-                  <Input placeholder="YYYYMMDD" maxLength={8} />
-                </Form.Item>
-              </Col>
-            </Row>
-            <Row gutter={[16, 0]}>
-              <Col span={8}>
-                <Form.Item
-                  name="plan"
-                  label="Plan"
-                  rules={[{ required: true, message: 'Plan is required' }]}
-                >
-                  <Input placeholder="Plan name or code" />
-                </Form.Item>
-              </Col>
-              <Col span={4}>
+    <AppShell pageTitle="Eligibility Check">
+      <Card style={{ marginBottom: 24 }} styles={{ body: { padding: 0 } }}>
+        <div style={styles.cardHeader}>Member Eligibility Check</div>
+        <Form form={form} layout="vertical" onFinish={handleSubmit} requiredMark={false}>
+          <div style={styles.formGrid}>
+            <div style={{ flex: 1 }}>
+              <div style={styles.sectionLabel}>Provider</div>
+              <Form.Item name="payer" label="Payer ID" rules={[{ required: true, message: 'Payer is required' }]}>
+                <Input placeholder="e.g. BCBSTX" />
+              </Form.Item>
+              <Form.Item name="npi" label="NPI" rules={[{ required: true, message: 'NPI is required' }]}>
+                <Input placeholder="10-digit NPI" />
+              </Form.Item>
+              <Form.Item name="base_url" label="Payer Base URL (optional)">
+                <Input placeholder="https://..." />
+              </Form.Item>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={styles.sectionLabel}>Member</div>
+              <Form.Item
+                name="member_id"
+                label="Member ID"
+                rules={[{ required: true, message: 'Member ID is required' }]}
+              >
+                <Input placeholder="Member/subscriber ID" />
+              </Form.Item>
+              <Form.Item
+                name="first_name"
+                label="First Name"
+                rules={[{ required: true, message: 'First name is required' }]}
+              >
+                <Input placeholder="Member first name" />
+              </Form.Item>
+              <Form.Item
+                name="last_name"
+                label="Last Name"
+                rules={[{ required: true, message: 'Last name is required' }]}
+              >
+                <Input placeholder="Member last name" />
+              </Form.Item>
+              <Form.Item name="dob" label="Date of Birth" rules={[{ required: true, message: 'DOB is required' }]}>
+                <Input placeholder="YYYYMMDD" maxLength={8} />
+              </Form.Item>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={styles.sectionLabel}>Plan &amp; Location</div>
+              <Form.Item name="plan" label="Plan" rules={[{ required: true, message: 'Plan is required' }]}>
+                <Input placeholder="Plan name or code" />
+              </Form.Item>
+              <div style={{ display: 'flex', gap: 12 }}>
                 <Form.Item
                   name="state"
                   label="State"
                   rules={[{ required: true, message: 'State is required' }]}
+                  style={{ flex: 1 }}
                 >
                   <Input placeholder="TX" maxLength={2} />
                 </Form.Item>
-              </Col>
-              <Col span={4}>
                 <Form.Item
                   name="zip"
                   label="ZIP"
                   rules={[{ required: true, message: 'ZIP is required' }]}
+                  style={{ flex: 1 }}
                 >
                   <Input placeholder="78701" maxLength={10} />
                 </Form.Item>
-              </Col>
-              <Col span={8}>
-                <Form.Item name="base_url" label="Payer Base URL (optional)">
-                  <Input placeholder="https://..." />
-                </Form.Item>
-              </Col>
-            </Row>
-            <Form.Item style={{ marginBottom: 0, marginTop: 8 }}>
-              <Button
-                type="primary"
-                htmlType="submit"
-                loading={loading}
-                size="large"
-                style={{ background: '#2c5364', borderColor: '#2c5364' }}
-              >
-                Check Eligibility
-              </Button>
-            </Form.Item>
-          </Form>
-        </Card>
-
-        {/* Results */}
-        {result && (
-          <div>
-            {/* Status badges */}
-            <Card style={{ marginBottom: 16, borderRadius: 12 }}>
-              <Row gutter={[24, 12]} align="middle">
-                <Col>
-                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
-                    Coverage
-                  </Text>
-                  <Tag
-                    color={result.coverage_active ? 'green' : 'red'}
-                    style={{ fontSize: 13, padding: '4px 10px' }}
-                  >
-                    {result.coverage_active ? 'ACTIVE' : 'INACTIVE'}
-                  </Tag>
-                </Col>
-                <Col>
-                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
-                    Network Status
-                  </Text>
-                  <Tag
-                    color={networkStatusColor(result.network_status)}
-                    style={{ fontSize: 13, padding: '4px 10px' }}
-                  >
-                    {result.network_status}
-                  </Tag>
-                </Col>
-                {result.plan_name && (
-                  <Col>
-                    <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
-                      Plan
-                    </Text>
-                    <Text strong>{result.plan_name}</Text>
-                  </Col>
-                )}
-                {result.group && (
-                  <Col>
-                    <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
-                      Group
-                    </Text>
-                    <Text>{result.group}</Text>
-                  </Col>
-                )}
-                <Col>
-                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
-                    PCP Required
-                  </Text>
-                  <Tag color={result.pcp_required ? 'orange' : 'default'}>
-                    {result.pcp_required == null ? 'N/A' : result.pcp_required ? 'Yes' : 'No'}
-                  </Tag>
-                </Col>
-                <Col>
-                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
-                    Prior Auth
-                  </Text>
-                  <Tag color={result.prior_auth_required ? 'red' : 'default'}>
-                    {result.prior_auth_required == null ? 'N/A' : result.prior_auth_required ? 'Yes' : 'No'}
-                  </Tag>
-                </Col>
-                <Col>
-                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
-                    Referral
-                  </Text>
-                  <Tag color={result.referral_required ? 'orange' : 'default'}>
-                    {result.referral_required == null ? 'N/A' : result.referral_required ? 'Yes' : 'No'}
-                  </Tag>
-                </Col>
-              </Row>
-            </Card>
-
-            {/* Network verdict / corroboration */}
-            {result.network_verdict && (
-              <Alert
-                type="info"
-                message={result.network_verdict}
-                description={result.corroboration ?? undefined}
-                showIcon
-                style={{ marginBottom: 16, borderRadius: 8 }}
-              />
-            )}
-
-            {/* Cost-share matrix */}
-            <Card
-              title={
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Title level={5} style={{ margin: 0 }}>Cost-Share Matrix</Title>
-                  <Space>
-                    <Tag color="green">IN = In-Network</Tag>
-                    <Tag color="red">OON = Out-of-Network</Tag>
-                  </Space>
-                </div>
-              }
-              style={{ borderRadius: 12 }}
-            >
-              {result.benefits.length === 0 ? (
-                <Text type="secondary">No benefit details returned for this member.</Text>
-              ) : (
-                <Table<MatrixRow>
-                  columns={matrixColumns}
-                  dataSource={buildMatrix(result.benefits)}
-                  pagination={{ pageSize: 20, showSizeChanger: false }}
-                  size="small"
-                  scroll={{ x: 820 }}
-                  bordered
-                />
-              )}
-            </Card>
-
-            {/* Audit note */}
-            <Divider />
-            <div style={{ textAlign: 'center' }}>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                Request ID: <strong>{result.request_id}</strong> · Audit recorded
-              </Text>
+              </div>
             </div>
           </div>
-        )}
-      </div>
-    </div>
+          <div style={styles.formFooter}>
+            <Button type="primary" htmlType="submit" loading={loading} size="large">
+              Check Eligibility
+            </Button>
+          </div>
+        </Form>
+      </Card>
+
+      {!result && (
+        <div style={styles.emptyState}>
+          <Text type="secondary">Run a check to see coverage, network status, and cost-share details.</Text>
+        </div>
+      )}
+
+      {result && (
+        <div>
+          <div style={styles.statRow}>
+            <StatTile
+              label="Coverage"
+              value={result.coverage_active ? 'ACTIVE' : 'INACTIVE'}
+              tone={result.coverage_active ? 'success' : 'danger'}
+            />
+            <StatTile
+              label="Network Status"
+              value={result.network_status}
+              tone={networkStatusTone(result.network_status)}
+            />
+            <StatTile
+              label="PCP Required"
+              value={result.pcp_required == null ? 'N/A' : result.pcp_required ? 'YES' : 'NO'}
+              tone={result.pcp_required ? 'warning' : 'neutral'}
+            />
+            <StatTile
+              label="Prior Auth"
+              value={result.prior_auth_required == null ? 'N/A' : result.prior_auth_required ? 'YES' : 'NO'}
+              tone={result.prior_auth_required ? 'danger' : 'neutral'}
+            />
+            <StatTile
+              label="Referral"
+              value={result.referral_required == null ? 'N/A' : result.referral_required ? 'YES' : 'NO'}
+              tone={result.referral_required ? 'warning' : 'neutral'}
+            />
+          </div>
+
+          {(result.plan_name || result.group) && (
+            <div style={styles.metaRow}>
+              {result.plan_name && (
+                <span>
+                  <strong>Plan:</strong> {result.plan_name}
+                </span>
+              )}
+              {result.group && (
+                <span>
+                  <strong>Group:</strong> {result.group}
+                </span>
+              )}
+            </div>
+          )}
+
+          {result.network_verdict && (
+            <div style={styles.verdictBanner}>
+              <div style={styles.verdictTitle}>{result.network_verdict}</div>
+              {result.corroboration && <div style={styles.verdictBody}>{result.corroboration}</div>}
+            </div>
+          )}
+
+          <Card style={{ marginBottom: 16 }} styles={{ body: { padding: 0 } }}>
+            <div style={styles.matrixHeader}>
+              <span style={styles.cardHeaderTitle}>Cost-Share Matrix</span>
+              <div style={styles.legend}>
+                <span style={styles.legendItem}>
+                  <span style={{ ...styles.legendDot, background: palette.success }} />
+                  In-Network
+                </span>
+                <span style={styles.legendItem}>
+                  <span style={{ ...styles.legendDot, background: palette.danger }} />
+                  Out-of-Network
+                </span>
+              </div>
+            </div>
+            {result.benefits.length === 0 ? (
+              <div style={{ padding: '16px 18px' }}>
+                <Text type="secondary">No benefit details returned for this member.</Text>
+              </div>
+            ) : (
+              <Table<MatrixRow>
+                columns={matrixColumns}
+                dataSource={buildMatrix(result.benefits)}
+                pagination={{ pageSize: 20, showSizeChanger: false }}
+                size="small"
+                scroll={{ x: 820 }}
+                onRow={(_, index) => ({
+                  style: index != null && index % 2 === 1 ? { background: '#FAFBFC' } : {},
+                })}
+              />
+            )}
+          </Card>
+
+          <Divider />
+          <div style={{ textAlign: 'center' }}>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              Request ID: <strong>{result.request_id}</strong> · Audit recorded
+            </Text>
+          </div>
+        </div>
+      )}
+    </AppShell>
   );
 }
 
-const navStyle: React.CSSProperties = {
-  background: 'linear-gradient(90deg, #0f2027 0%, #2c5364 100%)',
-  padding: '12px 32px',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
+const styles: Record<string, React.CSSProperties> = {
+  cardHeader: {
+    padding: '14px 18px',
+    borderBottom: `1px solid ${palette.slate100}`,
+    fontWeight: 700,
+    fontSize: 13,
+    color: palette.slate900,
+  },
+  formGrid: {
+    display: 'flex',
+    gap: 24,
+    padding: '16px 18px',
+  },
+  sectionLabel: {
+    fontSize: 10,
+    fontWeight: 700,
+    color: palette.slate400,
+    letterSpacing: '0.4px',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
+  formFooter: {
+    padding: '12px 18px',
+    borderTop: `1px solid ${palette.slate100}`,
+    display: 'flex',
+    justifyContent: 'flex-end',
+  },
+  emptyState: {
+    border: `1px dashed ${palette.slate300}`,
+    borderRadius: 10,
+    padding: '48px 24px',
+    textAlign: 'center',
+    background: '#fff',
+  },
+  statRow: {
+    display: 'flex',
+    gap: 12,
+    marginBottom: 16,
+  },
+  statTile: {
+    flex: 1,
+    background: '#fff',
+    border: `1px solid ${palette.slate200}`,
+    borderRadius: 10,
+    padding: '12px 14px',
+  },
+  statLabel: {
+    fontSize: 10,
+    fontWeight: 700,
+    color: palette.slate400,
+    letterSpacing: '0.4px',
+    marginBottom: 6,
+    textTransform: 'uppercase',
+  },
+  statPill: {
+    fontSize: 11,
+    fontWeight: 700,
+    padding: '3px 10px',
+    borderRadius: 999,
+  },
+  metaRow: {
+    display: 'flex',
+    gap: 24,
+    fontSize: 13,
+    color: palette.slate700,
+    marginBottom: 16,
+  },
+  verdictBanner: {
+    background: palette.brand50,
+    borderLeft: `3px solid ${palette.brand500}`,
+    borderRadius: 8,
+    padding: '12px 16px',
+    marginBottom: 16,
+  },
+  verdictTitle: {
+    color: palette.slate900,
+    fontWeight: 600,
+    fontSize: 13,
+  },
+  verdictBody: {
+    color: palette.slate600,
+    fontSize: 12,
+    marginTop: 4,
+  },
+  matrixHeader: {
+    padding: '14px 18px',
+    borderBottom: `1px solid ${palette.slate100}`,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  cardHeaderTitle: {
+    fontWeight: 700,
+    fontSize: 13,
+    color: palette.slate900,
+  },
+  legend: {
+    display: 'flex',
+    gap: 12,
+  },
+  legendItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 4,
+    fontSize: 11,
+    color: palette.slate600,
+  },
+  legendDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 999,
+    display: 'inline-block',
+  },
 };
