@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { Form, Input, Button, Typography } from 'antd';
+import { CheckOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { login, changePassword, logout } from '../services/auth';
+import { palette, FONT_STACK } from '../theme/tokens';
 
 const { Title, Text } = Typography;
 
@@ -19,6 +21,13 @@ interface ChangePassFormValues {
 
 type ScreenMode = 'login' | 'change_password';
 
+const FEATURES = [
+  'In-network vs out-of-network cost-share matrix',
+  'Deductible & OOP-max tracking',
+  'Prior-auth and referral flags',
+  'Full audit trail per request',
+];
+
 export default function Login() {
   const navigate = useNavigate();
   const [mode, setMode] = useState<ScreenMode>('login');
@@ -32,7 +41,6 @@ export default function Login() {
       const result = await login(values.username, values.password);
       if (result.must_change_password) {
         toast.info('Please set a new password before continuing.');
-        // Pre-fill current_password from the login form value
         changeForm.setFieldsValue({ current_password: values.password });
         setMode('change_password');
       } else {
@@ -63,11 +71,10 @@ export default function Login() {
 
   return (
     <div style={styles.root}>
-      {/* Left panel — brand */}
       <div style={styles.brand}>
         <div style={styles.brandInner}>
           <div style={styles.logo}>
-            <span style={styles.logoIcon}>⚕</span>
+            <span style={styles.logoMark}>P</span>
             <span style={styles.logoText}>PriorAuth</span>
           </div>
           <Title level={2} style={styles.brandHeadline}>
@@ -78,22 +85,18 @@ export default function Login() {
             authorization — powered by live payer data.
           </Text>
           <div style={styles.featureList}>
-            {[
-              'In-network vs out-of-network cost-share matrix',
-              'Deductible &amp; OOP-max tracking',
-              'Prior-auth and referral flags',
-              'Full audit trail per request',
-            ].map((f) => (
+            {FEATURES.map((f) => (
               <div key={f} style={styles.featureItem}>
-                <span style={styles.featureCheck}>✓</span>
-                <span dangerouslySetInnerHTML={{ __html: f }} />
+                <span style={styles.featureCheck}>
+                  <CheckOutlined style={{ fontSize: 9 }} />
+                </span>
+                <span>{f}</span>
               </div>
             ))}
           </div>
         </div>
       </div>
 
-      {/* Right panel — form */}
       <div style={styles.formPanel}>
         <div style={styles.formCard}>
           {mode === 'login' ? (
@@ -126,14 +129,7 @@ export default function Login() {
                 >
                   <Input.Password size="large" placeholder="••••••••" autoComplete="current-password" />
                 </Form.Item>
-                <Button
-                  type="primary"
-                  htmlType="submit"
-                  size="large"
-                  block
-                  loading={loading}
-                  style={styles.submitBtn}
-                >
+                <Button type="primary" htmlType="submit" size="large" block loading={loading}>
                   Sign in
                 </Button>
               </Form>
@@ -189,14 +185,7 @@ export default function Login() {
                 >
                   <Input.Password size="large" autoComplete="new-password" />
                 </Form.Item>
-                <Button
-                  type="primary"
-                  htmlType="submit"
-                  size="large"
-                  block
-                  loading={loading}
-                  style={styles.submitBtn}
-                >
+                <Button type="primary" htmlType="submit" size="large" block loading={loading}>
                   Update password
                 </Button>
                 <Button
@@ -224,10 +213,11 @@ const styles: Record<string, React.CSSProperties> = {
   root: {
     display: 'flex',
     minHeight: '100vh',
+    fontFamily: FONT_STACK,
   },
   brand: {
-    flex: '0 0 45%',
-    background: 'linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%)',
+    flex: '0 0 42%',
+    background: palette.slate900,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -240,29 +230,39 @@ const styles: Record<string, React.CSSProperties> = {
   logo: {
     display: 'flex',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
     marginBottom: 40,
   },
-  logoIcon: {
-    fontSize: 32,
+  logoMark: {
+    width: 28,
+    height: 28,
+    borderRadius: 7,
+    background: palette.brand500,
+    color: '#fff',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontWeight: 700,
+    fontSize: 14,
   },
   logoText: {
-    fontSize: 22,
+    fontSize: 16,
     fontWeight: 700,
     color: '#fff',
-    letterSpacing: '-0.5px',
+    letterSpacing: '-0.2px',
   },
   brandHeadline: {
     color: '#fff',
     marginBottom: 16,
-    lineHeight: 1.3,
+    lineHeight: 1.35,
+    fontSize: 22,
   },
   brandSub: {
     color: 'rgba(255,255,255,0.72)',
-    fontSize: 15,
+    fontSize: 13,
     lineHeight: 1.6,
     display: 'block',
-    marginBottom: 40,
+    marginBottom: 32,
   },
   featureList: {
     display: 'flex',
@@ -271,40 +271,43 @@ const styles: Record<string, React.CSSProperties> = {
   },
   featureItem: {
     display: 'flex',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: 10,
     color: 'rgba(255,255,255,0.85)',
-    fontSize: 14,
+    fontSize: 12.5,
   },
   featureCheck: {
-    color: '#52c41a',
-    fontWeight: 700,
-    marginTop: 1,
+    width: 16,
+    height: 16,
+    borderRadius: 4,
+    background: 'rgba(11,110,143,0.35)',
+    color: '#5FD4C0',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   formPanel: {
     flex: 1,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    background: '#f5f7fa',
+    background: palette.slate50,
     padding: '48px 24px',
   },
   formCard: {
     background: '#fff',
-    borderRadius: 16,
-    padding: '40px 48px',
+    borderRadius: 10,
+    border: `1px solid ${palette.slate200}`,
+    boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
+    padding: '32px 40px',
     width: '100%',
-    maxWidth: 420,
-    boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
+    maxWidth: 380,
   },
   formTitle: {
     marginBottom: 4,
   },
   formSub: {
-    fontSize: 14,
-  },
-  submitBtn: {
-    background: '#2c5364',
-    borderColor: '#2c5364',
+    fontSize: 13,
   },
 };
