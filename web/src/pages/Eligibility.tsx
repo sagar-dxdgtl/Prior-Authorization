@@ -57,7 +57,7 @@ interface EligibilityResponse {
   coverage_active: boolean;
   plan_name: string | null;
   group: string | null;
-  network_status: 'IN' | 'OON' | 'REVIEW' | 'UNKNOWN';
+  network_status: 'IN_NETWORK' | 'OUT_OF_NETWORK' | 'REVIEW' | 'UNKNOWN';
   benefits: Benefit[];
   pcp_required: boolean | null;
   prior_auth_required: boolean | null;
@@ -121,8 +121,8 @@ function buildMatrix(benefits: Benefit[]): MatrixRow[] {
 }
 
 function networkStatusTone(status: string): 'success' | 'warning' | 'danger' | 'neutral' {
-  if (status === 'IN') return 'success';
-  if (status === 'OON') return 'danger';
+  if (status === 'IN_NETWORK') return 'success';
+  if (status === 'OUT_OF_NETWORK') return 'danger';
   if (status === 'REVIEW') return 'warning';
   return 'neutral';
 }
