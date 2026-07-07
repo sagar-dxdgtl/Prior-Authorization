@@ -16,6 +16,7 @@ __MACOSX/
 web/node_modules/
 web/dist/
 .idea/
+.superpowers/
 
 # Python build artifacts
 *.egg-info/
