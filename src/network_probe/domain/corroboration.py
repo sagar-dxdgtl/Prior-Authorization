@@ -166,13 +166,12 @@ class TinScopeSource:
                 f"Billing TIN {q.tin}{grp} is IN-NETWORK{prov}{ver}.",
             )
 
-        # (b) No verified TIN status and the provider isn't listed -> nothing to compare against.
-        if verdict.status != NetworkStatus.IN_NETWORK:
-            return Signal(
-                self.name,
-                "inconclusive",
-                f"Billing TIN {q.tin} not evaluated — provider isn't listed in this directory.",
-            )
+        # (b) No verified TIN status -- try the directory's own per-TIN data, then the NPI->TIN
+        # crosswalk (TiC-derived), REGARDLESS of the directory verdict's own status. A TiC-
+        # confirmed contract is independent evidence even when the directory adapter itself
+        # couldn't confidently determine network status (e.g. an ambiguous plan/network match)
+        # or found nothing at all -- it shouldn't be skipped just because the verdict isn't a
+        # clean IN_NETWORK.
         tins = (verdict.matched_provider or {}).get("in_network_tins")
         src = "payer directory"
         if not tins:  # directory had none → try the NPI→TIN crosswalk (TiC-derived)
@@ -182,16 +181,46 @@ class TinScopeSource:
             tins = cw.tins_for(q.payer, q.npi) if cw else []
             src = "contracted-TIN crosswalk (TiC)"
         if not tins:
+            if verdict.status != NetworkStatus.IN_NETWORK:
+                return Signal(
+                    self.name,
+                    "inconclusive",
+                    f"Billing TIN {q.tin} not evaluated — provider isn't listed in this directory.",
+                )
             return Signal(
                 self.name, "inconclusive", f"Could not confirm TIN {q.tin} — no per-TIN data (directory or crosswalk)."
             )
         norm = {re.sub(r"[^0-9]", "", str(t)) for t in tins}
-        if re.sub(r"[^0-9]", "", q.tin) in norm:
-            return Signal(self.name, "corroborates", f"In-network under billing TIN {q.tin} (per {src}).")
+        tin_matches = re.sub(r"[^0-9]", "", q.tin) in norm
+
+        if verdict.status == NetworkStatus.IN_NETWORK:
+            if tin_matches:
+                return Signal(self.name, "corroborates", f"In-network under billing TIN {q.tin} (per {src}).")
+            return Signal(
+                self.name,
+                "contradicts",
+                f"Provider is in-network, but NOT under billing TIN {q.tin} (in-network TINs per {src}: {sorted(tins)}).",
+            )
+
+        # Directory verdict is OUT_OF_NETWORK or UNKNOWN, but we independently found this exact
+        # NPI+TIN pairing in {src}. That's real, contract-level evidence the directory adapter
+        # missed or couldn't determine -- it CONTRADICTS the non-IN_NETWORK verdict, it doesn't
+        # "corroborate" it (the two prior branches' wording only makes sense for an IN_NETWORK
+        # verdict, which is why this case is split out separately).
+        if tin_matches:
+            return Signal(
+                self.name,
+                "contradicts",
+                f"Billing TIN {q.tin} IS a contracted in-network TIN per {src}, but the directory "
+                f"found the provider absent/undetermined — review.",
+            )
+        # TIN doesn't match what {src} has on file for this NPI either -- uninformative for this
+        # specific claim (the crosswalk simply has other TINs for this provider, not ours).
         return Signal(
             self.name,
-            "contradicts",
-            f"Provider is in-network, but NOT under billing TIN {q.tin} (in-network TINs per {src}: {sorted(tins)}).",
+            "inconclusive",
+            f"Billing TIN {q.tin} not found among this provider's known TINs per {src} "
+            f"({sorted(tins)}) — inconclusive for this specific claim.",
         )
 
 

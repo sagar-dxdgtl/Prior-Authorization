@@ -54,12 +54,40 @@ def test_tinscope_uses_crosswalk_when_directory_has_none():
     assert src.check(q_bad, _v()).result == "contradicts"
 
 
+def test_tinscope_crosswalk_fires_even_when_verdict_is_not_in_network():
+    # A TiC-confirmed contract is independent evidence even when the directory adapter itself
+    # couldn't confidently determine network status (UNKNOWN/ambiguous plan match) or found the
+    # provider OON -- the crosswalk must not be skipped just because verdict.status isn't IN_NETWORK.
+    # Since the verdict ISN'T IN_NETWORK, a real TIN match here CONTRADICTS that verdict (it's
+    # evidence the directory missed/couldn't determine), not "corroborates" -- that wording only
+    # makes sense when confirming an already-IN_NETWORK verdict's specific billing TIN.
+    cw = TinCrosswalk(records=[{"payer": "cigna-healthcare-co-denver", "npi": "1629339312", "tin": "475181686"}])
+    src = TinScopeSource(crosswalk=cw)
+    unknown_verdict = NetworkVerdict(
+        NetworkStatus.UNKNOWN, {"npi": "1629339312", "name": "Jing Li"}, "cigna", "u", "medium", "ambiguous"
+    )
+    q = ProviderQuery(payer="cigna-healthcare-co-denver", plan_hint="x", npi="1629339312", tin="475181686")
+    s = src.check(q, unknown_verdict)
+    assert s.result == "contradicts" and "475181686" in s.detail and "crosswalk" in s.detail.lower()
+
+
 def test_default_crosswalk_has_seeded_uhc_uvc():
     # TiC-verified UnitedHealthcare TX-exchange mapping (United Vein & Vascular Centers, TIN 933510922).
     from network_probe.domain.tin_crosswalk import default_crosswalk
 
     assert default_crosswalk().tins_for("uhc", "1972603934") == ["933510922"]
     assert default_crosswalk().tins_for("uhc", "1710305735") == ["933510922"]
+
+
+def test_default_crosswalk_has_2026_07_08_tic_sweep_findings():
+    # Real, independently-verified findings from the 2026-07-08 UVC demo-cases TiC sweep.
+    from network_probe.domain.tin_crosswalk import default_crosswalk
+
+    cw = default_crosswalk()
+    assert cw.tins_for("cigna-healthcare-co-denver", "1629339312") == ["475181686"]
+    assert cw.tins_for("kaiser-permanente-co-denver", "1598895435") == ["475181686"]
+    assert cw.tins_for("unitedhealthcare-az", "1992078745") == ["843447602"]
+    assert cw.tins_for("ambetter-centene-tx-dallas", "1710305735") == ["412049581", "933510922"]
 
 
 def test_tinscope_corroborates_uhc_fradkin_via_seed():

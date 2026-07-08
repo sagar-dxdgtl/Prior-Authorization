@@ -76,9 +76,46 @@ class TinCrosswalk:
 # UnitedHealthcare's Texas individual/exchange network (TXNETWORKEXGN, 2026-06 MRF). That MRF lists
 # rendering NPIs 1972603934 (Kevin Fradkin) and 1710305735 under this contracted TIN. Extend this
 # with a full bulk ingest by pointing TIN_CROSSWALK_PATH at the parsed crosswalk file.
+#
+# 2026-07-08 UVC demo-cases TiC sweep (real production MRFs, each independently re-verified by a
+# second agent re-fetching the same file): payer key matches the catalogue key used in
+# uvc_demo.py's ProviderQuery so TinScopeSource's crosswalk fallback actually fires for these cases.
+#   - Cigna (Colorado): NPI 1629339312 (Jing Li) -> TIN 475181686, "Colorado Medical Group PLLC",
+#     present in 4 of 9 CO in-network files (national-oap, national-ppo, pathwell-oap, pathwell-ppo).
+#     https://www.cigna.com/static/mrf/co/latest.json (2026-07 CO table of contents).
+#   - Kaiser Foundation Health Plan of Colorado: NPI 1598895435 (Wende Moore's provider) ->
+#     TIN 475181686, "United Vein Centers", in Kaiser's COMMERCIAL/Medicaid in-network file
+#     (Kaiser publishes no Medicare Advantage MRF -- MA is federally TiC-exempt -- so this is the
+#     closest available real evidence for the same legal entity/provider group; not MA-specific).
+#     https://healthy.kaiserpermanente.org/pricing/innetwork/co/2026-07-01_KFHP-CO_index.json
+#   - UnitedHealthcare of Arizona: NPI 1992078745 (Arthur Maydell) -> TIN 843447602, "John W Darr"
+#     group, in UHC-AZ's commercial/exchange network file AZNETWORKEXGN (UHC publishes no Dual
+#     Complete/MA MRF -- also TiC-exempt -- same caveat as Kaiser above).
+#     https://transparency-in-coverage.uhc.com/api/v1/uhc/blobs/ (2026-07-01 AZNETWORKEXGN).
+#   - Ambetter/Centene (Texas): NPI 1710305735 (Umang Patel) -> TIN 933510922, "Texas UVC Medical
+#     PLLC", in the TX Ambetter in-network file (also lists a second TIN, 412049581, "Texas Vein
+#     and Wellness Institute", for the same NPI -- both real, this provider bills under either).
+#     https://www.centene.com/content/dam/centene/.../2026-06-29_centene-management-company-llc_ambetter-tx_in-network.json
+#
+# Checked and found NOT applicable/NOT present (documented here so this isn't re-researched):
+#   - Meridian Health (IL) / Mercy Care (AZ): Medicaid managed-care organizations, outside the
+#     federal TiC MRF mandate's scope (individual/group commercial issuers only) -- no file exists.
+#   - Community Health Choice (TX Marketplace): real TiC files exist and were searched in full, but
+#     NPI 1972603934 does not appear in any of them -- the files are themselves very sparse
+#     (~16-19 total NPIs), so this reflects incomplete payer-published data, not a confirmed absence.
+#   - Humana (FL): no real production MRF was reachable (their public transparency pages 404/error
+#     as a JS shell with no exposed blob URL); the only URL found was Humana's own developer
+#     *synthetic* sample dataset, correctly not used as a real finding.
+#   - BCBS Anthem/Elevance (GA): NPI 1902811656 IS present in Anthem's real GA in-network files, but
+#     Anthem masks billing TINs behind a representative NPI (tin.type="npi", not "ein") -- so this
+#     payer's own MRF cannot confirm or refute the EIN-based billing TIN at all.
 _SEED = [
     {"payer": "uhc", "npi": "1972603934", "tin": "933510922"},
     {"payer": "uhc", "npi": "1710305735", "tin": "933510922"},
+    {"payer": "cigna-healthcare-co-denver", "npi": "1629339312", "tin": "475181686"},
+    {"payer": "kaiser-permanente-co-denver", "npi": "1598895435", "tin": "475181686"},
+    {"payer": "unitedhealthcare-az", "npi": "1992078745", "tin": "843447602"},
+    {"payer": "ambetter-centene-tx-dallas", "npi": "1710305735", "tins": ["933510922", "412049581"]},
 ]
 
 

@@ -489,7 +489,12 @@ SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
         "needs-authorized-api",
     ),
     "UnitedHealthcare": (
-        None,
+        # get_adapter() only reaches the pre-built "uhc" adapter-key shortcut when q.payer is
+        # literally "uhc" -- callers that resolve a payer via its full catalogue key (e.g.
+        # "unitedhealthcare-az", as check_eligibility() does) need fhir_base_url populated here
+        # to fall through to the catalogue-driven FHIR dispatch instead of hitting "no adapter".
+        # Same endpoint as the "uhc" adapter-key shortcut (fhir_pdex.KNOWN_ENDPOINTS["uhc"]).
+        "https://flex.optum.com/fhirpublic/R4",
         "https://transparency-in-coverage.uhc.com/",
         "https://www.uhc.com/find-a-doctor",
         "public-fhir",
