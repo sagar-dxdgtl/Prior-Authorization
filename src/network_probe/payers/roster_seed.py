@@ -32,13 +32,22 @@ ROSTER = [
     ("Health Choice / BCBS / (Anthem / Elevance)", "Managed Medicaid", "AZ", None, "needs_payer_id"),
     ("Healthspring", "Medicare Advantage", "AZ", None, "needs_payer_id"),
     ("Humana", "Medicare Advantage", "AZ", "61101", "supported"),
-    ("Mercy Care", "Managed Medicaid", "AZ", None, "needs_payer_id"),
-    ("Mercy Care", "Medicare Advantage", "AZ", None, "needs_payer_id"),
+    # Stedi id 33628 = "Mercy Care ACC-RBHA" (verified via GET /2024-04-01/payers, exact plan-name
+    # match to Mercy Care's own AHCCCS Complete Care/RBHA Medicaid product), 2026-07-08.
+    ("Mercy Care", "Managed Medicaid", "AZ", "33628", "needs_enrollment"),
+    ("Mercy Care", "Medicare Advantage", "AZ", "33628", "needs_enrollment"),
     ("Molina Healthcare", "Dual Eligible (FIDE SNP)", "AZ", None, "needs_payer_id"),
     ("Molina Healthcare", "Managed Medicaid", "AZ", None, "needs_payer_id"),
-    ("Noridian Healthcare Solutions, LLC", "Traditional Medicare", "AZ", None, "needs_payer_id"),
+    # Stedi id 03102 = "Medicare Arizona Part B" (verified via GET /2024-04-01/payers, matched by
+    # STATE not by MAC-contractor name -- confirms this codebase's own prior warning that a fuzzy
+    # name match on "Noridian" alone proposes the wrong state, e.g. North Dakota), 2026-07-08.
+    ("Noridian Healthcare Solutions, LLC", "Traditional Medicare", "AZ", "03102", "needs_enrollment"),
     ("Oscar", "ACA", "AZ", "OSCAR", "supported"),
     ("Scan", "Medicare Advantage", "AZ", "SPSCN", "needs_enrollment"),
+    # Added for the UVC demo-cases roster (2026-07-08). Stedi id TDFIC = "TRICARE for Life", exact
+    # name match verified via GET /2024-04-01/payers. Benefit type is its own category (Medicare-
+    # secondary wraparound coverage for military retirees/dependents), not Medicare Advantage.
+    ("Tricare for Life", "TRICARE Secondary", "AZ", "TDFIC", "needs_enrollment"),
     ("UnitedHealthcare", "ACA", "AZ", "87726", "supported"),
     ("UnitedHealthcare", "Commercial", "AZ", "87726", "supported"),
     ("UnitedHealthcare", "Medicare Advantage", "AZ", "87726", "supported"),
@@ -106,7 +115,15 @@ ROSTER = [
     ("Humana", "Medicare Advantage", "IL", "61101", "supported"),
     ("Illinois Department of Healthcare and Family Services (HFS)", "Traditional Medicaid", "IL", None, "needs_payer_id"),
     ("Longevity Health Plan", "Medicare Advantage", "IL", "LIL01", "needs_enrollment"),
-    ("National Government Services, Inc. (NGS)", "Traditional Medicare", "IL", None, "needs_payer_id"),
+    # Stedi id 13189 = "Meridian (Illinois)" (verified via GET /2024-04-01/payers, exact
+    # state-scoped match -- the earlier fuzzy-name resolver proposal, "TRISTAR Insurance
+    # Group", was a false positive from bare token overlap on "Meridian"), 2026-07-08.
+    ("Meridian Health", "Managed Medicaid", "IL", "13189", "needs_enrollment"),
+    # Stedi id 06102 = "Medicare Illinois Part B" (verified via GET /2024-04-01/payers; Stedi
+    # organizes traditional-Medicare by STATE+part, not by MAC-contractor name -- "National
+    # Government Services" alone resolves to an umbrella entity, not the state-specific
+    # trading-partner id eligibility checks need), 2026-07-08.
+    ("National Government Services, Inc. (NGS)", "Traditional Medicare", "IL", "06102", "needs_enrollment"),
     ("Provider Partners", "Medicare Advantage", "IL", None, "needs_payer_id"),
     ("UnitedHealthcare", "Commercial", "IL", "87726", "supported"),
     ("UnitedHealthcare", "Medicare Advantage", "IL", "87726", "supported"),
@@ -154,7 +171,10 @@ ROSTER = [
     ("BCBS / Empire (Anthem / Elevance)(HCSC)", "Medicare Advantage", "TX-Houston", None, "needs_payer_id"),
     ("Cigna Healthcare", "ACA", "TX-Houston", "62308", "needs_enrollment"),
     ("Cigna Healthcare", "Commercial", "TX-Houston", "62308", "needs_enrollment"),
-    ("Community Health Choice (CHC)", "ACA", "TX-Houston", None, "needs_payer_id"),
+    # Stedi id 60495 = "Community Health Choice (Marketplace)" (verified via GET /2024-04-01/payers
+    # -- disambiguated from a second, unrelated "Community Health Choice" entry, id 48145, whose
+    # own `names` field is the Medicaid/CHIP/D-SNP side, not Marketplace/ACA), 2026-07-08.
+    ("Community Health Choice (CHC)", "ACA", "TX-Houston", "60495", "needs_enrollment"),
     ("Community Health Choice (CHC)", "Dual Eligible (FIDE SNP)", "TX-Houston", None, "needs_payer_id"),
     ("Community Health Choice (CHC)", "Managed Medicaid", "TX-Houston", None, "needs_payer_id"),
     ("Curative", "Commercial", "TX-Houston", "CURTV", "needs_enrollment"),
@@ -215,6 +235,11 @@ ROSTER = [
     ("Wellpoint / Amerigroup (Elevance)", "ACA", "TX-Dallas", None, "needs_payer_id"),
     ("Wellpoint / Amerigroup (Elevance)", "Managed Medicaid", "TX-Dallas", None, "needs_payer_id"),
     ("Wellpoint / Amerigroup (Elevance)", "Medicare Advantage", "TX-Dallas", None, "needs_payer_id"),
+    # --- Florida --- Added for the UVC demo-cases roster (2026-07-08): Traditional Medicare (First
+    # Coast Service Options is the FL Part A/B MAC) and Humana Medicare Advantage. Stedi ids verified
+    # via GET /2024-04-01/payers.
+    ("First Coast Service Options, Inc.", "Traditional Medicare", "FL", "09102", "needs_enrollment"),
+    ("Humana", "Medicare Advantage", "FL", "61101", "supported"),
 ]
 
 
@@ -377,6 +402,14 @@ SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
         "https://www.goldkidney.com/provider-search/",
         "needs-authorized-api",
     ),
+    "First Coast Service Options, Inc.": (
+        # Traditional Medicare MAC (FL Part A/B), same treatment as Noridian(AZ)/NGS(IL) --
+        # no network concept, checked via CMS's own tools per-NPI.
+        None,
+        None,
+        "https://npiregistry.cms.hhs.gov",
+        "none",
+    ),
     "Health Choice / BCBS / (Anthem / Elevance)": (
         None,
         None,
@@ -405,6 +438,14 @@ SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
         None,
         None,
         "https://www.mercycareaz.org/find-a-provider",
+        "none",
+    ),
+    "Meridian Health": (
+        # Illinois Medicaid MCO. Its own "Find a Provider" tool is a JS SPA (no public FHIR/API
+        # found) -- same treatment as other directory-access=none payers.
+        None,
+        None,
+        "https://findaprovider.ilmeridian.com",
         "none",
     ),
     "Molina Healthcare": (
@@ -646,6 +687,11 @@ SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
     ),
     "Texas Health and Human Services Commission (HHSC)": (
         None, None, "https://opl.tmhp.com", "none",
+    ),
+    "Tricare for Life": (
+        # Medicare-secondary coverage — no separate TRICARE network contract required as long as the
+        # provider is Medicare-enrolled and not opted out (per TRICARE's own published guidance).
+        None, None, "https://tricare.mil/tfl", "none",
     ),
     "UnitedHealthcare Community Plan": (
         # Same underlying UHC/Optum adapter as other UnitedHealthcare rows — not a separate
