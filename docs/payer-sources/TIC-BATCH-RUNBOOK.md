@@ -179,3 +179,40 @@ python scripts/pull_tic_index.py \
 - **Signed-URL expiry:** Cigna's index URLs are time-limited — copy a fresh one each run.
 - **Other payers:** the same command works for any CMS-compliant TiC index — just swap
   `--index-url` and `--payer`.
+
+## Anthem/Elevance: TIN masked behind a "representative NPI"
+
+Anthem/Elevance's own MRFs (confirmed on their GA commercial in-network files, and a known,
+documented industry-wide issue — see [Serif Health's MRF-quality writeup](https://www.serifhealth.com/blog/learnings-from-mrf-land),
+which calls out this exact behavior) do **not** publish a real EIN in `provider_references[].tin`.
+Instead `tin.type` is `"npi"`, and the value is a single **representative NPI** shared by every
+provider in that group — e.g. one real physician's own billing group had `tin.type="npi",
+value="1619681244"` instead of an EIN, with zero `"type":"ein"` entries anywhere in the file
+(3.1M+ tin objects checked). `ingest_tic.py`/`pull_tic_index.py` cannot extract a TIN from these
+files for this reason — there is no TIN in them to extract.
+
+**Workaround (partial — confirms the group, not the exact EIN):**
+
+1. Look up the representative NPI in NPPES (`https://npiregistry.cms.hhs.gov/api/?number=<npi>&version=2.1`).
+   It resolves to a real **Type 2 (organization) NPI** — in the case checked, "GEORGIA UVC MEDICAL LLC"
+   (dba United Vein & Vascular Centers), a real, active, operating practice group.
+2. Independently look up the target physician's own registered group/practice affiliation —
+   NOT via NPPES (individual/Type-1 NPI records don't carry group affiliation), but via **CMS's
+   "Doctors and Clinicians" National Downloadable File** (dataset `mj5m-pzi6` on
+   `data.cms.gov/provider-data` — the same data that powers `medicare.gov/care-compare`, queryable
+   directly even when the Care Compare *website* 403s automated fetches). It returns an
+   `org_pac_id` and group/practice name for the physician.
+3. If (1) and (2) name the same organization (same LLC name, same suite-level address, same org
+   PAC ID) — as happened in this check — that's real, independent confirmation of *which group*
+   the physician bills under, obtained without Anthem's file ever revealing a TIN.
+
+**What this does NOT give you:** proof that a specific numeric EIN belongs to that group. Private,
+for-profit LLC EINs are not published in any free public source — checked and confirmed absent
+from SEC EDGAR full-text search, IRS Exempt-Orgs BMF / ProPublica Nonprofit Explorer (LLCs aren't
+tax-exempt orgs, so this only ever works for nonprofits), OpenCorporates' public search, and a
+general web search for the exact EIN string. Georgia's Secretary of State registry is searchable
+by entity name, not by EIN, so it can confirm an LLC's *existence* by name but not link a specific
+EIN to it either. The only known way to close that last link is a paid commercial EIN-reverse-
+lookup API (Serif Health's own writeup notes these are "decently expensive pay-to-play" — not
+integrated here). Treat a group-name match from this technique as strong supporting evidence for
+TIN-scope corroboration, not as a standalone `tin_crosswalk.py` seed entry on its own.
