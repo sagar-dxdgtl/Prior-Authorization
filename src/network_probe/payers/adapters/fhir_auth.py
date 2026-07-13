@@ -1,16 +1,18 @@
-"""OAuth2 client-credentials layer for token-gated FHIR provider directories.
+"""Auth layers for token-gated FHIR provider directories.
 
-Some payers (Anthem/Elevance today; SelectHealth, Aetna, … next) expose the SAME
-CMS-mandated PDEX Plan-Net API as the public payers, but behind OAuth2 client-credentials
-instead of open access. This module fetches + caches a bearer token and hands the generic
-``FhirPdexAdapter`` an authenticated ``CachedClient`` — so the directory-traversal logic
-(Practitioner → PractitionerRole → network match) stays completely payer-agnostic; only the
-transport gains an ``Authorization: Bearer`` header.
+Some payers expose the SAME CMS-mandated PDEX Plan-Net API as the public payers, but behind a
+credential instead of open access. Both builders here hand the generic ``FhirPdexAdapter`` an
+authenticated ``CachedClient`` — so the directory-traversal logic (Practitioner → PractitionerRole
+→ network match) stays completely payer-agnostic; only the transport gains a header:
 
-Verified live against Elevance's directory: token endpoint takes form-encoded
-``grant_type=client_credentials`` + ``client_id`` + ``client_secret`` and returns
-``{access_token, token_type=bearer, expires_in}``; the FHIR base is a standard PDEX R4 server
-with inline ``network-reference`` displays and NPI ``identifier`` search.
+- ``build_authed_fhir_adapter`` — OAuth2 client-credentials (Anthem/Elevance today). Fetches +
+  caches a bearer token, attaches ``Authorization: Bearer``.
+  Verified live against Elevance's directory: token endpoint takes form-encoded
+  ``grant_type=client_credentials`` + ``client_id`` + ``client_secret`` and returns
+  ``{access_token, token_type=bearer, expires_in}``; the FHIR base is a standard PDEX R4 server
+  with inline ``network-reference`` displays and NPI ``identifier`` search.
+- ``build_apikey_fhir_adapter`` — a single static request header, no token exchange (HCSC's
+  `client_id` header today).
 """
 
 from __future__ import annotations
@@ -136,6 +138,36 @@ def build_authed_fhir_adapter(
         auth=auth,
         follow_redirects=True,
         transport=fhir_transport,
+    )
+    client = CachedClient(cache_dir=cache_dir, client=http)
+    return FhirPdexAdapter(base_url=base_url, payer_name=payer_key, year=year, client=client)
+
+
+def build_apikey_fhir_adapter(
+    payer_key: str,
+    base_url: str,
+    header_name: str,
+    header_value: str,
+    *,
+    year: int | None = None,
+    verify_url: bool = True,
+    cache_dir: str | None = ".cache",
+    transport: httpx.BaseTransport | None = None,
+) -> FhirPdexAdapter:
+    """Wire a static-API-key-gated PDEX directory: one constant request header, no token exchange.
+
+    Simpler than ``build_authed_fhir_adapter`` — the header is just baked into the httpx.Client's
+    default headers instead of an ``httpx.Auth`` flow (no expiry/refresh to manage).
+
+    ``transport`` injects httpx.MockTransport in tests; left None it uses the real network.
+    """
+    if verify_url:
+        assert_safe_url(base_url)
+    http = httpx.Client(
+        timeout=20.0,
+        headers={"user-agent": DEFAULT_UA, "accept": "application/fhir+json", header_name: header_value},
+        follow_redirects=True,
+        transport=transport,
     )
     client = CachedClient(cache_dir=cache_dir, client=http)
     return FhirPdexAdapter(base_url=base_url, payer_name=payer_key, year=year, client=client)

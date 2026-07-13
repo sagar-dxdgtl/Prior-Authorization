@@ -25,10 +25,11 @@ Implements **three adapters** behind one interface:
 The architecture is a pluggable per-payer adapter, so new payers drop in without touching the shared
 models, service, or CLI.
 
-> **Note on Humana & BCBS-TX:** their *web* "Find a Doctor" tools are behind bot protection
+> **Note on Humana & BCBS-TX/IL (HCSC):** their *web* "Find a Doctor" tools are behind bot protection
 > (Akamai-style sensor headers; Imperva) — documented as blockers in `docs/discovery/DISCOVERY-humana.md` /
 > `docs/discovery/DISCOVERY-bcbstx.md`, and **not** scraped (see [Ethics](#ethics)). The **FHIR adapter reaches
-> Humana legitimately** via its CMS Provider Directory API instead.
+> both legitimately** instead, via their CMS Provider Directory APIs — Humana's with no auth at all,
+> HCSC's (BCBS IL/TX/MT/NM/OK) behind a static `client_id` header credential.
 
 > **Why two payers matters:** the same provider can be in one payer's network and out of another's.
 > **Kyle A Herron, MD (NPI 1679766943)** is **OUT-of-network for Oscar's** FL HMO plan but
@@ -57,6 +58,11 @@ python -m network_probe.cli \
 # Same provider, Humana via the compliant FHIR API (expected: IN-NETWORK on Medicare PPO)
 python -m network_probe.cli \
     --payer humana-fhir --npi 1679766943 --last-name Herron --plan "Medicare PPO"
+
+# HCSC (BCBS IL/TX/MT/NM/OK) via the compliant FHIR API, client_id-header auth
+# (needs HCSC_FHIR_CLIENT_ID in .env; expected: IN-NETWORK on Blue Cross Medicare Advantage)
+python -m network_probe.cli \
+    --payer hcsc --npi 1336160274 --last-name Friedman --plan "Blue Cross Medicare Advantage"
 ```
 
 ### Web UI & API

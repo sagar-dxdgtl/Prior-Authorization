@@ -81,11 +81,41 @@ def _build_anthem_adapter(base_url: str | None = None, year: int | None = None):
     )
 
 
-# Authorized-FHIR catalogue rows (directory_access == "authorized-fhir") map to an OAuth2 adapter
-# builder. Gated on directory_access (NOT a label substring) so look-alike labels that merely
-# contain "Elevance" — e.g. Wellpoint/Amerigroup, which has no live endpoint — never route here.
+# HCSC's Sapphire PDEX FHIR base is fixed/public (verified live) — only the client_id credential
+# varies by environment, so it lives in Settings while the URL stays a constant here.
+HCSC_FHIR_BASE_URL = "https://api.hcsc.net/providerfinder/sapphire/fhir"
+
+
+def _build_hcsc_adapter(base_url: str | None = None, year: int | None = None):
+    """Build the client_id-header-authed HCSC (BCBS IL/TX/MT/NM/OK) FHIR adapter from Settings,
+    or None if HCSC_FHIR_CLIENT_ID is not configured (caller then refuses the gated endpoint)."""
+    from network_probe.core.config import get_settings
+
+    s = get_settings()
+    if not s.hcsc_fhir_ready:
+        return None
+    from network_probe.payers.adapters.fhir_auth import build_apikey_fhir_adapter
+
+    return build_apikey_fhir_adapter(
+        payer_key="hcsc",
+        base_url=base_url or HCSC_FHIR_BASE_URL,
+        header_name="client_id",
+        header_value=s.hcsc_fhir_client_id,
+        year=year,
+    )
+
+
+# Authorized-FHIR catalogue rows (directory_access == "authorized-fhir") map to a builder for
+# their specific auth mechanism. Gated on directory_access (NOT a label substring) so look-alike
+# labels that merely contain "Elevance" — e.g. Wellpoint/Amerigroup, which has no live endpoint —
+# never route here. "hcsc" is checked FIRST: the roster label "BCBS / Empire (Anthem /
+# Elevance)(HCSC)" contains both "anthem"/"elevance" AND "hcsc" (HCSC is an independent Blue
+# licensee, NOT Elevance) — checking anthem/elevance first would misroute it to the wrong payer's
+# OAuth2 adapter.
 def _authed_builder_for(row, key: str):
     blob = f"{getattr(row, 'key', '') or ''} {getattr(row, 'label', '') or ''} {key}".lower()
+    if "hcsc" in blob:
+        return _build_hcsc_adapter
     if "anthem" in blob or "elevance" in blob:
         return _build_anthem_adapter
     return None
@@ -102,19 +132,25 @@ def get_adapter(payer: str, catalogue=None, **kwargs) -> PayerAdapter:
         if adapter is not None:
             return adapter
         raise ValueError("Payer 'anthem' needs ANTHEM_FHIR_* credentials in .env (none configured).")
+    # Direct authed-FHIR payer key "hcsc": build the client_id-header adapter from Settings creds.
+    if key == "hcsc":
+        adapter = _build_hcsc_adapter(base_url=kwargs.get("base_url"), year=kwargs.get("year"))
+        if adapter is not None:
+            return adapter
+        raise ValueError("Payer 'hcsc' needs HCSC_FHIR_CLIENT_ID in .env (none configured).")
     # No more-specific registered adapter: consult the catalogue row.
     row = _catalogue_row(payer, catalogue)
     # (a) verified-public FHIR base_url — passed explicitly, or the catalogue `fhir_base_url`.
     base_url = kwargs.get("base_url") or (getattr(row, "fhir_base_url", None) if row is not None else None)
     if base_url:
-        # (a1) authorized-FHIR rows are OAuth2-gated — build with a bearer token, never anon.
+        # (a1) authorized-FHIR rows are credential-gated (OAuth2 or a static header) — never anon.
         if row is not None and getattr(row, "directory_access", None) == "authorized-fhir":
             builder = _authed_builder_for(row, key)
             adapter = builder(base_url=base_url, year=kwargs.get("year")) if builder else None
             if adapter is not None:
                 return adapter
             raise ValueError(
-                f"Payer {payer!r} is an authorized-FHIR directory but its OAuth2 credentials are not "
+                f"Payer {payer!r} is an authorized-FHIR directory but its credentials are not "
                 f"configured (set the payer's *_FHIR_* vars in .env). Refusing to query it unauthenticated."
             )
         kwargs["base_url"] = base_url

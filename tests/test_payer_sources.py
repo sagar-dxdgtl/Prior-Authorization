@@ -41,6 +41,9 @@ _DIRECTORY_ACCESS = {"public-fhir", "authorized-fhir", "needs-authorized-api", "
 ANTHEM_LABEL = "BCBS / Empire (Anthem / Elevance)"
 ANTHEM_FHIR = "https://totalview.healthos.elevancehealth.com/resources/unregistered/api/v1/fhir/cms_mandate/mcd"
 
+HCSC_LABEL = "BCBS / Empire (Anthem / Elevance)(HCSC)"
+HCSC_FHIR = "https://api.hcsc.net/providerfinder/sapphire/fhir"
+
 
 class _FakeRow:
     def __init__(self, fhir_base_url: str | None):
@@ -200,6 +203,59 @@ def test_authorized_fhir_without_creds_refuses_unauthenticated(monkeypatch):
         svc.get_adapter(ANTHEM_LABEL, catalogue=_AnthemCat())
 
 
+# ---- authorized-FHIR (static client_id header, e.g. HCSC) routing -----------------------------
+
+
+class _HcscRow:
+    fhir_base_url = HCSC_FHIR
+    directory_access = "authorized-fhir"
+    key = "bcbs-empire-anthem-elevance-hcsc-il"
+    label = HCSC_LABEL
+
+
+class _HcscCat:
+    def resolve(self, payer):
+        return _HcscRow()
+
+
+def test_direct_hcsc_key_builds_apikey_adapter(monkeypatch):
+    sentinel = object()
+    monkeypatch.setattr(svc, "_build_hcsc_adapter", lambda base_url=None, year=None: sentinel)
+    assert svc.get_adapter("hcsc") is sentinel
+
+
+def test_direct_hcsc_key_without_creds_raises(monkeypatch):
+    monkeypatch.setattr(svc, "_build_hcsc_adapter", lambda base_url=None, year=None: None)
+    with pytest.raises(ValueError, match="HCSC_FHIR_CLIENT_ID"):
+        svc.get_adapter("hcsc")
+
+
+def test_hcsc_catalogue_row_routes_to_apikey_builder_not_anthem(monkeypatch):
+    # Regression: the roster label literally contains "Anthem" AND "Elevance" AND "HCSC" — HCSC is
+    # an independent Blue licensee, NOT Elevance, so this must NOT fall through to the Anthem
+    # OAuth2 builder (wrong payer, wrong credentials).
+    captured = {}
+
+    def fake_hcsc(base_url=None, year=None):
+        captured["base_url"] = base_url
+        return "hcsc-adapter"
+
+    def fake_anthem(base_url=None, year=None):
+        raise AssertionError("must not route HCSC to the Anthem builder")
+
+    monkeypatch.setattr(svc, "_build_hcsc_adapter", fake_hcsc)
+    monkeypatch.setattr(svc, "_build_anthem_adapter", fake_anthem)
+    out = svc.get_adapter(HCSC_LABEL, catalogue=_HcscCat())
+    assert out == "hcsc-adapter"
+    assert captured["base_url"] == HCSC_FHIR
+
+
+def test_hcsc_without_creds_refuses_unauthenticated(monkeypatch):
+    monkeypatch.setattr(svc, "_build_hcsc_adapter", lambda base_url=None, year=None: None)
+    with pytest.raises(ValueError, match="authorized-FHIR"):
+        svc.get_adapter(HCSC_LABEL, catalogue=_HcscCat())
+
+
 # ---- (b) the seeded catalogue exposes fhir_base_url for the verified-public payers -----------
 
 
@@ -219,6 +275,11 @@ def test_seeded_fhir_base_urls_present():
     assert anthem_by_state["FL-South Florida"]["fhir_base_url"] is None
     # Wellpoint is auth-gated (registered path returns 403) — must NOT carry a public fhir_base_url
     assert by_label[WELLPOINT] is None, "Wellpoint must not have a public fhir_base_url"
+    # HCSC: one client_id-header-gated FHIR base covers all 3 markets this label spans.
+    hcsc_by_state = {r["state"]: r for r in payer_rows() if r["label"] == HCSC_LABEL}
+    for state in ("IL", "TX-Houston", "TX-Dallas"):
+        assert hcsc_by_state[state]["fhir_base_url"] == HCSC_FHIR, state
+        assert hcsc_by_state[state]["directory_access"] == "authorized-fhir", state
 
 
 def test_wellpoint_is_auth_gated():

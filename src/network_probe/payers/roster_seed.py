@@ -265,6 +265,13 @@ _CIGNA_TIC = "https://www.cigna.com/legal/compliance/machine-readable-files"
 # endpoint sits behind a CloudFront AWS-WAF that blocks datacenter/non-US IPs, so the prod egress
 # IP must be allowlisted by Centene (email the API owner) or queries 403. See docs SIGNUP-CHECKLIST.
 _CENTENE_FHIR = "https://iopc-pd.api.centene.com/iopc/pd/fhir/providerdirectory"
+# HCSC (Health Care Service Corp) — independent Blue licensee for IL/TX/MT/NM/OK, NOT Elevance.
+# Sapphire PDEX Plan-Net FHIR, gated by a static `client_id` header (creds in .env as
+# HCSC_FHIR_CLIENT_ID) rather than Anthem-style OAuth2. Verified live 2026-07-14: /metadata is a
+# standard FHIR 4.0.1 CapabilityStatement (Practitioner search by identifier/family/given/_id,
+# PractitionerRole search by practitioner/network, inline network-reference display) — same shape
+# as Humana, no name-search fallback needed.
+_HCSC_FHIR = "https://api.hcsc.net/providerfinder/sapphire/fhir"
 
 # (fhir_base_url, tic_url, directory_url, directory_access)
 SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
@@ -541,11 +548,14 @@ SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
     ),
     "BCBS / Empire (Anthem / Elevance)(HCSC)": (
         # HCSC (Health Care Service Corp) owns BCBS in IL/TX/MT/NM/OK — an independent licensee, NOT
-        # Elevance, same pattern as BCBSAZ/Florida Blue (do NOT route through _ANTHEM_FHIR). Medicaid
-        # product "Blue Cross Community Health Plans" has a confirmed Stedi id (G00621, IL) but its
-        # FHIR endpoint (api.hcsc.net/providerfinder/sapphire/fhir) returned 401 even on /metadata —
-        # tighter-gated than Aetna. Dev portal: interoperability.hcsc.com.
-        None, None, None, "needs-authorized-api",
+        # Elevance, same pattern as BCBSAZ/Florida Blue (routes to _HCSC_FHIR, never _ANTHEM_FHIR).
+        # **Directory LIVE 2026-07-14** — HCSC issued a client_id credential (previously 401'd even
+        # on /metadata, "tighter-gated than Aetna"); routes to the client_id-header-authed adapter
+        # (HCSC_FHIR_CLIENT_ID in .env), same one FHIR base covering all 3 markets this label
+        # spans (IL/TX-Houston/TX-Dallas) and every benefit type. Medicaid product "Blue Cross
+        # Community Health Plans" has a separately confirmed Stedi id (G00621, IL) but no roster
+        # row of its own yet. Dev portal: interoperability.hcsc.com.
+        _HCSC_FHIR, None, None, "authorized-fhir",
     ),
     "Essence Healthcare": (
         # Lumeris-owned, St. Louis MO. Confirmed CMS-regulated (H2610/H6200/H3189/H4620), sells in

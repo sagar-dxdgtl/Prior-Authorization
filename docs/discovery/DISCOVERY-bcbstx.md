@@ -5,6 +5,17 @@
 `DISCOVERY-devoted.md`, `DISCOVERY-humana.md`.
 **Payer:** Blue Cross Blue Shield of Texas (HCSC) · vendor: **Zelis "Sapphire365"** · year: 2026
 
+> **UPDATE 2026-07-14 — the recommended compliant path below is now LIVE, not just planned.**
+> HCSC issued a `client_id` credential for its Sapphire PDEX Plan-Net FHIR API
+> (`api.hcsc.net/providerfinder/sapphire/fhir` — previously 401 even on `/metadata`, see
+> `docs/payer-sources/MATRIX.md` / `SIGNUP-CHECKLIST.md`). Wired via
+> `payers/adapters/fhir_auth.py:build_apikey_fhir_adapter` (a static `client_id` request header,
+> no OAuth2 token exchange) + the generic `FhirPdexAdapter` — same compliant CMS Provider
+> Directory pattern already used for Humana, just with a different auth mechanism. Covers every
+> `BCBS / Empire (Anthem / Elevance)(HCSC)` catalogue row (IL/TX-Houston/TX-Dallas). The Imperva-
+> gated `my.providerfinderonline.com` web tool documented below remains untouched/unscraped, as
+> planned — this is the CMS-mandated alternative that made scraping unnecessary.
+
 ---
 
 ## ⛔ TL;DR — directory API is behind IMPERVA bot protection; STOPPED per CLAUDE.md

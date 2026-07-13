@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     anthem_fhir_client_id: str | None = None
     anthem_fhir_client_secret: str | None = None
     anthem_fhir_scope: str | None = None
+    # HCSC (BCBS IL/TX/MT/NM/OK) provider-directory FHIR — gated by a static `client_id` request
+    # header, not OAuth2. Base URL is fixed/public (wired in domain/service.py), so only the
+    # credential needs a setting.
+    hcsc_fhir_client_id: str | None = None
     # Kept as a raw str (not list[str]) so pydantic-settings does not attempt to
     # JSON-decode it at the source level. Plain, comma-separated, and JSON-array
     # forms are all supported via the `cors_origins` property below.
@@ -72,6 +76,11 @@ class Settings(BaseSettings):
             and self.anthem_fhir_client_id
             and self.anthem_fhir_client_secret
         )
+
+    @property
+    def hcsc_fhir_ready(self) -> bool:
+        """True once the HCSC client_id header credential is set (no token/secret needed)."""
+        return bool(self.hcsc_fhir_client_id)
 
     @property
     def fernet_key_list(self) -> list[str]:
