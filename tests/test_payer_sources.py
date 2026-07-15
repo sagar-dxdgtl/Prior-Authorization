@@ -37,6 +37,7 @@ _FHIR_PAYERS = {
     "Arizona Complete Health - Complete Care Plan (Centene)": CENTENE_FHIR,
     "Wellcare (Centene)": CENTENE_FHIR,
     "UnitedHealthcare Community Plan": UHC_FHIR,
+    "UMR": UHC_FHIR,
 }
 _DIRECTORY_ACCESS = {"public-fhir", "authorized-fhir", "needs-authorized-api", "none", "pdf-directory"}
 
@@ -118,6 +119,23 @@ def test_scan_seeded_public_fhir():
     row = {r["label"]: r for r in payer_rows()}["Scan"]
     assert row["fhir_base_url"] == SCAN_FHIR
     assert row["directory_access"] == "public-fhir"
+
+
+UMR_MARKETS = {
+    "AZ", "CO-Denver", "NY", "FL-South Florida", "FL", "IL", "GA-Atlanta", "TX-Houston", "TX-Dallas",
+}
+
+
+def test_umr_seeded_in_every_market():
+    umr_rows = [r for r in payer_rows() if r["label"] == "UMR"]
+    assert {r["state"] for r in umr_rows} == UMR_MARKETS
+    for r in umr_rows:
+        assert r["benefit_type"] == "Commercial", r["state"]
+        assert r["fhir_base_url"] == UHC_FHIR, r["state"]
+        assert r["directory_access"] == "public-fhir", r["state"]
+        assert r["stedi_payer_id"] is None, r["state"]
+        assert r["enrollment_status"] == "needs_payer_id", r["state"]
+        assert r["network_indicator_supported"] is False, r["state"]
 
 
 def test_align_routes_to_db_directory_adapter():

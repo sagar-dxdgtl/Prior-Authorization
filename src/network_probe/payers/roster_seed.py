@@ -51,6 +51,7 @@ ROSTER = [
     ("UnitedHealthcare", "ACA", "AZ", "87726", "supported"),
     ("UnitedHealthcare", "Commercial", "AZ", "87726", "supported"),
     ("UnitedHealthcare", "Medicare Advantage", "AZ", "87726", "supported"),
+    ("UMR", "Commercial", "AZ", None, "needs_payer_id"),
     ("Wellcare (Centene)", "Medicare Advantage", "AZ", None, "needs_payer_id"),
     ("Wellpoint / Amerigroup (Elevance)", "Medicare Advantage", "AZ", None, "needs_payer_id"),
     # --- Colorado (Denver) ---
@@ -78,8 +79,10 @@ ROSTER = [
     ("UnitedHealthcare", "Commercial", "CO-Denver", "87726", "supported"),
     ("UnitedHealthcare", "Dual Eligible (FIDE SNP)", "CO-Denver", "87726", "supported"),
     ("UnitedHealthcare", "Medicare Advantage", "CO-Denver", "87726", "supported"),
+    ("UMR", "Commercial", "CO-Denver", None, "needs_payer_id"),
     # --- New York ---
     ("EmblemHealth", "Commercial", "NY", "13551", "needs_enrollment"),
+    ("UMR", "Commercial", "NY", None, "needs_payer_id"),
     # --- Florida (South Florida) ---
     ("Aetna", "Commercial", "FL-South Florida", "60054", "needs_enrollment"),
     ("Aetna", "Medicare Advantage", "FL-South Florida", "60054", "needs_enrollment"),
@@ -99,6 +102,7 @@ ROSTER = [
     ("Cigna Healthcare", "Commercial", "FL-South Florida", "62308", "needs_enrollment"),
     ("Community Care Plan", "Managed Medicaid", "FL-South Florida", None, "needs_payer_id"),
     ("Curative", "Commercial", "FL-South Florida", "CURTV", "needs_enrollment"),
+    ("UMR", "Commercial", "FL-South Florida", None, "needs_payer_id"),
     # --- Illinois --- (added from client benefit list; researched via 3 parallel agent passes,
     # 2026-07-06 — see docs/payer-sources/MATRIX.md "Illinois" section for full sourcing notes)
     ("Aetna", "Commercial", "IL", "60054", "needs_enrollment"),
@@ -127,6 +131,7 @@ ROSTER = [
     ("Provider Partners", "Medicare Advantage", "IL", None, "needs_payer_id"),
     ("UnitedHealthcare", "Commercial", "IL", "87726", "supported"),
     ("UnitedHealthcare", "Medicare Advantage", "IL", "87726", "supported"),
+    ("UMR", "Commercial", "IL", None, "needs_payer_id"),
     ("Zing Health", "Medicare Advantage", "IL", None, "needs_payer_id"),
     ("Wellcare (Centene)", "Dual Eligible (FIDE SNP)", "IL", None, "needs_payer_id"),
     ("Wellcare (Centene)", "Medicare Advantage", "IL", None, "needs_payer_id"),
@@ -157,6 +162,7 @@ ROSTER = [
     ("UnitedHealthcare", "Commercial", "GA-Atlanta", "87726", "supported"),
     ("UnitedHealthcare", "Dual Eligible (FIDE SNP)", "GA-Atlanta", "87726", "supported"),
     ("UnitedHealthcare", "Medicare Advantage", "GA-Atlanta", "87726", "supported"),
+    ("UMR", "Commercial", "GA-Atlanta", None, "needs_payer_id"),
     ("Clear Spring Health", "Medicare Advantage", "GA-Atlanta", None, "needs_payer_id"),
     # --- Texas (Houston) ---
     ("Abilis Health Plan", "Medicare Advantage", "TX-Houston", None, "needs_payer_id"),
@@ -194,6 +200,7 @@ ROSTER = [
     ("UnitedHealthcare", "Dual Eligible (FIDE SNP)", "TX-Houston", "87726", "supported"),
     ("UnitedHealthcare", "Medicare Advantage", "TX-Houston", "87726", "supported"),
     ("UnitedHealthcare Community Plan", "Managed Medicaid", "TX-Houston", None, "needs_payer_id"),
+    ("UMR", "Commercial", "TX-Houston", None, "needs_payer_id"),
     ("Wellcare (Centene)", "Medicare Advantage", "TX-Houston", None, "needs_payer_id"),
     ("WellCare / AllWell (Centene)", "Dual Eligible (FIDE SNP)", "TX-Houston", None, "needs_payer_id"),
     ("Wellpoint / Amerigroup (Elevance)", "ACA", "TX-Houston", None, "needs_payer_id"),
@@ -231,6 +238,7 @@ ROSTER = [
     ("UnitedHealthcare", "Dual Eligible (FIDE SNP)", "TX-Dallas", "87726", "supported"),
     ("UnitedHealthcare", "Medicare Advantage", "TX-Dallas", "87726", "supported"),
     ("UnitedHealthcare Community Plan", "Managed Medicaid", "TX-Dallas", None, "needs_payer_id"),
+    ("UMR", "Commercial", "TX-Dallas", None, "needs_payer_id"),
     ("Wellcare (Centene)", "Medicare Advantage", "TX-Dallas", None, "needs_payer_id"),
     ("Wellpoint / Amerigroup (Elevance)", "ACA", "TX-Dallas", None, "needs_payer_id"),
     ("Wellpoint / Amerigroup (Elevance)", "Managed Medicaid", "TX-Dallas", None, "needs_payer_id"),
@@ -240,6 +248,7 @@ ROSTER = [
     # via GET /2024-04-01/payers.
     ("First Coast Service Options, Inc.", "Traditional Medicare", "FL", "09102", "needs_enrollment"),
     ("Humana", "Medicare Advantage", "FL", "61101", "supported"),
+    ("UMR", "Commercial", "FL", None, "needs_payer_id"),
 ]
 
 
@@ -725,6 +734,28 @@ SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
         # the same _UHC_FHIR constant the "UnitedHealthcare" row uses fixes it (see
         # docs/superpowers/specs/2026-07-15-umr-directory-integration-design.md).
         _UHC_FHIR, "https://transparency-in-coverage.uhc.com/", "https://www.uhc.com/communityplan/find-a-doctor", "public-fhir",
+    ),
+    "UMR": (
+        # UMR (UnitedHealth Group's third-party-administrator brand for self-funded employer
+        # plans) is not an insurer and has no network of its own -- verified 2026-07-15: its own
+        # "find a provider" tool (umr.com/find-a-provider) lists ~15 named networks (Choice Plus,
+        # Core, Options PPO, Select Plus, NexusACO, state-tiered variants), every one a
+        # UnitedHealthcare-branded national commercial network product, not a UMR-specific
+        # network. Live-tested against 3 of this client's own roster NPIs on flex.optum.com
+        # (Manayan/GA, Naar/FL, Bui/AZ) -- all resolved IN_NETWORK. TiC MRFs are published on the
+        # same UHC portal ("UnitedHealthcare, UMR, and HealthSCOPE Benefits create and publish
+        # Machine-Readable Files on behalf of group health plans... posted at
+        # transparency-in-coverage.uhc.com"). Excluded: Oxford Freedom (separate legacy UHG
+        # brand, external Rally-platform tool) and UnitedHealthcare Dental PPO (different product
+        # line). No single Stedi id: Stedi lists 19+ distinct UMR-associated payer ids
+        # (UMR01/UMRWAU/XXUMR/10394/GEHA/...) because UMR's eligibility routing is per
+        # self-funded employer group, not one umbrella id -- left `needs_payer_id` for human
+        # review rather than guessed (same honesty policy as every other ambiguous id in this
+        # file). See docs/superpowers/specs/2026-07-15-umr-directory-integration-design.md.
+        _UHC_FHIR,
+        "https://transparency-in-coverage.uhc.com/",
+        "https://www.umr.com/find-a-provider",
+        "public-fhir",
     ),
     "WellCare / AllWell (Centene)": (
         _CENTENE_FHIR, _CENTENE_TIC, "https://www.wellcare.com/en/find-a-doctor", "public-fhir",
