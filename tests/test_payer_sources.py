@@ -277,6 +277,26 @@ def test_hcsc_without_creds_refuses_unauthenticated(monkeypatch):
         svc.get_adapter(HCSC_LABEL, catalogue=_HcscCat())
 
 
+def test_hcsc_medicaid_row_seeded():
+    row = next(
+        r
+        for r in payer_rows()
+        if r["label"] == HCSC_LABEL and r["state"] == "IL" and r["benefit_type"] == "Managed Medicaid"
+    )
+    assert row["stedi_payer_id"] == "G00621"
+    assert row["enrollment_status"] == "needs_enrollment"
+    assert row["network_indicator_supported"] is False
+    # Inherited from the label-level SOURCES entry, not a new one:
+    assert row["fhir_base_url"] == HCSC_FHIR
+    assert row["directory_access"] == "authorized-fhir"
+    # Regression (design finding #5): this MUST reuse the existing HCSC label/key so it keeps
+    # routing through _build_hcsc_adapter via the "hcsc" substring match in _authed_builder_for().
+    # A brand-new label like "Blue Cross Community Health Plans" would silently bypass that match
+    # and misroute to a "credentials not configured" error despite real, working creds.
+    assert row["key"] == "bcbs-empire-anthem-elevance-hcsc-il"
+    assert "Blue Cross Community Health Plans" not in SOURCES
+
+
 # ---- (b) the seeded catalogue exposes fhir_base_url for the verified-public payers -----------
 
 

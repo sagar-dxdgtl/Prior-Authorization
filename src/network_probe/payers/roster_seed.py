@@ -113,6 +113,15 @@ ROSTER = [
     ("BCBS / Empire (Anthem / Elevance)(HCSC)", "ACA", "IL", None, "needs_payer_id"),
     ("BCBS / Empire (Anthem / Elevance)(HCSC)", "Commercial", "IL", None, "needs_payer_id"),
     ("BCBS / Empire (Anthem / Elevance)(HCSC)", "Medicare Advantage", "IL", None, "needs_payer_id"),
+    # Retail brand "Blue Cross Community Health Plans (SM)" -- HCSC's IL Medicaid product, same
+    # underlying entity/technical integration as the other 3 IL rows above (same SOURCES entry,
+    # same _HCSC_FHIR endpoint, same HCSC_FHIR_CLIENT_ID). Verified live 2026-07-15: Organization
+    # "Blue Cross Community Health Plans (SM)" (id network-11152019) is active on the Sapphire
+    # FHIR endpoint with 637,497 PractitionerRole entries. Stedi id G00621 confirmed live on
+    # Stedi's own site. Deliberately NOT a separate roster label -- see
+    # docs/superpowers/specs/2026-07-15-medicaid-meridian-hcsc-design.md finding #5 for why a new
+    # label here would silently break routing in _authed_builder_for().
+    ("BCBS / Empire (Anthem / Elevance)(HCSC)", "Managed Medicaid", "IL", "G00621", "needs_enrollment"),
     ("Cigna Healthcare", "Commercial", "IL", "62308", "needs_enrollment"),
     ("Essence Healthcare", "Medicare Advantage", "IL", None, "needs_payer_id"),
     ("Humana", "Dual Eligible (FIDE SNP)", "IL", "61101", "supported"),
@@ -578,8 +587,9 @@ SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
         # on /metadata, "tighter-gated than Aetna"); routes to the client_id-header-authed adapter
         # (HCSC_FHIR_CLIENT_ID in .env), same one FHIR base covering all 3 markets this label
         # spans (IL/TX-Houston/TX-Dallas) and every benefit type. Medicaid product "Blue Cross
-        # Community Health Plans" has a separately confirmed Stedi id (G00621, IL) but no roster
-        # row of its own yet. Dev portal: interoperability.hcsc.com.
+        # Community Health Plans" has a separately confirmed Stedi id (G00621, IL) and, as of
+        # 2026-07-15, its own IL Managed Medicaid ROSTER row below (still this same label/SOURCES
+        # entry, not a new one). Dev portal: interoperability.hcsc.com.
         _HCSC_FHIR, None, None, "authorized-fhir",
     ),
     "Essence Healthcare": (
