@@ -466,11 +466,19 @@ SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
     ),
     "Meridian Health": (
         # Illinois Medicaid MCO. Its own "Find a Provider" tool is a JS SPA (no public FHIR/API
-        # found) -- same treatment as other directory-access=none payers.
-        None,
+        # found) -- BUT Meridian Health Plan of Illinois has been a wholly-owned Centene
+        # subsidiary since 2018 (grouped with WellCare/Sunshine Health/Buckeye), and the shared
+        # Centene national PDEX directory (_CENTENE_FHIR) already serves it: verified live
+        # 2026-07-15 against this client's own Meridian-labeled provider (Kevin Petermann, NPI
+        # 1588744650) -- a real hit, with real Illinois-specific network affiliations (IL SNP,
+        # Exchange IL, etc.). Those network names don't literally say "Meridian" -- a
+        # Centene-platform-wide pattern already accepted for the existing Superior HealthPlan
+        # (Centene) row, not a Meridian-specific gap. See docs/superpowers/specs/
+        # 2026-07-15-medicaid-meridian-hcsc-design.md.
+        _CENTENE_FHIR,
         None,
         "https://findaprovider.ilmeridian.com",
-        "none",
+        "public-fhir",
     ),
     "Molina Healthcare": (
         "https://api.interop.molinahealthcare.com/ProviderDirectory",

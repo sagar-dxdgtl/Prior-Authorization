@@ -36,6 +36,7 @@ _FHIR_PAYERS = {
     "Ambetter (Centene)": CENTENE_FHIR,
     "Arizona Complete Health - Complete Care Plan (Centene)": CENTENE_FHIR,
     "Wellcare (Centene)": CENTENE_FHIR,
+    "Meridian Health": CENTENE_FHIR,
     "UnitedHealthcare Community Plan": UHC_FHIR,
     "UMR": UHC_FHIR,
 }
