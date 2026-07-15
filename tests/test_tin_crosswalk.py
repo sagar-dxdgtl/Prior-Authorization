@@ -90,6 +90,22 @@ def test_default_crosswalk_has_2026_07_08_tic_sweep_findings():
     assert cw.tins_for("ambetter-centene-tx-dallas", "1710305735") == ["412049581", "933510922"]
 
 
+def test_default_crosswalk_has_aetna_alicfi_sweep_findings():
+    # Real findings from the 2026-07-15 Aetna ALICFI (fully-insured exchange) TiC sweep -- a bounded
+    # 16-of-283-file sample (not exhaustive), in which all 6 target NPIs were confirmed hits.
+    from network_probe.domain.tin_crosswalk import default_crosswalk
+
+    cw = default_crosswalk()
+    assert cw.tins_for("aetna-co-denver", "1598895435") == ["475181686"]
+    assert cw.tins_for("aetna-co-denver", "1629339312") == ["475181686"]
+    assert cw.tins_for("aetna-tx-houston", "1710305735") == ["412049581", "933510922"]
+    assert cw.tins_for("aetna-tx-dallas", "1710305735") == ["412049581", "933510922"]
+    assert cw.tins_for("aetna-ga-atlanta", "1902811656") == ["921600050"]
+    assert cw.tins_for("aetna-tx-houston", "1972603934") == ["933510922"]
+    assert cw.tins_for("aetna-tx-dallas", "1972603934") == ["933510922"]
+    assert cw.tins_for("aetna-az", "1992078745") == ["843447602"]
+
+
 def test_tinscope_corroborates_uhc_fradkin_via_seed():
     # IN directory verdict + billing TIN 933510922 matched against the seeded crosswalk -> corroborates
     q = ProviderQuery(

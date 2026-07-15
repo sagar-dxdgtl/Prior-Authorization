@@ -97,6 +97,56 @@ class TinCrosswalk:
 #     and Wellness Institute", for the same NPI -- both real, this provider bills under either).
 #     https://www.centene.com/content/dam/centene/.../2026-06-29_centene-management-company-llc_ambetter-tx_in-network.json
 #
+# 2026-07-15 Aetna ALICFI (fully-insured exchange) TiC sweep, verified against the live
+# mrf.healthsparq.com/aetnacvs-egress.nophi.kyruushsq.com host (Aetna's TiC vendor, HealthSparq/
+# Kyruus -- unlike the WAF-protected consumer "find a doctor" site, this MRF host has no auth/WAF).
+# Scope note: this was a BOUNDED sample of 16 of Aetna's 283 ALICFI in-network files, not an
+# exhaustive sweep -- each file is 3-4+ GB compressed and tic_ingest.py's two-pass parse (Pass 1
+# provider_references, Pass 2 negotiated_rates) makes a full 283-file sweep impractical in one
+# session. All 6 target NPIs happened to be found within this 16-file sample; several appear under
+# multiple TINs there -- only TINs matching an already-established value from another payer's
+# crosswalk entry (or, for 1902811656, the sole TIN found with no established value to compare
+# against) are added to _SEED. Extra/unverified TINs are noted below for reference but not added:
+#   - Aetna (ALICFI): NPI 1598895435 (Wende Moore's provider) -> TIN 475181686, matching the
+#     already-established TIN via kaiser-permanente-co-denver's MRF. Added under catalogue key
+#     aetna-co-denver. (Aetna's file also lists this NPI under TIN 270883714 and TIN 840921521 --
+#     not independently established elsewhere, not added to _SEED; noted for reference only.)
+#     https://mrf.healthsparq.com/aetnacvs-egress.nophi.kyruushsq.com/prd/mrf/AETNACVS_I/ALICFI/2026-07-05/tableOfContents/2026-07-05_Aetna-Life-Insurance-Company_index.json.gz
+#     (2026-07-05 ALICFI table of contents, 16-file bounded sample.)
+#   - Aetna (ALICFI): NPI 1629339312 (Jing Li) -> TIN 475181686, matching the already-established
+#     TIN via cigna-healthcare-co-denver's MRF. Added under catalogue key aetna-co-denver.
+#     https://mrf.healthsparq.com/aetnacvs-egress.nophi.kyruushsq.com/prd/mrf/AETNACVS_I/ALICFI/2026-07-05/tableOfContents/2026-07-05_Aetna-Life-Insurance-Company_index.json.gz
+#     (2026-07-05 ALICFI table of contents, 16-file bounded sample.)
+#   - Aetna (ALICFI): NPI 1710305735 (Umang Patel) -> TIN 933510922 and TIN 412049581, both matching
+#     already-established TINs (933510922 via uhc's MRF, 412049581 via ambetter-centene-tx-dallas's
+#     MRF). Added under catalogue keys aetna-tx-houston and aetna-tx-dallas. (Aetna's file also lists
+#     this NPI under TIN 460688139 and TIN 743099047 -- not independently established elsewhere, not
+#     added to _SEED; noted for reference only.)
+#     https://mrf.healthsparq.com/aetnacvs-egress.nophi.kyruushsq.com/prd/mrf/AETNACVS_I/ALICFI/2026-07-05/tableOfContents/2026-07-05_Aetna-Life-Insurance-Company_index.json.gz
+#     (2026-07-05 ALICFI table of contents, 16-file bounded sample.)
+#   - Aetna (ALICFI): NPI 1902811656 -> TIN 921600050, no prior established TIN to compare against
+#     (Anthem's GA file masks the billing TIN behind a representative NPI) -- taken as-is. Added
+#     under catalogue key aetna-ga-atlanta.
+#     https://mrf.healthsparq.com/aetnacvs-egress.nophi.kyruushsq.com/prd/mrf/AETNACVS_I/ALICFI/2026-07-05/tableOfContents/2026-07-05_Aetna-Life-Insurance-Company_index.json.gz
+#     (2026-07-05 ALICFI table of contents, 16-file bounded sample.)
+#   - Aetna (ALICFI): NPI 1972603934 (Kevin Fradkin) -> TIN 933510922, matching the already-established
+#     TIN via uhc's MRF. Added under catalogue keys aetna-tx-houston and aetna-tx-dallas. (Aetna's
+#     file also lists this NPI under TIN 412049581, TIN 463812940, TIN 472689117, TIN 475181686, and
+#     TIN 880715104 -- not independently established for THIS NPI, not added to _SEED; noted for
+#     reference only. Interesting cross-reference: 412049581 and 475181686 are themselves established
+#     TINs elsewhere in this crosswalk, but for other NPIs -- 412049581 for Umang Patel via
+#     ambetter-centene-tx-dallas, 475181686 for Jing Li/Wende Moore's provider via
+#     cigna-healthcare-co-denver and kaiser-permanente-co-denver -- so they are NOT treated as
+#     confirmed for 1972603934 specifically.)
+#     https://mrf.healthsparq.com/aetnacvs-egress.nophi.kyruushsq.com/prd/mrf/AETNACVS_I/ALICFI/2026-07-05/tableOfContents/2026-07-05_Aetna-Life-Insurance-Company_index.json.gz
+#     (2026-07-05 ALICFI table of contents, 16-file bounded sample.)
+#   - Aetna (ALICFI): NPI 1992078745 (Arthur Maydell) -> TIN 843447602, matching the already-established
+#     TIN via unitedhealthcare-az's MRF. Added under catalogue key aetna-az. (Aetna's file also lists
+#     this NPI under TIN 371661911, TIN 813981821, TIN 824431093, and TIN 833498049 -- not
+#     independently established elsewhere, not added to _SEED; noted for reference only.)
+#     https://mrf.healthsparq.com/aetnacvs-egress.nophi.kyruushsq.com/prd/mrf/AETNACVS_I/ALICFI/2026-07-05/tableOfContents/2026-07-05_Aetna-Life-Insurance-Company_index.json.gz
+#     (2026-07-05 ALICFI table of contents, 16-file bounded sample.)
+#
 # Checked and found NOT applicable/NOT present (documented here so this isn't re-researched):
 #   - Meridian Health (IL) / Mercy Care (AZ): Medicaid managed-care organizations, outside the
 #     federal TiC MRF mandate's scope (individual/group commercial issuers only) -- no file exists.
@@ -109,6 +159,9 @@ class TinCrosswalk:
 #   - BCBS Anthem/Elevance (GA): NPI 1902811656 IS present in Anthem's real GA in-network files, but
 #     Anthem masks billing TINs behind a representative NPI (tin.type="npi", not "ein") -- so this
 #     payer's own MRF cannot confirm or refute the EIN-based billing TIN at all.
+#   - Aetna (FL-South Florida, IL): not checked -- no UVC-affiliated NPI has been established for
+#     either market by any payer's crosswalk entry yet. Needs a client-supplied TIN/NPI for these
+#     markets before any payer, including Aetna, can be checked here.
 _SEED = [
     {"payer": "uhc", "npi": "1972603934", "tin": "933510922"},
     {"payer": "uhc", "npi": "1710305735", "tin": "933510922"},
@@ -116,6 +169,14 @@ _SEED = [
     {"payer": "kaiser-permanente-co-denver", "npi": "1598895435", "tin": "475181686"},
     {"payer": "unitedhealthcare-az", "npi": "1992078745", "tin": "843447602"},
     {"payer": "ambetter-centene-tx-dallas", "npi": "1710305735", "tins": ["933510922", "412049581"]},
+    {"payer": "aetna-co-denver", "npi": "1598895435", "tin": "475181686"},
+    {"payer": "aetna-co-denver", "npi": "1629339312", "tin": "475181686"},
+    {"payer": "aetna-tx-houston", "npi": "1710305735", "tins": ["933510922", "412049581"]},
+    {"payer": "aetna-tx-dallas", "npi": "1710305735", "tins": ["933510922", "412049581"]},
+    {"payer": "aetna-ga-atlanta", "npi": "1902811656", "tin": "921600050"},
+    {"payer": "aetna-tx-houston", "npi": "1972603934", "tin": "933510922"},
+    {"payer": "aetna-tx-dallas", "npi": "1972603934", "tin": "933510922"},
+    {"payer": "aetna-az", "npi": "1992078745", "tin": "843447602"},
 ]
 
 
