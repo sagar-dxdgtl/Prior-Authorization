@@ -82,7 +82,7 @@ Machine-generated from `src/network_probe/payers/roster_seed.py` (the catalogue 
 | BCBS / Empire (Anthem / Elevance) | FL-South Florida | Medicare Advantage | — | — | `https://www.anthem.com/machine-readable-file` | needs-authorized-api | review: Stedi id varies by state BCBS affiliate (CA 040); resolver's 81508 (Empire/SOMOS) unconfirmed — left for review. |
 | Cigna Healthcare | FL-South Florida | ACA | 62308 | `https://fhir.cigna.com/ProviderDirectory/v1` (verified) | `https://www.cigna.com/legal/compliance/machine-readable-files` | public-fhir | Verified public FHIR + existing cigna-fhir adapter. Stedi 62308 (enrollment required before live 270/271). |
 | Cigna Healthcare | FL-South Florida | Commercial | 62308 | `https://fhir.cigna.com/ProviderDirectory/v1` (verified) | `https://www.cigna.com/legal/compliance/machine-readable-files` | public-fhir | Verified public FHIR + existing cigna-fhir adapter. Stedi 62308 (enrollment required before live 270/271). |
-| Community Care Plan | FL-South Florida | Managed Medicaid | — | — | — | none | review: FL Medicaid MCO; resolver candidate 59064 unconfirmed; PDF-only directory. |
+| Community Care Plan | FL-South Florida | Managed Medicaid | — | — | — | pdf-directory | **Directory LIVE 2026-07-15** — no FHIR API; network published only as 3 per-county monthly PDFs (Broward/Miami-Dade/Palm Beach, this client's full FL-South Florida market), all confirmed live and static (~18MB/~6,100 pages total, dated "As of 07/13/2026"). Wired via the "ccp" PDF format + `PDF_DIRECTORIES` multi-URL support. review: Stedi id candidate 59064 still unconfirmed (separate from directory access). |
 | Curative | FL-South Florida | Commercial | CURTV | — | `https://curative.com/transparency-in-coverage-rates` | needs-authorized-api | CURTV — resolver + research agree. Provider search is login-gated. |
 | UMR | FL-South Florida | Commercial |  | via existing adapter | `https://transparency-in-coverage.uhc.com/` | public-fhir | UHG's self-funded-plan TPA — rides UnitedHealthcare's own networks (Choice Plus/Options PPO/Core/NexusACO/Select Plus), not a network of its own; live-tested against 3 in-roster NPIs on the same flex.optum.com endpoint (Manayan/GA, Naar/FL, Bui/AZ — all IN_NETWORK). No single Stedi id (19+ group-specific ids on Stedi, e.g. UMR01/UMRWAU/XXUMR) — left `needs_payer_id` for human review. Excludes Oxford Freedom and UnitedHealthcare Dental PPO. See docs/superpowers/specs/2026-07-15-umr-directory-integration-design.md. |
 | Aetna | IL | Commercial | 60054 | — | `https://health1.aetna.com/app/public/` | needs-authorized-api | Stedi 60054; provider-directory FHIR is OAuth2-gated (needs-authorized-api). Same national id as other states. |
@@ -260,7 +260,9 @@ Payers with **no machine-queryable public directory** today (the engine cannot r
 - **EmblemHealth** (needs-authorized-api) — 13551. HealthTranzform endpoint open/no-auth but **network data broken** (ParticipatingNetwork Orgs → person names; no network-type orgs) → not wireable until clean data.
 - **Aetna Better Health** (needs-authorized-api) — ABH01 — resolver + research agree.
 - **AvMed** (needs-authorized-api) — 59274 — resolver + research agree. FHIR endpoint stale (TLS expired) → not seeded.
-- **Community Care Plan** (none) — review: FL Medicaid MCO; resolver candidate 59064 unconfirmed; PDF-only directory.
+- **Community Care Plan** (pdf-directory) — **Directory LIVE 2026-07-15** — 3 per-county monthly
+  PDFs (Broward/Miami-Dade/Palm Beach), no FHIR API. review: Stedi id candidate 59064 still
+  unconfirmed (separate concern from directory access, tracked below).
 - **Curative** (needs-authorized-api) — CURTV — resolver + research agree. Provider search is login-gated.
 - **BCBS / Empire (Anthem / Elevance)(HCSC)** — **now LIVE 2026-07-14** (`authorized-fhir`: all IL/
   TX-Houston/TX-Dallas rows, every benefit type — HCSC issued a `client_id` credential, previously
