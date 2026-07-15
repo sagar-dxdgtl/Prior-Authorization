@@ -7,6 +7,10 @@ candidates_fn. The live download + 53k-row load runs in the deployment (ENABLE_D
 
 from __future__ import annotations
 
+import httpx
+import pytest
+
+from network_probe.domain import directory_load
 from network_probe.domain.directory_match import _norm, match_directory
 from network_probe.domain.directory_pdf import parse_lines, parse_lines_aaneel, parse_lines_ccp
 from network_probe.domain.models import NetworkStatus, ProviderQuery
@@ -197,6 +201,67 @@ def test_parse_lines_ccp_strips_page_header_mid_stream():
     for e in es:
         assert "BROWARD" not in e.name
         assert "of 1933" not in e.name
+
+
+# --- directory_load.py: multi-URL support (no existing coverage before this task) -------------
+
+
+def test_load_directory_concatenates_multiple_urls(monkeypatch):
+    monkeypatch.setitem(
+        directory_load.PDF_DIRECTORIES,
+        "test-multi",
+        {"label": "Test", "format": "ccp", "pdf_urls": ["https://x/a.pdf", "https://x/b.pdf", "https://x/c.pdf"]},
+    )
+    monkeypatch.setattr(directory_load, "download_pdf", lambda url, timeout=180.0: b"fake-pdf-bytes")
+    call_rows = iter([[{"a": 1}, {"a": 2}], [{"a": 3}], [{"a": 4}, {"a": 5}, {"a": 6}]])
+    monkeypatch.setattr(
+        directory_load, "rows_from_pdf", lambda path, payer_key, version, fmt="allyalign": next(call_rows)
+    )
+    replaced = {}
+    monkeypatch.setattr(
+        directory_load,
+        "_replace_rows",
+        lambda payer_key, rows, engine=None: replaced.update(payer_key=payer_key, rows=rows),
+    )
+    n = directory_load.load_directory("test-multi")
+    assert n == 6
+    assert replaced["payer_key"] == "test-multi"
+    assert replaced["rows"] == [{"a": 1}, {"a": 2}, {"a": 3}, {"a": 4}, {"a": 5}, {"a": 6}]
+
+
+def test_load_directory_aborts_on_partial_failure(monkeypatch):
+    monkeypatch.setitem(
+        directory_load.PDF_DIRECTORIES,
+        "test-multi-fail",
+        {"label": "Test", "format": "ccp", "pdf_urls": ["https://x/a.pdf", "https://x/BAD.pdf", "https://x/c.pdf"]},
+    )
+
+    def fake_download(url, timeout=180.0):
+        if "BAD" in url:
+            raise httpx.HTTPError("boom")
+        return b"fake-pdf-bytes"
+
+    monkeypatch.setattr(directory_load, "download_pdf", fake_download)
+    monkeypatch.setattr(
+        directory_load, "rows_from_pdf", lambda path, payer_key, version, fmt="allyalign": [{"a": 1}]
+    )
+    replace_called = []
+    monkeypatch.setattr(
+        directory_load, "_replace_rows", lambda payer_key, rows, engine=None: replace_called.append(True)
+    )
+    with pytest.raises(httpx.HTTPError):
+        directory_load.load_directory("test-multi-fail")
+    assert replace_called == [], "must not replace rows on partial failure"
+
+
+def test_resolve_pdf_urls_singular_config_returns_one_item_list():
+    cfg = {"pdf_url": "https://example.org/one.pdf"}
+    assert directory_load.resolve_pdf_urls(cfg) == ["https://example.org/one.pdf"]
+
+
+def test_resolve_pdf_urls_plural_config_returns_all_items():
+    cfg = {"pdf_urls": ["https://example.org/a.pdf", "https://example.org/b.pdf"]}
+    assert directory_load.resolve_pdf_urls(cfg) == ["https://example.org/a.pdf", "https://example.org/b.pdf"]
 
 
 # --- matcher -----------------------------------------------------------------

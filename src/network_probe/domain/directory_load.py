@@ -61,6 +61,17 @@ def resolve_pdf_url(cfg: dict) -> str:
     return m.group(0)
 
 
+def resolve_pdf_urls(cfg: dict) -> list[str]:
+    """Return every PDF URL this payer's directory is split across. Most payers publish one file
+    (`pdf_url` static, or discovered via `page_url`+`link_pattern`) -- `resolve_pdf_url` already
+    handles both, so this just wraps its result in a single-item list. Payers whose directory is
+    split into several files (e.g. Community Care Plan's per-county PDFs) set `pdf_urls` (plural)
+    directly instead."""
+    if cfg.get("pdf_urls"):
+        return list(cfg["pdf_urls"])
+    return [resolve_pdf_url(cfg)]
+
+
 def _month() -> str:
     return _dt.date.today().strftime("%Y-%m")
 
@@ -116,31 +127,55 @@ def _replace_rows(payer_key: str, rows: list[dict], engine=None) -> None:
         s.commit()
 
 
+def _rows_from_url(url: str, payer_key: str, version: str, fmt: str) -> list[dict]:
+    """Download one PDF and parse it into rows, cleaning up its temp file afterward."""
+    data = download_pdf(url)
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            tmp.write(data)
+            tmp_path = tmp.name
+        return rows_from_pdf(tmp_path, payer_key, version, fmt=fmt)
+    finally:
+        if tmp_path:
+            os.unlink(tmp_path)
+
+
 def load_directory(
     payer_key: str, *, pdf_path: str | None = None, pdf_bytes: bytes | None = None,
     version: str | None = None, engine=None,
 ) -> int:
-    """Download (or use the given) PDF, parse it, and atomically replace this payer's rows.
-    Returns the number of rows loaded."""
+    """Download (or use the given) PDF(s), parse them, and atomically replace this payer's rows.
+    Returns the number of rows loaded.
+
+    `pdf_path`/`pdf_bytes` override a single file (used by tests / one-off loads) exactly as
+    before. Without an override, every URL `resolve_pdf_urls()` returns for this payer is
+    downloaded and parsed in turn and the rows concatenated -- if any one fails, the whole call
+    raises before `_replace_rows()` is reached, so a payer's directory is never left partially
+    replaced from some counties/files but not others."""
     cfg = PDF_DIRECTORIES.get(payer_key)
     if cfg is None and pdf_path is None and pdf_bytes is None:
         raise ValueError(f"unknown PDF-directory payer {payer_key!r}")
     version = version or _month()
     fmt = (cfg or {}).get("format", "allyalign")
-    tmp_path = None
-    try:
-        if pdf_path is None:
-            data = pdf_bytes if pdf_bytes is not None else download_pdf(resolve_pdf_url(cfg))
-            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-                tmp.write(data)
-                tmp_path = tmp.name
-            pdf_path = tmp_path
-        rows = rows_from_pdf(pdf_path, payer_key, version, fmt=fmt)
-        _replace_rows(payer_key, rows, engine)
-        return len(rows)
-    finally:
-        if tmp_path:
-            os.unlink(tmp_path)
+    if pdf_path is not None or pdf_bytes is not None:
+        tmp_path = None
+        try:
+            if pdf_path is None:
+                with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+                    tmp.write(pdf_bytes)
+                    tmp_path = tmp.name
+                pdf_path = tmp_path
+            rows = rows_from_pdf(pdf_path, payer_key, version, fmt=fmt)
+        finally:
+            if tmp_path:
+                os.unlink(tmp_path)
+    else:
+        rows = []
+        for url in resolve_pdf_urls(cfg):
+            rows.extend(_rows_from_url(url, payer_key, version, fmt=fmt))
+    _replace_rows(payer_key, rows, engine)
+    return len(rows)
 
 
 def loaded_version(payer_key: str, engine=None) -> str | None:
