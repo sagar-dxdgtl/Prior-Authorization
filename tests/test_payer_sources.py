@@ -24,6 +24,7 @@ MOLINA = "Molina Healthcare"
 MOLINA_FHIR = "https://api.interop.molinahealthcare.com/ProviderDirectory"
 # Centene-family plans share one PDEX directory (no-auth; prod egress must be WAF-allowlisted).
 CENTENE_FHIR = "https://iopc-pd.api.centene.com/iopc/pd/fhir/providerdirectory"
+UHC_FHIR = "https://flex.optum.com/fhirpublic/R4"
 _FHIR_PAYERS = {
     "Cigna Healthcare": "https://fhir.cigna.com/ProviderDirectory/v1",
     "Humana": "https://fhir.humana.com/api",
@@ -35,6 +36,7 @@ _FHIR_PAYERS = {
     "Ambetter (Centene)": CENTENE_FHIR,
     "Arizona Complete Health - Complete Care Plan (Centene)": CENTENE_FHIR,
     "Wellcare (Centene)": CENTENE_FHIR,
+    "UnitedHealthcare Community Plan": UHC_FHIR,
 }
 _DIRECTORY_ACCESS = {"public-fhir", "authorized-fhir", "needs-authorized-api", "none", "pdf-directory"}
 

@@ -272,6 +272,14 @@ _CENTENE_FHIR = "https://iopc-pd.api.centene.com/iopc/pd/fhir/providerdirectory"
 # PractitionerRole search by practitioner/network, inline network-reference display) — same shape
 # as Humana, no name-search fallback needed.
 _HCSC_FHIR = "https://api.hcsc.net/providerfinder/sapphire/fhir"
+# UnitedHealthcare's public Optum FHIR Layer Exchange (no auth/login) -- the same endpoint the
+# "uhc" adapter key uses (fhir_pdex.KNOWN_ENDPOINTS["uhc"]). Shared by every UHC-family catalogue
+# label that needs a populated fhir_base_url to reach the catalogue-driven FHIR dispatch (see the
+# "UnitedHealthcare" SOURCES note below): UnitedHealthcare itself, UnitedHealthcare Community Plan,
+# and UMR (UHG's self-funded-plan TPA -- rides UHC's own Choice Plus/Options PPO/Core/NexusACO/
+# Select Plus networks, not a network of its own; see docs/superpowers/specs/
+# 2026-07-15-umr-directory-integration-design.md).
+_UHC_FHIR = "https://flex.optum.com/fhirpublic/R4"
 
 # (fhir_base_url, tic_url, directory_url, directory_access)
 SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
@@ -501,7 +509,7 @@ SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
         # "unitedhealthcare-az", as check_eligibility() does) need fhir_base_url populated here
         # to fall through to the catalogue-driven FHIR dispatch instead of hitting "no adapter".
         # Same endpoint as the "uhc" adapter-key shortcut (fhir_pdex.KNOWN_ENDPOINTS["uhc"]).
-        "https://flex.optum.com/fhirpublic/R4",
+        _UHC_FHIR,
         "https://transparency-in-coverage.uhc.com/",
         "https://www.uhc.com/find-a-doctor",
         "public-fhir",
@@ -710,8 +718,13 @@ SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
     ),
     "UnitedHealthcare Community Plan": (
         # Same underlying UHC/Optum adapter as other UnitedHealthcare rows — not a separate
-        # technical product, just a distinct Medicaid brand name.
-        None, "https://transparency-in-coverage.uhc.com/", "https://www.uhc.com/communityplan/find-a-doctor", "public-fhir",
+        # technical product, just a distinct Medicaid brand name. BUG FIX 2026-07-15: this was
+        # `None` here, which meant get_adapter() had no fhir_base_url to fall through to and no
+        # adapter-key shortcut matches this multi-word label either -- every call raised
+        # `ValueError: No adapter for payer 'UnitedHealthcare Community Plan'`. Populating it with
+        # the same _UHC_FHIR constant the "UnitedHealthcare" row uses fixes it (see
+        # docs/superpowers/specs/2026-07-15-umr-directory-integration-design.md).
+        _UHC_FHIR, "https://transparency-in-coverage.uhc.com/", "https://www.uhc.com/communityplan/find-a-doctor", "public-fhir",
     ),
     "WellCare / AllWell (Centene)": (
         _CENTENE_FHIR, _CENTENE_TIC, "https://www.wellcare.com/en/find-a-doctor", "public-fhir",
