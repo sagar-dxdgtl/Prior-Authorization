@@ -8,7 +8,7 @@ candidates_fn. The live download + 53k-row load runs in the deployment (ENABLE_D
 from __future__ import annotations
 
 from network_probe.domain.directory_match import _norm, match_directory
-from network_probe.domain.directory_pdf import parse_lines, parse_lines_aaneel
+from network_probe.domain.directory_pdf import parse_lines, parse_lines_aaneel, parse_lines_ccp
 from network_probe.domain.models import NetworkStatus, ProviderQuery
 from network_probe.payers.adapters.db_directory import DbDirectoryAdapter
 
@@ -96,6 +96,107 @@ def test_parse_lines_aaneel():
     assert b.name == "GEORGE JOUMAS" and b.last_name == "JOUMAS"  # (M) suffix stripped
     assert b.locations[0]["address"] == "1300 N 12th St Ste 320"  # line before city/state/zip, past multi-line org
     assert b.locations[0]["zip"] == "85006"
+
+
+# Community Care Plan (FL Medicaid) layout: each record is fully self-contained (no shared
+# multi-location name header like allyalign), surname-first names, and a running 3-line page
+# header ("<section>" / "<COUNTY>" / "N of M") that PyMuPDF re-extracts on every page. Transcribed
+# verbatim from the live Broward PDF (docs/superpowers/specs/2026-07-15-community-care-plan-pdf-design.md).
+CCP_LINES = [
+    "PCP - ADOLESCENT MEDICINE",
+    "BROWARD",
+    "4 of 1933",
+    "FLORENT-CARRE MARIE",
+    "ADOLESCENT MEDICINE",
+    "9241 W BROWARD BLVD",
+    "PLANTATION, FL 33324",
+    "Phone: 9542624100",
+    "Office Hours: M-F 8:00-5:00p",
+    "Gender Accepted: All",
+    "Cultural Competence: Yes",
+    "WheelChair Accessible: Yes",
+    "Board Certification: No",
+    "Accepting New Patients: Yes",
+    "Age Limitations: 18Y-99Y",
+    "Website:",
+    "Performance Indicator: Not yet rated",
+    "IGLESIAS ELBA AMALIA",
+    "ADOLESCENT MEDICINE",
+    "1150 N 35TH AVE 560",
+    "HOLLYWOOD, FL 33021",
+    "Phone: 9542651460",
+    "Office Hours: M-F 8:00-5:00p",
+    "Gender Accepted: All",
+    "Cultural Competence: Yes",
+    "WheelChair Accessible: Yes",
+    "Board Certification: No",
+    "Accepting New Patients: Yes",
+    "Age Limitations: 00Y-21Y",
+    "Website:",
+    "Performance Indicator: Not yet rated",
+    "PCP - ADOLESCENT MEDICINE",
+    "BROWARD",
+    "5 of 1933",
+    "FLORENT-CARRE MARIE",
+    "ADOLESCENT MEDICINE",
+    "3200 S UNIVERSITY DR",
+    "DAVIE, FL 33328",
+    "Phone: 9542624100",
+    "Office Hours: M-F 8:00-5:00p ; Sa 9:00-2:00",
+    "Gender Accepted: All",
+    "Cultural Competence: Yes",
+    "WheelChair Accessible: Yes",
+    "Board Certification: No",
+    "Accepting New Patients: Yes",
+    "Age Limitations: 18Y-99Y",
+    "Website:",
+    "Performance Indicator: Not yet rated",
+]
+
+
+def test_parse_lines_ccp_extracts_records_surname_first():
+    es = parse_lines_ccp(CCP_LINES)
+    assert len(es) == 3
+    e = es[0]
+    assert e.name == "FLORENT-CARRE MARIE"
+    # CCP is surname-first: "FLORENT-CARRE MARIE" -> last="FLORENT-CARRE", first="MARIE" --
+    # the OPPOSITE of allyalign's _split_name(), confirmed against a real match (this client's
+    # own physician Desiree Clarke appears in the live Palm Beach PDF as "CLARKE DESIREE").
+    assert e.last_name == "FLORENT-CARRE"
+    assert e.first_name == "MARIE"
+    assert e.specialty == "ADOLESCENT MEDICINE"
+    assert e.accepting_new is True
+    assert e.locations[0] == {
+        "address": "9241 W BROWARD BLVD",
+        "city": "PLANTATION",
+        "state": "FL",
+        "zip": "33324",
+    }
+    iglesias = es[1]
+    assert iglesias.last_name == "IGLESIAS"
+    assert iglesias.first_name == "ELBA AMALIA"
+
+
+def test_parse_lines_ccp_two_locations_are_two_entries():
+    """A provider at 2 addresses is 2 full separate records in CCP's PDF (unlike allyalign, which
+    shares one name header with a multi-location list) -- confirmed live: FLORENT-CARRE MARIE
+    appears as two complete, separate blocks in the real Broward PDF."""
+    es = parse_lines_ccp(CCP_LINES)
+    florent = [e for e in es if e.name == "FLORENT-CARRE MARIE"]
+    assert len(florent) == 2
+    assert len(florent[0].locations) == 1
+    assert len(florent[1].locations) == 1
+    assert {florent[0].locations[0]["zip"], florent[1].locations[0]["zip"]} == {"33324", "33328"}
+
+
+def test_parse_lines_ccp_strips_page_header_mid_stream():
+    """The 3-line running header ("PCP - ADOLESCENT MEDICINE" / "BROWARD" / "5 of 1933") appears
+    a second time in CCP_LINES, between the 2nd and 3rd records -- must not be misread as part of
+    a record or leak into any field."""
+    es = parse_lines_ccp(CCP_LINES)
+    for e in es:
+        assert "BROWARD" not in e.name
+        assert "of 1933" not in e.name
 
 
 # --- matcher -----------------------------------------------------------------

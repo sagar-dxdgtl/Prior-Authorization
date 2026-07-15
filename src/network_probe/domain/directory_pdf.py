@@ -34,6 +34,14 @@ _PHONE = re.compile(r"Phone:")
 # AaNeel/eternalHealth: internal provider id like "P0191519-258948" anchors each record
 _PROVIDER_ID = re.compile(r"^[A-Z]\d{4,}-\d{4,}$")
 _GENDER_SUFFIX = re.compile(r"\((?:M|F)\)\s*$")
+# Community Care Plan (CCP): "CITY, ST ZIP" -- space before zip, not allyalign's comma-separated
+# "CITY, ST, ZIP". Confirmed live: "PLANTATION, FL 33324".
+_CCP_CSZ = re.compile(r"^(.+?),\s*([A-Z]{2})\s+(\d{5})(?:-\d{4})?$")
+# CCP's running page header ends with a literal "N of M" page-count line, repeated on every page.
+_CCP_PAGE_MARKER = re.compile(r"^\d+\s+of\s+\d+$")
+# CCP's last field in every record (physician or facility) is always Performance Indicator --
+# the reliable anchor for "this record just ended".
+_CCP_PERF_INDICATOR = re.compile(r"^Performance Indicator:", re.I)
 
 
 @dataclass
@@ -80,9 +88,10 @@ def parse_directory_pdf(
 ) -> list[DirectoryEntry]:
     """Parse the directory PDF at `path` into DirectoryEntry rows.
 
-    `fmt`: "allyalign" (Align Senior Care — anchored on 'Available As Of:') or "aaneel"
-    (eternalHealth — anchored on the internal provider id). `specialties`: optional TOC
-    specialty headers (allyalign only); matching never needs specialty.
+    `fmt`: "allyalign" (Align Senior Care — anchored on 'Available As Of:'), "aaneel"
+    (eternalHealth — anchored on the internal provider id), or "ccp" (Community Care Plan —
+    anchored on 'Performance Indicator:'). `specialties`: optional TOC specialty headers
+    (allyalign only); matching never needs specialty.
     """
     import fitz  # PyMuPDF
 
@@ -93,7 +102,11 @@ def parse_directory_pdf(
                 s = raw.strip()
                 if s and not _FOOTER.match(s) and not _PAGE_FOOTER.match(s):
                     lines.append(s)
-    return parse_lines_aaneel(lines) if fmt == "aaneel" else parse_lines(lines, specialties)
+    if fmt == "aaneel":
+        return parse_lines_aaneel(lines)
+    if fmt == "ccp":
+        return parse_lines_ccp(lines)
+    return parse_lines(lines, specialties)
 
 
 def parse_lines(lines: list[str], specialties: set[str] | None = None) -> list[DirectoryEntry]:
@@ -200,3 +213,71 @@ def toc_specialties(path: str, max_pages: int = 8) -> set[str]:
                 if m:
                     specs.add(m.group(1).strip())
     return specs
+
+
+def _split_name_ccp(full: str) -> tuple[str, str]:
+    """CCP prints 'LASTNAME FIRSTNAME [MIDDLENAME]' -- surname first, the reverse of allyalign's
+    _split_name(). Confirmed against a real match: this client's own physician Desiree Clarke
+    appears in the live Palm Beach PDF as "CLARKE DESIREE"."""
+    parts = full.split()
+    if len(parts) == 1:
+        return parts[0], ""
+    return parts[0], " ".join(parts[1:])
+
+
+def _strip_ccp_page_headers(lines: list[str]) -> list[str]:
+    """Drop the 3-line running page header ('<section title>' / '<COUNTY>' / 'N of M') that
+    PyMuPDF re-extracts on every single page of a CCP directory PDF -- confirmed live across
+    multiple consecutive pages, not just once per specialty section."""
+    out: list[str] = []
+    for line in lines:
+        if _CCP_PAGE_MARKER.match(line) and len(out) >= 2:
+            out.pop()  # county
+            out.pop()  # section title
+            continue
+        out.append(line)
+    return out
+
+
+def parse_lines_ccp(lines: list[str]) -> list[DirectoryEntry]:
+    """Community Care Plan (FL Medicaid) layout: each record is fully self-contained --
+
+        NAME
+        SPECIALTY (or a facility type like "Hospital")
+        STREET ADDRESS
+        CITY, ST ZIP                 <- space before zip, unlike allyalign's "CITY, ST, ZIP"
+        Phone: ... / Office Hours: ... / other labeled fields we don't store ...
+        Accepting New Patients: Yes|No
+        ... zero or more further labeled fields ...
+        Performance Indicator: ...   <- always the last field; anchors the record boundary
+
+    A provider at two locations appears as two complete, separate records (not one record with
+    two `locations` entries like allyalign) -- this parser reflects that directly, no
+    multi-location walk-loop needed. Facility/hospital records (no "Age Limitations:" field,
+    different name shape) parse the same way and simply never match a real physician's name
+    during lookup -- not filtered out, matching this codebase's precedent of not rejecting input
+    shapes it doesn't need to reject."""
+    clean = _strip_ccp_page_headers(lines)
+    entries: list[DirectoryEntry] = []
+    i, n = 0, len(clean)
+    while i + 3 < n:
+        name, specialty, addr, csz = clean[i], clean[i + 1], clean[i + 2], clean[i + 3]
+        m = _CCP_CSZ.match(csz)
+        if not m:
+            i += 1
+            continue
+        accepting: bool | None = None
+        j = i + 4
+        while j < n and not _CCP_PERF_INDICATOR.match(clean[j]):
+            am = _ACCEPTING.search(clean[j])
+            if am:
+                accepting = am.group(1).lower().startswith("y")
+            j += 1
+        last, first = _split_name_ccp(name)
+        e = DirectoryEntry(
+            name=name, last_name=last, first_name=first, specialty=specialty, accepting_new=accepting
+        )
+        e.locations.append({"address": addr, "city": m.group(1).strip(), "state": m.group(2), "zip": m.group(3)})
+        entries.append(e)
+        i = j + 1  # past the "Performance Indicator:" line
+    return entries
