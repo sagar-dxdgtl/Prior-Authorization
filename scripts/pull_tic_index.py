@@ -213,6 +213,7 @@ def run(
     list_only: bool = False,
     max_workers: int = 16,
     keep: bool = False,
+    limit: int | None = None,
 ) -> int:
     """Download a CMS TiC index and ingest selected in-network files.
 
@@ -247,6 +248,12 @@ def run(
         Concurrent threads for downloads and ``ingest_tic`` resolver calls.
     keep:
         When ``True``, downloaded temp files are not deleted after ingestion.
+    limit:
+        Cap the selected file list to the first *limit* entries (after
+        ``select_files()`` filtering) before downloading/ingesting.  ``None``
+        (default) means unlimited -- unchanged existing behaviour.  Useful for
+        bounding a run against very large in-network files where an exhaustive
+        sweep would take too long to finish in one session.
 
     Returns
     -------
@@ -276,6 +283,7 @@ def run(
 
     # --- Step 2: filter ----------------------------------------------------
     selected = select_files(entries, state=state, plan_contains=plan_contains)
+    selected = selected[:limit] if limit else selected
     if not selected:
         print(
             f"WARNING: no files matched your filter "
@@ -434,6 +442,17 @@ def main(argv: list[str] | None = None) -> int:
         metavar="N",
         help="Concurrent threads for download + resolver (default: 16).",
     )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Cap the selected file list to the first N files (after filtering) "
+            "before downloading/ingesting. Default: unlimited. Useful for "
+            "bounding a run against very large in-network files."
+        ),
+    )
 
     args = parser.parse_args(argv)
 
@@ -449,6 +468,7 @@ def main(argv: list[str] | None = None) -> int:
         keep=args.keep,
         list_only=args.list_only,
         max_workers=args.max_workers,
+        limit=args.limit,
     )
     return 0
 
