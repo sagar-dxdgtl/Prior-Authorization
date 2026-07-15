@@ -43,6 +43,18 @@ PDF_DIRECTORIES: dict[str, dict] = {
         "page_url": "https://www.eternalhealth.com/for-members/find-a-provider-or-pharmacy/",
         "link_pattern": r"https://www\.eternalhealth\.com/wp-content/uploads/[^\"'<>]*ProviderDirectory-AZ-[^\"'<>]*\.pdf",
     },
+    "community-care-plan-fl-south-florida": {
+        "label": "Community Care Plan",
+        "format": "ccp",
+        # 3 static per-county PDFs (Broward/Miami-Dade/Palm Beach — the client's FL-South Florida
+        # market), confirmed live 2026-07-15. No date-stamp discovery needed (unlike eternalHealth
+        # above) — these URLs are stable month to month, only the PDF content changes.
+        "pdf_urls": [
+            "https://providerdirectory.ccpcares.org/Content/PDFs/ProviderDirectory_Broward.pdf",
+            "https://providerdirectory.ccpcares.org/Content/PDFs/ProviderDirectory_MiamiDade.pdf",
+            "https://providerdirectory.ccpcares.org/Content/PDFs/ProviderDirectory_PalmBeach.pdf",
+        ],
+    },
 }
 
 

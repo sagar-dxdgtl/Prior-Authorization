@@ -383,10 +383,16 @@ SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
         "none",
     ),
     "Community Care Plan": (
+        # FL Medicaid MCO -- no FHIR API, network published only as 3 per-county monthly PDFs
+        # (Broward/Miami-Dade/Palm Beach, the client's FL-South Florida market). Verified live
+        # 2026-07-15: all 3 static, ~18MB/~6,100 pages total, dated "As of 07/13/2026". Wired via
+        # the "ccp" PDF format (parse_lines_ccp in directory_pdf.py) and PDF_DIRECTORIES'
+        # multi-URL support (directory_load.py) -- see docs/superpowers/specs/
+        # 2026-07-15-community-care-plan-pdf-design.md.
         None,
         None,
         "https://providerdirectory.ccpcares.org/mma",
-        "none",
+        "pdf-directory",
     ),
     "Curative": (
         None,

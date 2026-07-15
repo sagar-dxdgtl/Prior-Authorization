@@ -165,6 +165,13 @@ def test_align_seeded_as_pdf_directory():
     assert row["fhir_base_url"] is None
 
 
+def test_community_care_plan_seeded_as_pdf_directory():
+    row = {r["label"]: r for r in payer_rows()}["Community Care Plan"]
+    assert row["directory_access"] == "pdf-directory"
+    assert row["fhir_base_url"] is None
+    assert row["tic_url"] is None
+
+
 def test_no_fhir_base_url_and_no_adapter_raises_no_live_call():
     # A payer the catalogue can't help with stays a clean ValueError — never a live request.
     with pytest.raises(ValueError, match="No adapter"):
