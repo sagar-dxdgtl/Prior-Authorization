@@ -264,6 +264,48 @@ def test_resolve_pdf_urls_plural_config_returns_all_items():
     assert directory_load.resolve_pdf_urls(cfg) == ["https://example.org/a.pdf", "https://example.org/b.pdf"]
 
 
+def test_load_directory_aborts_on_empty_url_result(monkeypatch):
+    """A PDF that parses successfully but yields zero rows (a structure-drift failure mode, not
+    an exception) must abort the whole load, not silently replace the payer's directory with a
+    partial set from the other URLs."""
+    monkeypatch.setitem(
+        directory_load.PDF_DIRECTORIES,
+        "test-multi-empty",
+        {"label": "Test", "format": "ccp", "pdf_urls": ["https://x/a.pdf", "https://x/b.pdf", "https://x/c.pdf"]},
+    )
+    monkeypatch.setattr(directory_load, "download_pdf", lambda url, timeout=180.0: b"fake-pdf-bytes")
+    call_rows = iter([[{"a": 1}, {"a": 2}], [], [{"a": 3}]])  # the 2nd URL yields zero rows
+    monkeypatch.setattr(
+        directory_load, "rows_from_pdf", lambda path, payer_key, version, fmt="allyalign": next(call_rows)
+    )
+    replace_called = []
+    monkeypatch.setattr(
+        directory_load, "_replace_rows", lambda payer_key, rows, engine=None: replace_called.append(True)
+    )
+    with pytest.raises(ValueError, match="zero rows"):
+        directory_load.load_directory("test-multi-empty")
+    assert replace_called == [], "must not replace rows when a URL yields zero rows"
+
+
+def test_load_directory_aborts_on_empty_single_url_result(monkeypatch):
+    """Single-URL payers (Align, EternalHealth) go through the same loop as multi-URL payers --
+    confirm they get the identical protection, not just the multi-URL case."""
+    monkeypatch.setitem(
+        directory_load.PDF_DIRECTORIES,
+        "test-single-empty",
+        {"label": "Test", "format": "allyalign", "pdf_url": "https://x/only.pdf"},
+    )
+    monkeypatch.setattr(directory_load, "download_pdf", lambda url, timeout=180.0: b"fake-pdf-bytes")
+    monkeypatch.setattr(directory_load, "rows_from_pdf", lambda path, payer_key, version, fmt="allyalign": [])
+    replace_called = []
+    monkeypatch.setattr(
+        directory_load, "_replace_rows", lambda payer_key, rows, engine=None: replace_called.append(True)
+    )
+    with pytest.raises(ValueError, match="zero rows"):
+        directory_load.load_directory("test-single-empty")
+    assert replace_called == [], "must not replace rows when the only URL yields zero rows"
+
+
 # --- matcher -----------------------------------------------------------------
 def _rows(*tuples):
     return [

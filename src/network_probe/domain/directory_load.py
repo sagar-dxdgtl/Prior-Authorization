@@ -164,7 +164,15 @@ def load_directory(
     before. Without an override, every URL `resolve_pdf_urls()` returns for this payer is
     downloaded and parsed in turn and the rows concatenated -- if any one fails, the whole call
     raises before `_replace_rows()` is reached, so a payer's directory is never left partially
-    replaced from some counties/files but not others."""
+    replaced from some counties/files but not others.
+
+    A source that parses successfully but yields ZERO rows also aborts the load (raises, before
+    `_replace_rows()`) -- a real PDF with real providers never legitimately produces zero rows, so
+    an empty result means the parser silently stopped recognizing the page structure (a drift, not
+    a genuine "this payer has no providers"). Without this guard the atomic replace would still
+    proceed, wiping that payer's directory to empty and turning every real provider into a false
+    OUT_OF_NETWORK instead of an honest UNKNOWN. See docs/superpowers/specs/
+    2026-07-15-pdf-directory-zero-rows-guard-design.md."""
     cfg = PDF_DIRECTORIES.get(payer_key)
     if cfg is None and pdf_path is None and pdf_bytes is None:
         raise ValueError(f"unknown PDF-directory payer {payer_key!r}")
@@ -179,13 +187,24 @@ def load_directory(
                     tmp_path = tmp.name
                 pdf_path = tmp_path
             rows = rows_from_pdf(pdf_path, payer_key, version, fmt=fmt)
+            if not rows:
+                raise ValueError(
+                    f"{pdf_path!r} produced zero rows for payer {payer_key!r} -- "
+                    "refusing to replace (parser/structure drift?)"
+                )
         finally:
             if tmp_path:
                 os.unlink(tmp_path)
     else:
         rows = []
         for url in resolve_pdf_urls(cfg):
-            rows.extend(_rows_from_url(url, payer_key, version, fmt=fmt))
+            url_rows = _rows_from_url(url, payer_key, version, fmt=fmt)
+            if not url_rows:
+                raise ValueError(
+                    f"{url} produced zero rows for payer {payer_key!r} -- "
+                    "refusing to replace (parser/structure drift?)"
+                )
+            rows.extend(url_rows)
     _replace_rows(payer_key, rows, engine)
     return len(rows)
 
