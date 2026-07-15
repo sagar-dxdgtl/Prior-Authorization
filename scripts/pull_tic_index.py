@@ -263,7 +263,10 @@ def run(
     # --- Step 1: download + parse the index -------------------------------
     index_local = _dl(index_url)
     try:
-        with open(index_local, encoding="utf-8") as f:
+        import gzip as _gzip
+
+        _opener = _gzip.open if index_local.endswith(".gz") else open
+        with _opener(index_local, "rt", encoding="utf-8") as f:
             index_data = json.load(f)
     finally:
         if _owns_downloads:
