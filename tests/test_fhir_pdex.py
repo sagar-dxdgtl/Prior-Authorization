@@ -244,6 +244,129 @@ def test_uhc_bronze_essential_resolves_in_network_via_alias():
     assert v.matched_provider["matched_network"] == "TX Individual Exchange Benefit Plan"
     assert "alias" in v.notes.lower()
 
+# --- Centene-shaped server: bare id returns zero roles, full "Practitioner/<id>" reference
+# form is required. Regression for the bug found in the Meridian Health Medicaid sub-project
+# (docs/superpowers/specs/2026-07-15-centene-practitioner-ref-fix-design.md). ------------------
+
+CENTENE_PID = "3287471"
+CENTENE_NPI = "1588744650"
+
+
+def _centene_handler(request: httpx.Request) -> httpx.Response:
+    u = urlsplit(str(request.url))
+    qs = parse_qs(u.query)
+    if u.path.endswith("/Practitioner"):
+        if "identifier" in qs:  # Centene rejects identifier search (matches production: HTTP 400)
+            return httpx.Response(
+                400,
+                json={"resourceType": "OperationOutcome", "issue": [{"severity": "error", "code": "not-supported"}]},
+            )
+        if (qs.get("family") or [""])[0].lower() == "petermann":
+            return httpx.Response(
+                200,
+                json={
+                    "resourceType": "Bundle",
+                    "total": 1,
+                    "entry": [
+                        {
+                            "resource": {
+                                "resourceType": "Practitioner",
+                                "id": CENTENE_PID,
+                                "name": [{"text": "Dr. Kevin Louis Petermann"}],
+                                "identifier": [{"system": "http://hl7.org/fhir/sid/us-npi", "value": CENTENE_NPI}],
+                            }
+                        }
+                    ],
+                },
+            )
+        if (qs.get("family") or [""])[0].lower() == "noroles":
+            return httpx.Response(
+                200,
+                json={
+                    "resourceType": "Bundle",
+                    "total": 1,
+                    "entry": [
+                        {
+                            "resource": {
+                                "resourceType": "Practitioner",
+                                "id": "NOROLE1",
+                                "name": [{"text": "Dr. No Roles"}],
+                                "identifier": [{"system": "http://hl7.org/fhir/sid/us-npi", "value": "1000000004"}],
+                            }
+                        }
+                    ],
+                },
+            )
+        return httpx.Response(200, json={"resourceType": "Bundle", "total": 0, "entry": []})
+    if u.path.endswith("/PractitionerRole"):
+        prac = (qs.get("practitioner") or [""])[0]
+        if prac == f"Practitioner/{CENTENE_PID}":  # the form Centene actually requires
+            return httpx.Response(
+                200,
+                json={
+                    "resourceType": "Bundle",
+                    "total": 1,
+                    "entry": [
+                        {
+                            "resource": {
+                                "resourceType": "PractitionerRole",
+                                "id": "cr1",
+                                "extension": [{"url": NET_EXT, "valueReference": {"display": "IL SNP"}}],
+                            }
+                        }
+                    ],
+                },
+            )
+        # bare id (or any other reference) -> Centene's real behavior: zero roles
+        return httpx.Response(200, json={"resourceType": "Bundle", "total": 0, "entry": []})
+    return httpx.Response(404, json={})
+
+
+def _centene_adapter() -> FhirPdexAdapter:
+    mock = httpx.Client(transport=httpx.MockTransport(_centene_handler))
+    return FhirPdexAdapter(
+        base_url="https://example.org/fhir",
+        payer_name="meridian",
+        client=CachedClient(cache_dir=None, delay_seconds=0, client=mock),
+    )
+
+
+def test_centene_shaped_server_falls_back_to_full_reference():
+    """Bare id returns zero roles (Centene's real behavior) -> retry with Practitioner/<id> ->
+    resolves the real network."""
+    v = _centene_adapter().check_network(
+        ProviderQuery(payer="meridian", plan_hint="", npi=CENTENE_NPI, provider_last_name="Petermann")
+    )
+    assert v.status == NetworkStatus.IN_NETWORK
+    assert "IL SNP" in v.matched_provider["networks"]
+
+
+def test_centene_shaped_server_genuinely_zero_roles_reports_no_active_roles():
+    """Both the bare-id and Practitioner/<id> attempts legitimately return zero -> still an
+    honest 'no active network roles' result, not an error and not a false IN_NETWORK."""
+    v = _centene_adapter().check_network(
+        ProviderQuery(payer="meridian", plan_hint="", npi="1000000004", provider_last_name="Noroles")
+    )
+    assert v.status == NetworkStatus.OUT_OF_NETWORK
+    assert "no active network roles" in v.notes
+
+
+def test_bare_id_success_makes_no_fallback_request():
+    """Existing bare-id-only servers (Humana) must not pay for a retry they don't need."""
+    role_requests = []
+
+    def counting_handler(request: httpx.Request) -> httpx.Response:
+        u = urlsplit(str(request.url))
+        if u.path.endswith("/PractitionerRole"):
+            role_requests.append(str(request.url))
+        return _fhir_handler(request)
+
+    mock = httpx.Client(transport=httpx.MockTransport(counting_handler))
+    cc = CachedClient(cache_dir=None, delay_seconds=0, client=mock)
+    a = FhirPdexAdapter(base_url=HUMANA, payer_name="humana-fhir", client=cc)
+    v = a.check_network(_q(KYLE_NPI, "Medicare PPO"))
+    assert v.status == NetworkStatus.IN_NETWORK
+    assert len(role_requests) == 1, role_requests
 
 # ---- live (real Humana CMS Provider Directory API) --------------------------
 

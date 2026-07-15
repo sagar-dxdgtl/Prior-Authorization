@@ -160,13 +160,15 @@ class FhirPdexAdapter(PayerAdapter):
                 return r.get("name")
         return None
 
-    def _networks_for(self, practitioner_id: str) -> tuple[list[str], list[str], int]:
-        """Return (network_names, specialties, role_count) across all PractitionerRole pages.
-
-        Network name comes from the PDEX network-reference extension's display when present
-        (Humana); when only an Organization reference is given (Cigna), resolve it to a name.
-        """
-        url = f"{self.base_url}/PractitionerRole?practitioner={quote(practitioner_id)}&_count=50"
+    def _fetch_practitioner_roles(
+        self, practitioner_ref: str
+    ) -> tuple[list[str], list[str], set[str], int]:
+        """Fetch one query attempt's worth of PractitionerRole pages for `practitioner_ref`
+        (either a bare id or a full "Practitioner/<id>" reference -- the caller decides which).
+        Returns (inline_names, org_refs, specialties, role_count) -- no Organization-reference
+        resolution yet; that happens once in _networks_for(), after the winning attempt is
+        chosen, so a retry never resolves the same Organization twice."""
+        url = f"{self.base_url}/PractitionerRole?practitioner={quote(practitioner_ref)}&_count=50"
         names: list[str] = []
         refs: list[str] = []
         specialties: set[str] = set()
@@ -192,6 +194,26 @@ class FhirPdexAdapter(PayerAdapter):
                             specialties.add(cd["display"])
             url = self._next_link(bundle)
             pages += 1
+        return names, refs, specialties, roles
+
+    def _networks_for(self, practitioner_id: str) -> tuple[list[str], list[str], int]:
+        """Return (network_names, specialties, role_count) across all PractitionerRole pages.
+
+        Network name comes from the PDEX network-reference extension's display when present
+        (Humana); when only an Organization reference is given (Cigna), resolve it to a name.
+
+        Tries a bare practitioner id first (the default -- UHC/HCSC/Humana/Cigna/Kaiser/Molina
+        are all verified working with this form). Some servers (confirmed: Centene's HAPI FHIR)
+        reject a bare id for the `practitioner=` search param and only return roles for the full
+        `Practitioner/<id>` reference form -- HCSC's Sapphire server is the reverse (bare id
+        works, full reference returns nothing), so neither form is safe to hardcode. Retrying
+        once with the full reference form only when the bare id found zero roles keeps every
+        already-working server on its current path. See docs/superpowers/specs/
+        2026-07-15-centene-practitioner-ref-fix-design.md.
+        """
+        names, refs, specialties, roles = self._fetch_practitioner_roles(practitioner_id)
+        if roles == 0:
+            names, refs, specialties, roles = self._fetch_practitioner_roles(f"Practitioner/{practitioner_id}")
         # resolve Organization references that lacked an inline display name
         uniq_refs, seen_ref = [], set()
         for ref in refs:
