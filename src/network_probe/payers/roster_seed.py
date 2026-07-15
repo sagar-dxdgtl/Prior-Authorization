@@ -102,6 +102,20 @@ ROSTER = [
     ("Cigna Healthcare", "Commercial", "FL-South Florida", "62308", "needs_enrollment"),
     ("Community Care Plan", "Managed Medicaid", "FL-South Florida", None, "needs_payer_id"),
     ("Curative", "Commercial", "FL-South Florida", "CURTV", "needs_enrollment"),
+    # Same national Stedi id (87726) and public-fhir directory access already confirmed working
+    # in every other market this client operates in (AZ/CO-Denver/IL/GA-Atlanta/TX-Houston/
+    # TX-Dallas) -- this row was simply missing from the FL-South Florida section despite the
+    # underlying UHC endpoint already covering this client's own FL provider (David Naar, NPI
+    # 1760457477). Re-verified live 2026-07-15: with a blank plan_hint (presence-only, matching
+    # how the UMR row's own "IN_NETWORK" claim was actually produced -- see UMR's comment below)
+    # this NPI resolves IN_NETWORK/medium confidence. A SPECIFIC plan_hint like "AARP Medicare
+    # Advantage" does NOT confidently match -- this FHIR server has the same pre-existing bug
+    # already documented on the UMR row (its PDEX network-reference never carries a real network
+    # name, so the adapter can confirm "in the UHC-affiliated network" but not "in this specific
+    # named plan"), which is not new to this row and not fixed here. Added 2026-07-15 to give
+    # UnitedHealthcare its own proper catalogue entry here rather than relying on the incidental
+    # UMR overlap.
+    ("UnitedHealthcare", "Medicare Advantage", "FL-South Florida", "87726", "supported"),
     ("UMR", "Commercial", "FL-South Florida", None, "needs_payer_id"),
     # --- Illinois --- (added from client benefit list; researched via 3 parallel agent passes,
     # 2026-07-06 — see docs/payer-sources/MATRIX.md "Illinois" section for full sourcing notes)
