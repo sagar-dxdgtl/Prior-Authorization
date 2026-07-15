@@ -90,8 +90,9 @@ Machine-generated from `src/network_probe/payers/roster_seed.py` (the catalogue 
 | Aetna Better Health | IL | Managed Medicaid |  | — | — | needs-authorized-api | review: conflicting low-confidence Stedi-id candidates (68024/26337/"ABH-IL") from different clearinghouse pages, none confirmed authoritative — left needs_payer_id. |
 | Ambetter (Centene) | IL | ACA | 68069 | https://iopc-pd.api.centene.com/iopc/pd/fhir/providerdirectory (verified) | `https://www.centene.com/price-transparency-files.html` | public-fhir | Ambetter of Illinois confirmed (expanded to 25 counties for 2026). Same national Centene id/endpoint as AZ/FL — no new research needed. |
 | BCBS (Anthem) | IL | Medicare Advantage |  | — | — | needs-authorized-api | **RESEARCHED — likely a duplicate, not a real distinct payer.** High-confidence finding: BCBSA Blue licenses are exclusive per state; HCSC holds the exclusive IL license and directly sells "Blue Cross Medicare Advantage" HMO/HMO-POS/PPO there. Elevance's own 2025 affiliated-MA-brands list (Anthem, Wellpoint, HealthSun, Simply Healthcare, Freedom Health, Optimum HealthCare, MMM) never mentions Illinois, and Elevance holds no Blue license in IL (its Blue states are CA/CO/CT/GA/IN/KY/ME/MO/NV/NH/NY/OH/VA/WI). Recommend merging this row into "BCBS / Empire (Anthem / Elevance)(HCSC)" MA-IL rather than pursuing separate registration — flag for client confirmation before removing. |
-| BCBS / Empire (Anthem / Elevance)(HCSC) | IL | ACA |  | `https://api.hcsc.net/providerfinder/sapphire/fhir` (authorized, verified) | — | authorized-fhir | **Directory LIVE 2026-07-14** — HCSC issued a `client_id` credential (`HCSC_FHIR_CLIENT_ID` in .env; previously 401 even on `/metadata`, "tighter-gated than Aetna"). HCSC (Health Care Service Corp) owns BCBS IL — an independent licensee, NOT Elevance (same pattern as BCBSAZ/Florida Blue) — routes to a dedicated client_id-header adapter, never the Anthem OAuth2 one. Verified live: standard FHIR 4.0.1 CapabilityStatement, Practitioner `identifier` search + inline `network-reference` (e.g. real hit: Jeffery E Friedman, NPI 1336160274, in "Blue Cross Medicare Advantage (PPO)℠" among 9 networks). Medicaid product "Blue Cross Community Health Plans" has confirmed Stedi id **G00621** but no roster row of its own yet. Dev portal: `interoperability.hcsc.com`. |
+| BCBS / Empire (Anthem / Elevance)(HCSC) | IL | ACA |  | `https://api.hcsc.net/providerfinder/sapphire/fhir` (authorized, verified) | — | authorized-fhir | **Directory LIVE 2026-07-14** — HCSC issued a `client_id` credential (`HCSC_FHIR_CLIENT_ID` in .env; previously 401 even on `/metadata`, "tighter-gated than Aetna"). HCSC (Health Care Service Corp) owns BCBS IL — an independent licensee, NOT Elevance (same pattern as BCBSAZ/Florida Blue) — routes to a dedicated client_id-header adapter, never the Anthem OAuth2 one. Verified live: standard FHIR 4.0.1 CapabilityStatement, Practitioner `identifier` search + inline `network-reference` (e.g. real hit: Jeffery E Friedman, NPI 1336160274, in "Blue Cross Medicare Advantage (PPO)℠" among 9 networks). Medicaid product "Blue Cross Community Health Plans" has confirmed Stedi id **G00621** — see the Managed Medicaid row below. Dev portal: `interoperability.hcsc.com`. |
 | BCBS / Empire (Anthem / Elevance)(HCSC) | IL | Commercial |  | `https://api.hcsc.net/providerfinder/sapphire/fhir` (authorized, verified) | — | authorized-fhir | **Directory LIVE 2026-07-14** — same HCSC client_id-header adapter as the ACA row above (one FHIR base covers every benefit type for this label). |
+| BCBS / Empire (Anthem / Elevance)(HCSC) | IL | Managed Medicaid | G00621 | `https://api.hcsc.net/providerfinder/sapphire/fhir` (authorized, verified) | — | authorized-fhir | **Directory LIVE 2026-07-15** — retail brand "Blue Cross Community Health Plans℠", same underlying HCSC technical integration as the other 3 IL rows here (deliberately kept as the same roster label, not split into a new one — a new label would have bypassed the `"hcsc"` substring match in `_authed_builder_for()` and silently misrouted). Verified live: `Organization` "Blue Cross Community Health Plans℠" (id `network-11152019`) is active with 637,497 `PractitionerRole` entries. Stedi **G00621** confirmed live on Stedi's own site. |
 | BCBS / Empire (Anthem / Elevance)(HCSC) | IL | Medicare Advantage |  | `https://api.hcsc.net/providerfinder/sapphire/fhir` (authorized, verified) | — | authorized-fhir | **Directory LIVE 2026-07-14** — same HCSC client_id-header adapter as the ACA row above (one FHIR base covers every benefit type for this label). |
 | Cigna Healthcare | IL | Commercial | 62308 | https://fhir.cigna.com/ProviderDirectory/v1 (verified) | `https://www.cigna.com/legal/compliance/machine-readable-files` | public-fhir | Verified public FHIR + existing cigna-fhir adapter, same national id as elsewhere. |
 | Essence Healthcare | IL | Medicare Advantage |  | — | — | needs-authorized-api | **RESEARCHED.** Essence Healthcare, Inc. (Lumeris-owned, St. Louis MO), CMS-regulated (H2610/H6200/H3189/H4620), confirmed selling in IL. `essencehealthcare.healthlx.com/{metadata,fhir/metadata}` returns HTTP 200 but is a React SPA page, NOT a real CapabilityStatement — confirmed false positive, do not reuse. No Stedi id found. No developer/interoperability portal found despite targeted search — genuine gap even though CMS Cures-Act rules imply one should exist. |
@@ -99,6 +100,7 @@ Machine-generated from `src/network_probe/payers/roster_seed.py` (the catalogue 
 | Humana | IL | Medicare Advantage | 61101 | https://fhir.humana.com/api (verified) | `https://developers.humana.com/syntheticdata/Resource/PCTFilesList?fileType=innetwork` | public-fhir | Verified public FHIR + existing humana-fhir adapter. Stedi 61101 — supported, same as other states. |
 | Illinois Department of Healthcare and Family Services (HFS) | IL | Traditional Medicaid |  | — | — | none | review: no Stedi id confirmed live on Stedi's own site (candidate `IL621`/aliases sourced from third-party clearinghouse only, not baked). Govt program: no PDEX/TiC — the program IS the network. Public (non-machine-queryable) ORP directory at `ext2.hfs.illinois.gov/hfsindprovdirectory`. |
 | Longevity Health Plan | IL | Medicare Advantage | LIL01 | — | — | needs-authorized-api | **RESEARCHED.** Longevity Health Plan Inc. (IL entity). Stedi id **LIL01** confirmed live on Stedi's own site — flipped `needs_payer_id`→`needs_enrollment`. No FHIR endpoint found (`fhir./api.longevityhealthplan.com` don't resolve). No dev portal — only `Compliance@longevityhealthplan.com`. **Georgia caveat: Longevity has no direct GA plan of its own** (GA served via a separate "National Carriers" partner brand) — the GA-Atlanta row for this label below is likely mislabeled; flag for client confirmation. |
+| Meridian Health | IL | Managed Medicaid | 13189 | `https://iopc-pd.api.centene.com/iopc/pd/fhir/providerdirectory` (verified) | — | public-fhir | **Directory LIVE 2026-07-15** — Meridian Health Plan of Illinois has been a Centene subsidiary since 2018 (grouped with WellCare/Sunshine Health/Buckeye), and the shared Centene national PDEX directory already serves it. Verified against this client's own Meridian-labeled provider (Kevin Petermann, NPI 1588744650): a real hit, with real Illinois-specific network affiliations (IL SNP, Exchange IL, Exchange Solutions, CC National Medicare HMO, Exchange Solutions Marathon). Network names don't literally say "Meridian" — a Centene-platform-wide pattern, already accepted for the existing Superior HealthPlan (Centene) row, not Meridian-specific. Stedi 13189 — confirmed, not yet enrolled. |
 | National Government Services, Inc. (NGS) | IL | Traditional Medicare |  | — | — | none | Confirmed: MAC **Jurisdiction 6** (IL/MN/WI) for Traditional Medicare. Same `none` treatment as Noridian(AZ)/Novitas(CO) — CMS-owned data (NPPES), no Stedi id. |
 | Provider Partners | IL | Medicare Advantage |  | — | — | needs-authorized-api | **RESEARCHED.** "Provider Partners Health Plan(s)" — an institutional SNP (nursing-facility/assisted-living residents only), CMS H3800-001-0 for IL (Cook/DuPage/Kane/Lake/McHenry/Ogle/Will/Winnebago counties). No FHIR endpoint confirmed live (guessed metadata paths all 404). Possible dev portal `pphpfhirapp.prod.healthaxis.net/Login` (HealthAxis-hosted login page) — not confirmed reachable pre-registration. Narrow SNP network, limited relevance to an outpatient vein/vascular clinic. |
 | UnitedHealthcare | IL | Commercial | 87726 | — | `https://transparency-in-coverage.uhc.com/` | public-fhir | Existing public Optum FHIR adapter (uhc). Stedi 87726 — supported, same national id. |
@@ -206,19 +208,21 @@ Machine-generated from `src/network_probe/payers/roster_seed.py` (the catalogue 
 
 ## Counts
 
-- Total roster rows: **193** (grown past the original 180 as later passes — UHC/UnitedHealthcare
-  Community Plan wiring, UMR, etc. — added rows; see git history for the incremental deltas rather
-  than a single point-in-time total).
-- Rows with `fhir_base_url`: **102** (UnitedHealthcare 18, Cigna 13, **BCBS / Empire (Anthem /
-  Elevance)(HCSC) 10** — new 2026-07-14, Humana 8, Molina 8, Ambetter/Centene 6, Anthem/Elevance 6,
-  Healthspring 5, Wellcare/Centene 5, **UMR 9** — new 2026-07-15, Devoted 3, Kaiser Permanente 2,
-  AmeriHealth Caritas 2, **UnitedHealthcare Community Plan 2** — bug fix 2026-07-15 (was
-  incorrectly `None`), AZ Complete Health 1, Scan 1, Kaiser Foundation Health Plan of Georgia 1,
-  Peach State 1, WellCare/AllWell 1).
+- Total roster rows: **194** (grown past the original 180 as later passes — UHC/UnitedHealthcare
+  Community Plan wiring, UMR, HCSC Medicaid, etc. — added rows; see git history for the
+  incremental deltas rather than a single point-in-time total).
+- Rows with `fhir_base_url`: **104** (UnitedHealthcare 18, Cigna 13, **BCBS / Empire (Anthem /
+  Elevance)(HCSC) 11** — +1 for the new IL Managed Medicaid row, 2026-07-15, Humana 8, Molina 8,
+  Ambetter/Centene 6, Anthem/Elevance 6, Healthspring 5, Wellcare/Centene 5, **UMR 9** — new
+  2026-07-15, Devoted 3, Kaiser Permanente 2, AmeriHealth Caritas 2, **UnitedHealthcare Community
+  Plan 2** — bug fix 2026-07-15 (was incorrectly `None`), AZ Complete Health 1, **Meridian Health
+  1** — new 2026-07-15 (was incorrectly `none`), Scan 1, Kaiser Foundation Health Plan of Georgia
+  1, Peach State 1, WellCare/AllWell 1).
 - Rows with `tic_url`: **109**
-- Rows with a Stedi id: **96**
-- By `directory_access`: `needs-authorized-api` 66 · `authorized-fhir` 16 (+10 HCSC, 2026-07-14) ·
-  `none` 20 · `public-fhir` 89 (+9 UMR, 2026-07-15) · `pdf-directory` 2
+- Rows with a Stedi id: **97** (+1 for the new HCSC Medicaid row's confirmed **G00621**).
+- By `directory_access`: `needs-authorized-api` 66 · `authorized-fhir` 17 (+11 HCSC total,
+  2026-07-15) · `none` 19 (−1: Meridian Health moved to `public-fhir`) · `public-fhir` 90 (+9 UMR
+  and +1 Meridian Health, 2026-07-15) · `pdf-directory` 2
 
 ## Not yet researched (known gap, flagged not silently missing)
 
@@ -263,7 +267,8 @@ Payers with **no machine-queryable public directory** today (the engine cannot r
   401 even on `/metadata`). HCSC (Health Care Service Corp) owns BCBS in IL/TX/MT/NM/OK — an
   independent licensee, NOT Elevance (same as BCBSAZ/Florida Blue), so it routes to its own
   client_id-header adapter, never the Anthem OAuth2 one. Medicaid product "Blue Cross Community
-  Health Plans" has confirmed Stedi id **G00621** (IL) but no roster row of its own yet. Dev
+  Health Plans" has confirmed Stedi id **G00621** (IL) and, as of 2026-07-15, its own IL Managed
+  Medicaid roster row (same label/SOURCES entry — see the Matrix above). Dev
   portal: `interoperability.hcsc.com`.
 - **Community Health Choice (CHC)** (needs-authorized-api) — Houston/Harris-only nonprofit HMO
   (Medicaid + ACA + MA D-SNP); dev portal live but sign-up gated, no reachable `/metadata`.
