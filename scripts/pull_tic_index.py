@@ -283,7 +283,7 @@ def run(
 
     # --- Step 2: filter ----------------------------------------------------
     selected = select_files(entries, state=state, plan_contains=plan_contains)
-    selected = selected[:limit] if limit else selected
+    selected = selected[:limit] if limit is not None else selected
     if not selected:
         print(
             f"WARNING: no files matched your filter "

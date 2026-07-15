@@ -8,6 +8,7 @@ the existing ``tests/fixtures/tic-sample.json`` fixture).
 from __future__ import annotations
 
 import csv
+import gzip
 import json
 import sys
 from pathlib import Path
@@ -274,3 +275,129 @@ def test_run_select_no_match_warns_returns_0(tmp_path, capsys):
     assert "WARNING" in captured.out
     # The available file should be listed for the operator.
     assert sample_url in captured.out
+
+
+# ---------------------------------------------------------------------------
+# gzip-compressed index file (scripts/pull_tic_index.py:271-277)
+# ---------------------------------------------------------------------------
+
+
+def test_run_gzip_compressed_index_file(tmp_path):
+    """run() transparently decompresses a .gz-suffixed downloaded index file.
+
+    Regression coverage for the gzip-detection branch in Step 1 of run():
+    on the pre-fix code, ``open(index_local, "rt", encoding="utf-8")`` on raw
+    gzip bytes raises UnicodeDecodeError before json.load ever runs. The
+    in-network file itself is served plain (uncompressed) so this test
+    isolates the INDEX file's gzip path specifically.
+    """
+    sample_url = "fake://sample.json"
+    index_data = {
+        "reporting_structure": [
+            {
+                "reporting_plans": [{"plan_name": "Cigna AZ HMO", "plan_market_type": "group"}],
+                "in_network_files": [{"description": "file 0", "location": sample_url}],
+            }
+        ]
+    }
+    gz_index_path = tmp_path / "index.json.gz"
+    with gzip.open(gz_index_path, "wt", encoding="utf-8") as f:
+        json.dump(index_data, f)
+
+    index_url = "fake://index.json.gz"
+    fake = _fake_downloader({index_url: str(gz_index_path), sample_url: str(FIXTURE)})
+
+    out_csv = str(tmp_path / "out.csv")
+    n = run(index_url=index_url, out_csv=out_csv, downloader=fake, payer="cigna")
+
+    assert n == 3
+    with open(out_csv, newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    assert len(rows) == 3
+    pairs = {(r["npi"], r["tin"]) for r in rows}
+    assert ("1972603934", "933510922") in pairs
+    assert ("1710305735", "933510922") in pairs
+    assert ("1679766943", "463812940") in pairs
+
+
+# ---------------------------------------------------------------------------
+# --limit flag (scripts/pull_tic_index.py:286)
+# ---------------------------------------------------------------------------
+
+
+def _counting_downloader(url_to_path: dict[str, str]):
+    """Like _fake_downloader, but records every URL it is called with."""
+    calls: list[str] = []
+
+    def _fake(url: str) -> str:
+        calls.append(url)
+        return url_to_path[url]
+
+    _fake.calls = calls  # type: ignore[attr-defined]
+    return _fake
+
+
+def _write_multi_file_index(tmp_path: Path, n: int) -> tuple[str, str, list[str]]:
+    """Write an index with *n* distinct in-network file entries.
+
+    Returns ``(index_url, index_path, in_network_urls)``.
+    """
+    urls = [f"fake://sample_{i}.json" for i in range(n)]
+    index_url, index_path = _write_index(tmp_path, urls)
+    return index_url, index_path, urls
+
+
+def test_run_limit_caps_file_count(tmp_path):
+    """--limit 2 against a 4-file index only downloads/ingests 2 files."""
+    index_url, index_path, urls = _write_multi_file_index(tmp_path, 4)
+    url_to_path = {index_url: index_path, **{u: str(FIXTURE) for u in urls}}
+    fake = _counting_downloader(url_to_path)
+
+    out_csv = str(tmp_path / "out.csv")
+    run(index_url=index_url, out_csv=out_csv, downloader=fake, payer="cigna", limit=2)
+
+    in_network_calls = [u for u in fake.calls if u != index_url]  # type: ignore[attr-defined]
+    assert len(in_network_calls) == 2
+    # select_files preserves index order, so the first 2 entries are kept.
+    assert set(in_network_calls) == {urls[0], urls[1]}
+
+
+def test_run_limit_none_selects_all(tmp_path):
+    """limit=None (the default) is unaffected -- all entries are selected.
+
+    Uses a call-counting downloader against a 4-file index so the assertion
+    is a genuine proof of "no cap applied", rather than relying on
+    incidental dedup of identical fixture content across files.
+    """
+    index_url, index_path, urls = _write_multi_file_index(tmp_path, 4)
+    url_to_path = {index_url: index_path, **{u: str(FIXTURE) for u in urls}}
+    fake = _counting_downloader(url_to_path)
+
+    out_csv = str(tmp_path / "out.csv")
+    run(index_url=index_url, out_csv=out_csv, downloader=fake, payer="cigna")
+
+    in_network_calls = [u for u in fake.calls if u != index_url]  # type: ignore[attr-defined]
+    assert len(in_network_calls) == 4
+    assert set(in_network_calls) == set(urls)
+
+
+def test_run_limit_zero_selects_none(tmp_path, capsys):
+    """--limit 0 selects zero files (0 is a valid cap, not "no limit").
+
+    Regression coverage for the ``limit else`` -> ``limit is not None``
+    truthiness fix: 0 is falsy in Python, so the pre-fix code treated
+    ``--limit 0`` identically to no limit at all (selecting everything).
+    """
+    index_url, index_path, urls = _write_multi_file_index(tmp_path, 3)
+    url_to_path = {index_url: index_path, **{u: str(FIXTURE) for u in urls}}
+    fake = _counting_downloader(url_to_path)
+
+    out_csv = str(tmp_path / "out.csv")
+    result = run(index_url=index_url, out_csv=out_csv, downloader=fake, payer="cigna", limit=0)
+
+    assert result == 0
+    assert not Path(out_csv).exists()
+    in_network_calls = [u for u in fake.calls if u != index_url]  # type: ignore[attr-defined]
+    assert in_network_calls == []
+    captured = capsys.readouterr()
+    assert "WARNING" in captured.out
