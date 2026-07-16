@@ -56,6 +56,40 @@ def test_provider_body_includes_first_name():
     assert captured["body"]["provider"]["npi"] == "1629339312"
 
 
+def test_provider_org_name_fallback_when_no_provider_name():
+    # Stedi v3 rejects a 270 whose provider loop has neither organizationName nor lastName
+    # ("Missing required field: provider organizationName or lastName is required"). The
+    # eligibility form supplies only an NPI, so the client must add organizationName so every
+    # check validates.
+    captured = {}
+
+    def handler(req):
+        captured["body"] = json.loads(req.content)
+        return httpx.Response(200, json={"benefitsInformation": []})
+
+    client = CachedClient(cache_dir=None, delay_seconds=0, client=httpx.Client(transport=httpx.MockTransport(handler)))
+    c = StediEligibilityClient(api_key="k", client=client, payer_id="DEVOT")
+    c.check(ProviderQuery(payer="devoted", plan_hint="", npi="1720209885", member_id="M1", dob="01/02/1980"))
+    prov = captured["body"]["provider"]
+    assert prov["npi"] == "1720209885"
+    assert prov.get("organizationName")  # present because no provider first/last name was given
+
+
+def test_no_org_name_when_provider_last_name_present():
+    # When a provider lastName IS supplied, that satisfies Stedi's requirement — don't also
+    # send a placeholder organizationName.
+    captured = {}
+
+    def handler(req):
+        captured["body"] = json.loads(req.content)
+        return httpx.Response(200, json={"benefitsInformation": []})
+
+    client = CachedClient(cache_dir=None, delay_seconds=0, client=httpx.Client(transport=httpx.MockTransport(handler)))
+    c = StediEligibilityClient(api_key="k", client=client, payer_id="CIGNA")
+    c.check(ProviderQuery(payer="cigna", plan_hint="", npi="1629339312", provider_first_name="Jing", provider_last_name="Li"))
+    assert "organizationName" not in captured["body"]["provider"]
+
+
 def test_dob_normalization():
     assert _dob("01/02/1980") == "19800102"
     assert _dob("1980-01-02") == "19800102"

@@ -50,6 +50,10 @@ def _dob(dob: str | None) -> str | None:
 
 class StediEligibilityClient:
     DEFAULT_STC = ["30", "98"]
+    # Stedi v3 requires the provider (information-receiver) loop to carry a name — organizationName
+    # or lastName. The eligibility form supplies only an NPI, so we fall back to this org name.
+    # Stedi does not validate it against the NPI; override via provider_org_name for a real name.
+    DEFAULT_ORG_NAME = "PROVIDER"
 
     def __init__(
         self,
@@ -57,6 +61,7 @@ class StediEligibilityClient:
         client: CachedClient | None = None,
         payer_id: str | None = None,
         service_type_codes: list | None = None,
+        provider_org_name: str | None = None,
     ):
         # Settings reads the .env file (pydantic); get_secret reads os.environ → AWS Secrets Manager.
         # Prefer the configured setting (.env/env var), then fall back to the secrets provider (prod/AWS).
@@ -68,6 +73,7 @@ class StediEligibilityClient:
         self.client = client or CachedClient(cache_dir=None, delay_seconds=0.2)
         self.payer_id = payer_id
         self.stc = service_type_codes or self.DEFAULT_STC
+        self.provider_org_name = provider_org_name or self.DEFAULT_ORG_NAME
         self.url = get_settings().stedi_eligibility_url
 
     def check(self, q: ProviderQuery) -> EligibilityResult:
@@ -75,17 +81,22 @@ class StediEligibilityClient:
             return _unknown("STEDI_API_KEY not configured")
         if not self.payer_id:
             return _unknown(f"no Stedi payer id for {q.payer!r}")
+        provider = {
+            k: v
+            for k, v in {
+                "npi": q.npi,
+                "firstName": q.provider_first_name,
+                "lastName": q.provider_last_name,
+            }.items()
+            if v
+        }
+        # Stedi requires organizationName OR lastName in the provider loop; a bare NPI 400s. When
+        # no provider lastName was supplied, add organizationName so every check validates.
+        if not provider.get("lastName"):
+            provider["organizationName"] = self.provider_org_name
         body = {
             "tradingPartnerServiceId": self.payer_id,
-            "provider": {
-                k: v
-                for k, v in {
-                    "npi": q.npi,
-                    "firstName": q.provider_first_name,
-                    "lastName": q.provider_last_name,
-                }.items()
-                if v
-            },
+            "provider": provider,
             "subscriber": {
                 k: v
                 for k, v in {
