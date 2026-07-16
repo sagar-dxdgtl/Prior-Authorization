@@ -290,7 +290,7 @@ export default function Eligibility() {
     <AppShell pageTitle="Eligibility Check">
       <Card style={{ marginBottom: 24 }} styles={{ body: { padding: 0 } }}>
         <div style={styles.cardHeader}>Member Eligibility Check</div>
-        <Form form={form} layout="vertical" onFinish={handleSubmit} requiredMark={false}>
+        <Form form={form} layout="vertical" onFinish={handleSubmit} requiredMark>
           <div style={styles.formGrid}>
             <div style={{ flex: 1 }}>
               <div style={styles.sectionLabel}>Provider</div>
@@ -383,20 +383,10 @@ export default function Eligibility() {
                 Plan is read from the payer's 271 — no need to enter it.
               </Text>
               <div style={{ display: 'flex', gap: 12 }}>
-                <Form.Item
-                  name="state"
-                  label="State"
-                  rules={[{ required: true, message: 'State is required' }]}
-                  style={{ flex: 1 }}
-                >
+                <Form.Item name="state" label="State (optional)" style={{ flex: 1 }}>
                   <Input placeholder="TX" maxLength={2} />
                 </Form.Item>
-                <Form.Item
-                  name="zip"
-                  label="ZIP"
-                  rules={[{ required: true, message: 'ZIP is required' }]}
-                  style={{ flex: 1 }}
-                >
+                <Form.Item name="zip" label="ZIP (optional)" style={{ flex: 1 }}>
                   <Input placeholder="78701" maxLength={10} />
                 </Form.Item>
               </div>
