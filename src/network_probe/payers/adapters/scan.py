@@ -46,7 +46,7 @@ class ScanDirectoryAdapter(PayerAdapter):
         self.base_url = (base_url or SCAN_BASE).rstrip("/")
         self.payer_name = payer_name
         self.year = year
-        self.client = client or CachedClient()
+        self.client = client or CachedClient(use_proxy=True)
 
     def _get(self, url: str) -> dict:
         return self.client.get_json(url, headers=FHIR_ACCEPT)

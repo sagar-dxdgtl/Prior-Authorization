@@ -37,6 +37,15 @@ class Settings(BaseSettings):
     # header, not OAuth2. Base URL is fixed/public (wired in domain/service.py), so only the
     # credential needs a setting.
     hcsc_fhir_client_id: str | None = None
+    # Outbound proxy for reaching geo-IP-gated PUBLIC provider directories from local dev — e.g.
+    # Centene's PDEX endpoint is fronted by a CloudFront WAF that blocks non-US / datacenter IPs.
+    # Applied ONLY to non-PHI provider-directory traffic; the Stedi 270/271 (member PHI) path never
+    # routes through it. In production use an allowlisted egress IP instead of a proxy.
+    residential_proxy_enabled: bool = False
+    residential_proxy_host: str | None = None
+    residential_proxy_port: int | None = None
+    residential_proxy_username: str | None = None
+    residential_proxy_password: str | None = None
     # Kept as a raw str (not list[str]) so pydantic-settings does not attempt to
     # JSON-decode it at the source level. Plain, comma-separated, and JSON-array
     # forms are all supported via the `cors_origins` property below.
@@ -81,6 +90,22 @@ class Settings(BaseSettings):
     def hcsc_fhir_ready(self) -> bool:
         """True once the HCSC client_id header credential is set (no token/secret needed)."""
         return bool(self.hcsc_fhir_client_id)
+
+    @property
+    def directory_proxy_url(self) -> str | None:
+        """HTTP proxy URL for NON-PHI provider-directory calls, or None when disabled. The Stedi
+        270/271 (member PHI) path must never be routed through this — see CachedClient(use_proxy)."""
+        if not (self.residential_proxy_enabled and self.residential_proxy_host and self.residential_proxy_port):
+            return None
+        from urllib.parse import quote
+
+        auth = ""
+        if self.residential_proxy_username:
+            auth = (
+                f"{quote(self.residential_proxy_username, safe='')}:"
+                f"{quote(self.residential_proxy_password or '', safe='')}@"
+            )
+        return f"http://{auth}{self.residential_proxy_host}:{self.residential_proxy_port}"
 
     @property
     def fernet_key_list(self) -> list[str]:

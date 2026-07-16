@@ -33,16 +33,29 @@ class CachedClient:
         timeout: float = 20.0,
         user_agent: str = DEFAULT_UA,
         client: httpx.Client | None = None,
+        use_proxy: bool = False,
     ):
         self.cache_dir = Path(cache_dir) if cache_dir else None
         if self.cache_dir:
             self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.delay_seconds = delay_seconds
+        # Outbound proxy is opt-in and used ONLY by non-PHI provider-directory clients (use_proxy=True)
+        # to reach geo-IP-gated PUBLIC directories from local dev. The Stedi 270/271 (member PHI)
+        # client never sets use_proxy, so PHI is never routed through a third-party proxy.
+        proxy = None
+        if client is None and use_proxy:
+            try:
+                from network_probe.core.config import get_settings
+
+                proxy = get_settings().directory_proxy_url
+            except Exception:
+                proxy = None
         # `client` lets tests inject an httpx.Client(transport=MockTransport(...))
         self._client = client or httpx.Client(
             timeout=timeout,
             headers={"user-agent": user_agent, "accept": "application/json"},
             follow_redirects=True,
+            proxy=proxy,
         )
         self._owns_client = client is None
 

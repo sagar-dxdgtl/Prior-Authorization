@@ -160,12 +160,20 @@ real networks); absent → OUT_OF_NETWORK. One class works for any PDEX server (
 
 ## Ethics
 
-This probe only reads **open** endpoints and the **public, compliance-mandated** FHIR APIs. It sends a
-real User-Agent, keeps volume tiny, delays between live calls, and caches during dev. It does **not**
-bypass authentication, CAPTCHAs, WAFs, or bot protection. Two payers (Humana, BCBS-TX) gate their web
-directories behind bot management — those are recorded as **documented blockers**, not defeated, and
-Humana is instead reached via its legitimate FHIR Provider Directory API. A wrong verdict is worse
-than an honest `UNKNOWN`.
+This probe only reads **open** endpoints and the **public, compliance-mandated** FHIR provider
+directories (CMS Da Vinci PDEX Plan-Net — payers are federally required to expose these with no
+authentication). It sends a real User-Agent, keeps volume tiny (per-provider lookups, not bulk
+harvesting), delays between live calls, and caches during dev. It does **not** defeat authentication
+or CAPTCHAs, and **member PHI (the Stedi 270/271 path) is never routed through any proxy** — only
+non-PHI provider-directory traffic can be.
+
+Some payers front their *public* PDEX directory with a CloudFront/WAF geo-filter that blocks
+non-US / datacenter IPs (e.g. Centene). To reach that public data, **local dev** may route the
+**non-PHI directory calls** through an operator-configured US egress proxy
+(`RESIDENTIAL_PROXY_*` in `.env`), and **production** uses an **allowlisted egress IP** registered
+with the payer (see `docs/payer-sources/SIGNUP-CHECKLIST.md`). Payers that gate their *web*
+directories behind bot management (Humana, BCBS-TX) remain **documented blockers**, reached via
+their legitimate FHIR API instead. A wrong verdict is worse than an honest `UNKNOWN`.
 
 ---
 

@@ -85,7 +85,7 @@ class OscarAdapter(PayerAdapter):
         # year defaults to the current calendar year (the coverage year to check).
         self._today = today or date.today()
         self.year = year or self._today.year
-        self.client = client or CachedClient()
+        self.client = client or CachedClient(use_proxy=True)
 
     # ---- HTTP wrappers (one method per discovered endpoint) -----------------
 

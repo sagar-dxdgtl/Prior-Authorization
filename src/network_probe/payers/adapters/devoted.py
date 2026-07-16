@@ -73,7 +73,7 @@ class DevotedAdapter(PayerAdapter):
     ):
         self._today = today or date.today()
         self.year = year or self._today.year
-        self.client = client or CachedClient()
+        self.client = client or CachedClient(use_proxy=True)
         self.app_id = app_id or os.environ.get("DEVOTED_ALGOLIA_APP_ID", DEFAULT_APP_ID)
         self.api_key = api_key or os.environ.get("DEVOTED_ALGOLIA_API_KEY", DEFAULT_API_KEY)
 
