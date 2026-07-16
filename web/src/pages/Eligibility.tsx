@@ -1,8 +1,9 @@
-import { useState } from 'react';
-import { Form, Input, Button, Table, Card, Typography, Divider } from 'antd';
+import { useState, useRef } from 'react';
+import { Form, Input, Button, Table, Card, Typography, Divider, Select, Tag } from 'antd';
 import type { TableColumnsType } from 'antd';
 import { toast } from 'react-toastify';
 import { apiFetch } from '../services/auth';
+import { searchPayers, type PayerOption } from '../services/payers';
 import AppShell from '../components/AppShell';
 import { palette } from '../theme/tokens';
 
@@ -226,14 +227,33 @@ export default function Eligibility() {
   const [form] = Form.useForm<EligibilityRequest>();
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<EligibilityResponse | null>(null);
+  const [payerOptions, setPayerOptions] = useState<PayerOption[]>([]);
+  const [selectedPayer, setSelectedPayer] = useState<PayerOption | null>(null);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const onPayerSearch = (q: string) => {
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (!q.trim()) {
+      setPayerOptions([]);
+      return;
+    }
+    searchTimer.current = setTimeout(() => {
+      searchPayers(q).then(setPayerOptions).catch(() => setPayerOptions([]));
+    }, 250);
+  };
 
   const handleSubmit = async (values: EligibilityRequest) => {
     setLoading(true);
     setResult(null);
+    const payload = {
+      ...values,
+      stedi_payer_id:
+        selectedPayer?.source === 'stedi' ? selectedPayer.stedi_payer_id ?? undefined : undefined,
+    };
     try {
       const res = await apiFetch('/eligibility', {
         method: 'POST',
-        body: JSON.stringify(values),
+        body: JSON.stringify(payload),
       });
       const data = (await res.json()) as EligibilityResponse & { message?: string };
       if (!res.ok) {
@@ -255,8 +275,37 @@ export default function Eligibility() {
           <div style={styles.formGrid}>
             <div style={{ flex: 1 }}>
               <div style={styles.sectionLabel}>Provider</div>
-              <Form.Item name="payer" label="Payer ID" rules={[{ required: true, message: 'Payer is required' }]}>
-                <Input placeholder="e.g. BCBSTX" />
+              <Form.Item name="payer" label="Payer" rules={[{ required: true, message: 'Payer is required' }]}>
+                <Select
+                  showSearch
+                  filterOption={false}
+                  placeholder="Search payers (e.g. Aetna, UnitedHealthcare)"
+                  onSearch={onPayerSearch}
+                  onChange={(value) =>
+                    setSelectedPayer(payerOptions.find((o) => o.value === value) ?? null)
+                  }
+                  notFoundContent={null}
+                  options={payerOptions.map((o) => ({
+                    value: o.value,
+                    label: (
+                      <span>
+                        {o.label}
+                        {o.market ? <span style={{ color: palette.slate400 }}> · {o.market}</span> : null}
+                        {o.enrollment_status === 'supported' ? (
+                          <Tag color="green" style={{ marginLeft: 6 }}>
+                            supported
+                          </Tag>
+                        ) : o.enrollment_status === 'needs_enrollment' ? (
+                          <Tag color="gold" style={{ marginLeft: 6 }}>
+                            needs enrollment
+                          </Tag>
+                        ) : o.source === 'stedi' ? (
+                          <Tag style={{ marginLeft: 6 }}>Stedi</Tag>
+                        ) : null}
+                      </span>
+                    ),
+                  }))}
+                />
               </Form.Item>
               <div style={{ display: 'flex', gap: 12 }}>
                 <Form.Item
