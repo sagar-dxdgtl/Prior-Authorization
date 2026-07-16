@@ -3,7 +3,7 @@ import { Form, Input, Button, Table, Card, Typography, Divider, Select, Tag } fr
 import type { TableColumnsType } from 'antd';
 import { toast } from 'react-toastify';
 import { apiFetch } from '../services/auth';
-import { searchPayers, type PayerOption } from '../services/payers';
+import { searchPayers, recheckNetwork, type PayerOption } from '../services/payers';
 import AppShell from '../components/AppShell';
 import { palette } from '../theme/tokens';
 
@@ -16,7 +16,7 @@ interface EligibilityRequest {
   dob: string;
   first_name: string;
   last_name: string;
-  plan: string;
+  plan?: string;
   state: string;
   zip: string;
   tin?: string;
@@ -66,6 +66,9 @@ interface EligibilityResponse {
   cob: boolean | null;
   network_verdict: NetworkVerdict | null;
   corroboration: CorroborationSignal[] | null;
+  plan_candidates: { plan: string; is_product: boolean; rank: number }[];
+  selected_plan: string | null;
+  stedi_network_status: string | null;
 }
 
 interface MatrixRow {
@@ -229,6 +232,7 @@ export default function Eligibility() {
   const [result, setResult] = useState<EligibilityResponse | null>(null);
   const [payerOptions, setPayerOptions] = useState<PayerOption[]>([]);
   const [selectedPayer, setSelectedPayer] = useState<PayerOption | null>(null);
+  const [rechecking, setRechecking] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const onPayerSearch = (q: string) => {
@@ -356,10 +360,10 @@ export default function Eligibility() {
               </Form.Item>
             </div>
             <div style={{ flex: 1 }}>
-              <div style={styles.sectionLabel}>Plan &amp; Location</div>
-              <Form.Item name="plan" label="Plan" rules={[{ required: true, message: 'Plan is required' }]}>
-                <Input placeholder="Plan name or code" />
-              </Form.Item>
+              <div style={styles.sectionLabel}>Location</div>
+              <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 12 }}>
+                Plan is read from the payer's 271 — no need to enter it.
+              </Text>
               <div style={{ display: 'flex', gap: 12 }}>
                 <Form.Item
                   name="state"
@@ -473,6 +477,56 @@ export default function Eligibility() {
               </Card>
             );
           })()}
+
+          {result.plan_candidates?.length > 0 && (
+            <Card style={{ marginBottom: 16 }} styles={{ body: { padding: '14px 18px' } }}>
+              <div style={styles.cardHeaderTitle}>Plan used for network check</div>
+              <div style={{ marginTop: 8, maxWidth: 460 }}>
+                <Select
+                  style={{ width: '100%' }}
+                  value={result.selected_plan ?? undefined}
+                  loading={rechecking}
+                  options={result.plan_candidates.map((c) => ({
+                    value: c.plan,
+                    label: c.is_product ? c.plan : `${c.plan} (segment)`,
+                  }))}
+                  onChange={async (plan) => {
+                    setRechecking(true);
+                    try {
+                      const upd = await recheckNetwork({
+                        payer: form.getFieldValue('payer'),
+                        stedi_payer_id:
+                          selectedPayer?.source === 'stedi'
+                            ? selectedPayer.stedi_payer_id ?? undefined
+                            : undefined,
+                        npi: form.getFieldValue('npi'),
+                        plan,
+                        state: form.getFieldValue('state'),
+                        zip: form.getFieldValue('zip'),
+                        tin: form.getFieldValue('tin'),
+                        stedi_network_status: result.stedi_network_status ?? 'UNKNOWN',
+                      });
+                      setResult({
+                        ...result,
+                        selected_plan: plan,
+                        network_status: upd.network_status as EligibilityResponse['network_status'],
+                        network_verdict: upd.network_verdict as unknown as NetworkVerdict | null,
+                        corroboration: upd.corroboration,
+                      });
+                    } catch {
+                      toast.error('Network re-check failed');
+                    } finally {
+                      setRechecking(false);
+                    }
+                  }}
+                />
+                <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 6 }}>
+                  Derived from the payer's 271. Change it to re-check the network for another of this
+                  member's coverages.
+                </Text>
+              </div>
+            </Card>
+          )}
 
           <Card style={{ marginBottom: 16 }} styles={{ body: { padding: 0 } }}>
             <div style={styles.matrixHeader}>
