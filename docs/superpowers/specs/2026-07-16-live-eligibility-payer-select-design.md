@@ -32,9 +32,9 @@ a member card.**
   `plan_name = planInformation.planName or planInformation.groupDescription`. **Verified against
   the 8 cached real 271s in `.cache/stedi_271/`: `planInformation` is frequently `{}` (Devoted) or
   only the employer group ("DISNEY WORLDWIDE SERVICES") — while the member's real plan lives in
-  `benefitsInformation[].planCoverageDescription`**, which this function currently ignores:
+  `benefitsInformation[].planCoverage`**, which this function currently ignores:
 
-  | member | `planCoverageDescription` values in the 271 |
+  | member | `planCoverage` values in the 271 |
   |---|---|
   | Rodriguez · Devoted CO | `DEVOTED CHOICE GIVEBACK 003 CO (PPO)` |
   | Craig · Devoted TX (dual-eligible) | `DEVOTED GIVEBACK 006 TX (HMO)` **and** `03 - SLMB ONLY (PARTIAL DUAL)` |
@@ -128,7 +128,7 @@ A Stedi-directory payer has no roster row and no directory adapter. To still run
 
 1. `POST /api/eligibility` runs the 270/271.
 2. `parse_271_benefits` now also builds **`plan_candidates`** from the distinct
-   `benefitsInformation[].planCoverageDescription` values (fallback: `planInformation.planName`/
+   `benefitsInformation[].planCoverage` values (fallback: `planInformation.planName`/
    `groupDescription`), each `{ plan, rank, is_product }`, and sets **`selected_plan`** = the
    top-ranked candidate. Ranking (see guardrails) prefers a real product/network line over a
    Medicaid-segment line.
@@ -150,7 +150,7 @@ No 270, no subscriber PHI beyond the NPI already in play. The client passes back
 
 ### 5. Correctness guardrails
 
-- **Fix the latent bug:** derive plan from `benefitsInformation[].planCoverageDescription`, not
+- **Fix the latent bug:** derive plan from `benefitsInformation[].planCoverage`, not
   just `planInformation.planName` (usually empty). Unit-pinned against `.cache/stedi_271/`.
 - **Candidate ranking / dual-eligible safety:** a descriptor is `is_product=true` when it contains
   a network/product token (`HMO|PPO|EPO|POS` or a metal/plan token like
