@@ -36,8 +36,10 @@ from network_probe.api.review import router as review_router
 from network_probe.api.validation import normalize_dob, valid_npi
 from network_probe.auth.deps import get_context
 from network_probe.auth.routes import router as auth_router
+from network_probe.core._http import CachedClient
 from network_probe.core.config import get_settings
 from network_probe.core.context import RequestContext
+from network_probe.core.secrets_provider import get_secret
 from network_probe.domain.audit import write_audit
 from network_probe.domain.benefits import EligibilityResult
 from network_probe.domain.eligibility import check_eligibility
@@ -359,6 +361,25 @@ def index() -> str:
 @app.get("/api/payers")
 def payers() -> list[dict]:
     return PAYERS
+
+
+@app.get("/api/payers/search")
+def payers_search(q: str = "", limit: int = 20, ctx: RequestContext = Depends(get_context)) -> list[dict]:
+    """Searchable payer options for the eligibility UI: curated roster first, then the Stedi live
+    payer directory (deduped) for the long tail. Auth-gated so unauthenticated callers can't drive
+    Stedi lookups."""
+    from network_probe.payers.search import load_roster_rows, search_roster, search_stedi
+
+    roster = search_roster(load_roster_rows(), q, limit)
+    if len(roster) >= limit:
+        return roster
+    api_key = get_settings().stedi_api_key or get_secret("STEDI_API_KEY")
+    if not api_key:
+        return roster
+    seen = {o["stedi_payer_id"] for o in roster if o["stedi_payer_id"]}
+    client = CachedClient(cache_dir=None, delay_seconds=0.3)
+    extra = [o for o in search_stedi(client, api_key, q, limit) if o["stedi_payer_id"] not in seen]
+    return roster + extra[: max(0, limit - len(roster))]
 
 
 @app.get("/api/samples")

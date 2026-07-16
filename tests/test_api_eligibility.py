@@ -78,3 +78,23 @@ def test_oversized_body_rejected(auth_header):
     c = TestClient(app, raise_server_exceptions=False)
     r = c.post("/api/check", content=b"x" * 5, headers={**auth_header, "content-length": str(13 * 1024 * 1024)})
     assert r.status_code == 413
+
+
+@pytest.mark.db
+def test_payers_search_roster_hits(auth_header, seed_payers, monkeypatch):
+    # Roster-first: the seeded Oscar row is returned as a roster option. Stedi fallback is mocked
+    # out so the test stays fast and never hits the live payer directory.
+    import network_probe.payers.search as search_mod
+
+    monkeypatch.setattr(search_mod, "search_stedi", lambda *a, **k: [])
+    c = TestClient(app, raise_server_exceptions=False)
+    r = c.get("/api/payers/search", params={"q": "oscar"}, headers=auth_header)
+    assert r.status_code == 200
+    body = r.json()
+    assert body and any(o["label"] == "Oscar" and o["source"] == "roster" for o in body)
+
+
+@pytest.mark.db
+def test_payers_search_requires_auth():
+    c = TestClient(app, raise_server_exceptions=False)
+    assert c.get("/api/payers/search", params={"q": "aetna"}).status_code == 401
