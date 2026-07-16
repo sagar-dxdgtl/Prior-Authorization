@@ -292,7 +292,7 @@ export default function Eligibility() {
         <div style={styles.cardHeader}>Member Eligibility Check</div>
         <Form form={form} layout="vertical" onFinish={handleSubmit} requiredMark>
           <div style={styles.formGrid}>
-            <div style={{ flex: 1 }}>
+            <div style={styles.formColFirst}>
               <div style={styles.sectionLabel}>Provider</div>
               <Form.Item name="payer" label="Payer" rules={[{ required: true, message: 'Payer is required' }]}>
                 <Select
@@ -346,7 +346,7 @@ export default function Eligibility() {
                 <Input placeholder="https://..." />
               </Form.Item>
             </div>
-            <div style={{ flex: 1 }}>
+            <div style={styles.formCol}>
               <div style={styles.sectionLabel}>Member</div>
               <Form.Item
                 name="member_id"
@@ -374,10 +374,10 @@ export default function Eligibility() {
                 </Form.Item>
               </div>
               <Form.Item name="dob" label="Date of Birth" rules={[{ required: true, message: 'DOB is required' }]}>
-                <Input placeholder="YYYYMMDD" maxLength={8} />
+                <Input placeholder="MM/DD/YYYY" maxLength={10} />
               </Form.Item>
             </div>
-            <div style={{ flex: 1 }}>
+            <div style={styles.formCol}>
               <div style={styles.sectionLabel}>Location</div>
               <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 12 }}>
                 Plan is read from the payer's 271 — no need to enter it.
@@ -590,16 +590,30 @@ const styles: Record<string, React.CSSProperties> = {
   },
   formGrid: {
     display: 'flex',
-    gap: 24,
-    padding: '16px 18px',
+    alignItems: 'stretch',
+    padding: '20px 20px',
+  },
+  formColFirst: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 28,
+  },
+  formCol: {
+    flex: 1,
+    minWidth: 0,
+    paddingLeft: 28,
+    paddingRight: 28,
+    borderLeft: `1px solid ${palette.slate200}`,
   },
   sectionLabel: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: 700,
-    color: palette.slate400,
-    letterSpacing: '0.4px',
-    marginBottom: 8,
+    color: palette.slate500,
+    letterSpacing: '0.6px',
+    paddingBottom: 10,
+    marginBottom: 18,
     textTransform: 'uppercase',
+    borderBottom: `1px solid ${palette.slate100}`,
   },
   formFooter: {
     padding: '12px 18px',

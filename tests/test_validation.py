@@ -14,5 +14,7 @@ def test_npi_luhn():
 def test_normalize_dob():
     assert normalize_dob("01/02/1980") == "1980-01-02"
     assert normalize_dob("1980-01-02") == "1980-01-02"
+    assert normalize_dob("01-02-1980") == "1980-01-02"
+    assert normalize_dob("19420911") == "1942-09-11"  # compact YYYYMMDD (matches the UI placeholder)
     with pytest.raises(ValueError):
         normalize_dob("not-a-date")

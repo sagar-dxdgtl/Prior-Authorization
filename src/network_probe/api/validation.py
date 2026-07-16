@@ -19,7 +19,7 @@ def valid_npi(npi: str) -> bool:
 
 
 def normalize_dob(dob: str) -> str:
-    for fmt in ("%m/%d/%Y", "%Y-%m-%d", "%m-%d-%Y"):
+    for fmt in ("%m/%d/%Y", "%Y-%m-%d", "%m-%d-%Y", "%Y%m%d"):
         try:
             return datetime.strptime(dob, fmt).strftime("%Y-%m-%d")
         except ValueError:
