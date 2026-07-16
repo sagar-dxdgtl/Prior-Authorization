@@ -7,6 +7,25 @@ from network_probe.payers.catalogue import DbPayerCatalogue, PayerCatalogue
 from network_probe.stedi.client import EligibilitySource, StediEligibilityClient
 
 
+def reconcile(stedi_status: NetworkStatus, verdict) -> tuple[NetworkStatus, list]:
+    """Merge the 271-derived network status with the directory verdict (the correctness core).
+
+    Rules (unchanged): directory IN vs 271 OUT -> REVIEW; directory OUT vs 271 IN -> REVIEW;
+    271 UNKNOWN + decisive directory -> take the directory; otherwise keep the 271 status.
+    """
+    if verdict is None:
+        return stedi_status, []
+    corr = verdict.corroboration or []
+    status = stedi_status
+    if verdict.status == NetworkStatus.IN_NETWORK and stedi_status == NetworkStatus.OUT_OF_NETWORK:
+        status = NetworkStatus.REVIEW
+    elif verdict.status == NetworkStatus.OUT_OF_NETWORK and stedi_status == NetworkStatus.IN_NETWORK:
+        status = NetworkStatus.REVIEW
+    elif stedi_status == NetworkStatus.UNKNOWN and verdict.status != NetworkStatus.UNKNOWN:
+        status = verdict.status
+    return status, corr
+
+
 def check_eligibility(
     q: ProviderQuery,
     base_url: str | None = None,
@@ -29,15 +48,8 @@ def check_eligibility(
         verdict = check_network(q, **kw)
     except Exception:
         verdict = None
-    if verdict is not None:
-        result.network_verdict = verdict
-        result.corroboration = verdict.corroboration or []
-        if verdict.status == NetworkStatus.IN_NETWORK and result.network_status == NetworkStatus.OUT_OF_NETWORK:
-            result.network_status = NetworkStatus.REVIEW
-        elif verdict.status == NetworkStatus.OUT_OF_NETWORK and result.network_status == NetworkStatus.IN_NETWORK:
-            result.network_status = NetworkStatus.REVIEW
-        elif result.network_status == NetworkStatus.UNKNOWN and verdict.status != NetworkStatus.UNKNOWN:
-            result.network_status = verdict.status
+    result.network_verdict = verdict
+    result.network_status, result.corroboration = reconcile(result.network_status, verdict)
     # Apply tenant-scoped golden-record override as the authoritative last word.
     store = override_store
     if store is None and tenant_id is not None:
