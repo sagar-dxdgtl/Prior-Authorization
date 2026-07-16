@@ -38,14 +38,26 @@ def search_roster(rows: list[dict], q: str, limit: int = 20) -> list[dict]:
         rank = 0 if hay == ql else (1 if hay.startswith(ql) else 2)
         scored.append((rank, hay, r))
     scored.sort(key=lambda t: (t[0], t[1]))
-    return [
-        _option(
-            value=r.get("key"), label=r.get("label"), market=r.get("state"),
-            benefit_type=r.get("benefit_type"), stedi_payer_id=r.get("stedi_payer_id"),
-            enrollment_status=r.get("enrollment_status"), source="roster",
+    # Dedupe by catalogue key: the roster has one row per (payer, market, benefit_type), but the
+    # key is (payer, market) — so the same payer/market appears once per benefit type with an
+    # identical value. AntD Select requires unique option values; keep the best-ranked one.
+    out: list[dict] = []
+    seen_keys: set = set()
+    for _, _, r in scored:
+        key = r.get("key")
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        out.append(
+            _option(
+                value=key, label=r.get("label"), market=r.get("state"),
+                benefit_type=r.get("benefit_type"), stedi_payer_id=r.get("stedi_payer_id"),
+                enrollment_status=r.get("enrollment_status"), source="roster",
+            )
         )
-        for _, _, r in scored[:limit]
-    ]
+        if len(out) >= limit:
+            break
+    return out
 
 
 def search_stedi(client: CachedClient, api_key: str, q: str, limit: int = 20) -> list[dict]:

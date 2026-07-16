@@ -384,15 +384,16 @@ def payers_search(q: str = "", limit: int = 20, ctx: RequestContext = Depends(ge
     from network_probe.payers.search import load_roster_rows, search_roster, search_stedi
 
     roster = search_roster(load_roster_rows(), q, limit)
-    if len(roster) >= limit:
+    # Roster-first: if the curated roster answers, return it immediately — never block the typeahead
+    # on the (6-10s) live Stedi directory call. Stedi is only for the long tail: payers NOT in the
+    # roster at all. Cap it with a short timeout so an unknown-payer search can't hang the UI.
+    if roster:
         return roster
     api_key = get_settings().stedi_api_key or get_secret("STEDI_API_KEY")
     if not api_key:
         return roster
-    seen = {o["stedi_payer_id"] for o in roster if o["stedi_payer_id"]}
-    client = CachedClient(cache_dir=None, delay_seconds=0.3)
-    extra = [o for o in search_stedi(client, api_key, q, limit) if o["stedi_payer_id"] not in seen]
-    return roster + extra[: max(0, limit - len(roster))]
+    client = CachedClient(cache_dir=None, delay_seconds=0.0, timeout=5.0)
+    return search_stedi(client, api_key, q, limit)
 
 
 @app.get("/api/samples")

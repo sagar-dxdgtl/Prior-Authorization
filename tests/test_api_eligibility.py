@@ -81,12 +81,15 @@ def test_oversized_body_rejected(auth_header):
 
 
 @pytest.mark.db
-def test_payers_search_roster_hits(auth_header, seed_payers, monkeypatch):
-    # Roster-first: the seeded Oscar row is returned as a roster option. Stedi fallback is mocked
-    # out so the test stays fast and never hits the live payer directory.
+def test_payers_search_roster_hits_never_calls_stedi(auth_header, seed_payers, monkeypatch):
+    # Roster-first: when the roster answers, the endpoint must NOT touch the slow live Stedi
+    # directory. Make search_stedi blow up so any call fails the test.
     import network_probe.payers.search as search_mod
 
-    monkeypatch.setattr(search_mod, "search_stedi", lambda *a, **k: [])
+    def _boom(*a, **k):
+        raise AssertionError("Stedi must not be called when the roster has hits")
+
+    monkeypatch.setattr(search_mod, "search_stedi", _boom)
     c = TestClient(app, raise_server_exceptions=False)
     r = c.get("/api/payers/search", params={"q": "oscar"}, headers=auth_header)
     assert r.status_code == 200

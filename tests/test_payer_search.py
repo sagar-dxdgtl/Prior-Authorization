@@ -25,6 +25,19 @@ def test_roster_blank_query_returns_nothing():
     assert search_roster(ROWS, "   ") == []
 
 
+def test_roster_dedupes_same_catalogue_key():
+    # Same payer/market appears once per benefit type but shares the catalogue key (value).
+    # AntD Select requires unique values -> collapse to one option.
+    rows = [
+        {"label": "Aetna", "key": "aetna-az", "benefit_type": "Commercial", "state": "AZ",
+         "stedi_payer_id": "60054", "enrollment_status": "needs_enrollment"},
+        {"label": "Aetna", "key": "aetna-az", "benefit_type": "Medicare Advantage", "state": "AZ",
+         "stedi_payer_id": "60054", "enrollment_status": "needs_enrollment"},
+    ]
+    out = search_roster(rows, "aetna")
+    assert len(out) == 1 and out[0]["value"] == "aetna-az"
+
+
 def test_stedi_maps_items_with_prefix_value():
     payload = {"items": [
         {"primaryPayerId": "128KY", "displayName": "Aetna Better Health of Kentucky", "stediId": "AABKY"},

@@ -232,17 +232,32 @@ export default function Eligibility() {
   const [result, setResult] = useState<EligibilityResponse | null>(null);
   const [payerOptions, setPayerOptions] = useState<PayerOption[]>([]);
   const [selectedPayer, setSelectedPayer] = useState<PayerOption | null>(null);
+  const [payerSearching, setPayerSearching] = useState(false);
   const [rechecking, setRechecking] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchSeq = useRef(0);
 
   const onPayerSearch = (q: string) => {
     if (searchTimer.current) clearTimeout(searchTimer.current);
-    if (!q.trim()) {
+    if (q.trim().length < 2) {
       setPayerOptions([]);
+      setPayerSearching(false);
       return;
     }
+    setPayerSearching(true);
+    const seq = ++searchSeq.current;
     searchTimer.current = setTimeout(() => {
-      searchPayers(q).then(setPayerOptions).catch(() => setPayerOptions([]));
+      searchPayers(q)
+        .then((opts) => {
+          // ignore stale responses that resolve out of order
+          if (seq === searchSeq.current) setPayerOptions(opts);
+        })
+        .catch(() => {
+          if (seq === searchSeq.current) setPayerOptions([]);
+        })
+        .finally(() => {
+          if (seq === searchSeq.current) setPayerSearching(false);
+        });
     }, 250);
   };
 
@@ -283,12 +298,15 @@ export default function Eligibility() {
                 <Select
                   showSearch
                   filterOption={false}
+                  loading={payerSearching}
                   placeholder="Search payers (e.g. Aetna, UnitedHealthcare)"
                   onSearch={onPayerSearch}
-                  onChange={(value) =>
+                  onSelect={(value) =>
                     setSelectedPayer(payerOptions.find((o) => o.value === value) ?? null)
                   }
-                  notFoundContent={null}
+                  notFoundContent={
+                    payerSearching ? 'Searching…' : 'Type at least 2 letters of a payer name'
+                  }
                   options={payerOptions.map((o) => ({
                     value: o.value,
                     label: (
