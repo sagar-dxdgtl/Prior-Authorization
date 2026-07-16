@@ -111,3 +111,63 @@ def test_base_url_threaded_into_check_network(monkeypatch):
         stedi=FakeStedi(_res(NetworkStatus.UNKNOWN)),
     )
     assert captured.get("base_url") == "https://fhir.example/api"
+
+
+def test_blank_plan_scoped_from_271_and_captures_pre_merge(monkeypatch):
+    captured = {}
+
+    def cn(q, **k):
+        captured["plan_hint"] = q.plan_hint
+        return _verdict(NetworkStatus.UNKNOWN)
+
+    monkeypatch.setattr(elig, "check_network", cn)
+    result = _res(NetworkStatus.UNKNOWN)
+    result.selected_plan = "DEVOTED GIVEBACK 006 TX (HMO)"
+    result.plan_candidates = [{"plan": "DEVOTED GIVEBACK 006 TX (HMO)", "is_product": True, "rank": 0}]
+    out = elig.check_eligibility(
+        ProviderQuery(payer="devoted", plan_hint="", npi="1720209885"),
+        catalogue=FakeCat("DEVOT"),
+        stedi=FakeStedi(result),
+    )
+    # the directory leg was scoped by the plan the 271 returned, not a blank hint
+    assert captured["plan_hint"] == "DEVOTED GIVEBACK 006 TX (HMO)"
+    # the 271-only status is captured before the merge overwrites network_status
+    assert out.stedi_network_status == NetworkStatus.UNKNOWN
+
+
+def test_explicit_plan_not_overridden(monkeypatch):
+    captured = {}
+
+    def cn(q, **k):
+        captured["plan_hint"] = q.plan_hint
+        return _verdict(NetworkStatus.UNKNOWN)
+
+    monkeypatch.setattr(elig, "check_network", cn)
+    result = _res(NetworkStatus.UNKNOWN)
+    result.selected_plan = "DERIVED PLAN"
+    elig.check_eligibility(
+        ProviderQuery(payer="oscar", plan_hint="USER TYPED PLAN"),
+        catalogue=FakeCat("OSCAR"),
+        stedi=FakeStedi(result),
+    )
+    assert captured["plan_hint"] == "USER TYPED PLAN"
+
+
+def test_stedi_payer_id_bypasses_catalogue(monkeypatch):
+    seen = {}
+
+    class FakeClient:
+        def __init__(self, payer_id=None):
+            seen["payer_id"] = payer_id
+
+        def check(self, q):
+            return _res(NetworkStatus.UNKNOWN)
+
+    monkeypatch.setattr(elig, "StediEligibilityClient", FakeClient)
+    monkeypatch.setattr(elig, "check_network", lambda q, **k: None)
+    elig.check_eligibility(
+        ProviderQuery(payer="stedi:128KY", plan_hint=""),
+        catalogue=FakeCat(None),
+        stedi_payer_id="128KY",
+    )
+    assert seen["payer_id"] == "128KY"

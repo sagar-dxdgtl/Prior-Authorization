@@ -33,11 +33,19 @@ def check_eligibility(
     stedi: EligibilitySource | None = None,
     tenant_id=None,
     override_store=None,
+    stedi_payer_id: str | None = None,
 ) -> EligibilityResult:
     cat = catalogue or DbPayerCatalogue()
     payer = cat.resolve(q.payer)
-    source = stedi or StediEligibilityClient(payer_id=payer.stedi_payer_id if payer else None)
+    # An explicit stedi_payer_id (from a Stedi-directory-sourced payer with no roster row) wins;
+    # otherwise use the resolved roster row's id.
+    effective_id = stedi_payer_id or (payer.stedi_payer_id if payer else None)
+    source = stedi or StediEligibilityClient(payer_id=effective_id)
     result = source.check(q)
+    # The 271 knows the member's real plan; scope the directory leg by it when the caller gave none.
+    if not q.plan_hint and result.selected_plan:
+        q.plan_hint = result.selected_plan
+    result.stedi_network_status = result.network_status  # capture pre-merge (271-only) status
     # Directory engine still owns provider-specific network status; merge/corroborate.
     # Reuse the resolved catalogue so a payer with a verified-public `fhir_base_url` routes its
     # directory leg to the FHIR PDEX adapter (no second DB lookup, no live call in tests).

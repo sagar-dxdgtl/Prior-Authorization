@@ -74,6 +74,7 @@ class EligibilityResult:
     source_audit: dict
     plan_candidates: list = field(default_factory=list)
     selected_plan: str | None = None
+    stedi_network_status: NetworkStatus | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -92,4 +93,5 @@ class EligibilityResult:
             "source_audit": self.source_audit,
             "plan_candidates": self.plan_candidates,
             "selected_plan": self.selected_plan,
+            "stedi_network_status": self.stedi_network_status.value if self.stedi_network_status else None,
         }
