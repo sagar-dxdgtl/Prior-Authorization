@@ -41,3 +41,28 @@ def test_aaa_reject_is_unknown_and_redacted():
 def test_inactive_coverage():
     r = parse_271_benefits({"benefitsInformation": [{"code": "6", "name": "Inactive"}]})
     assert r.coverage_active is False
+
+
+def test_plan_candidates_from_plan_coverage():
+    data = {
+        "benefitsInformation": [
+            {"code": "1", "planCoverage": "DEVOTED GIVEBACK 006 TX (HMO)"},
+            {"code": "1", "planCoverage": "03 - SLMB ONLY (PARTIAL DUAL)"},
+        ]
+    }
+    r = parse_271_benefits(data)
+    assert r.selected_plan == "DEVOTED GIVEBACK 006 TX (HMO)"
+    assert [c["plan"] for c in r.plan_candidates] == [
+        "DEVOTED GIVEBACK 006 TX (HMO)",
+        "03 - SLMB ONLY (PARTIAL DUAL)",
+    ]
+    # plan_name prefers the derived plan over the (empty) planInformation
+    assert r.plan_name == "DEVOTED GIVEBACK 006 TX (HMO)"
+    d = r.to_dict()
+    assert d["selected_plan"] == "DEVOTED GIVEBACK 006 TX (HMO)"
+    assert d["plan_candidates"][0]["plan"] == "DEVOTED GIVEBACK 006 TX (HMO)"
+
+
+def test_no_usable_plan_leaves_selected_none():
+    r = parse_271_benefits({"benefitsInformation": [{"code": "1", "planCoverage": "Network"}]})
+    assert r.selected_plan is None and r.plan_candidates == []

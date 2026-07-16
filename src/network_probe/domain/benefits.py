@@ -72,6 +72,8 @@ class EligibilityResult:
     network_verdict: NetworkVerdict | None
     corroboration: list
     source_audit: dict
+    plan_candidates: list = field(default_factory=list)
+    selected_plan: str | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -88,4 +90,6 @@ class EligibilityResult:
             "network_verdict": self.network_verdict.to_dict() if self.network_verdict else None,
             "corroboration": self.corroboration,
             "source_audit": self.source_audit,
+            "plan_candidates": self.plan_candidates,
+            "selected_plan": self.selected_plan,
         }

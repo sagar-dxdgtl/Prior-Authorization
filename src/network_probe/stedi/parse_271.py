@@ -4,6 +4,7 @@ from decimal import Decimal, InvalidOperation
 
 from network_probe.domain.benefits import BenefitCategory, BenefitLine, CoverageLevel, EligibilityResult, Network
 from network_probe.domain.models import NetworkStatus
+from network_probe.domain.plan_candidates import derive_plan_candidates
 
 _CATEGORY = {
     "B": BenefitCategory.COPAY,
@@ -135,10 +136,11 @@ def parse_271_benefits(data: dict) -> EligibilityResult:
     else:
         status = NetworkStatus.UNKNOWN  # mixed/none → defer to the directory engine, never guess
 
+    candidates, selected = derive_plan_candidates(infos)
     plan = data.get("planInformation") or {}
     return EligibilityResult(
         coverage_active=coverage_active,
-        plan_name=plan.get("planName") or plan.get("groupDescription"),
+        plan_name=selected or plan.get("planName") or plan.get("groupDescription"),
         group=plan.get("groupNumber"),
         coverage_dates=data.get("planDateInformation") or {},
         network_status=status,
@@ -150,4 +152,6 @@ def parse_271_benefits(data: dict) -> EligibilityResult:
         network_verdict=None,
         corroboration=[],
         source_audit={"source": "stedi-271"},
+        plan_candidates=candidates,
+        selected_plan=selected,
     )
