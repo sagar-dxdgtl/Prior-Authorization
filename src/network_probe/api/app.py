@@ -339,6 +339,19 @@ class CheckRequest(BaseModel):
     base_url: str | None = None
     member_id: str | None = None
     dob: str | None = None
+    stedi_payer_id: str | None = None
+
+
+class RecheckRequest(BaseModel):
+    payer: str
+    stedi_payer_id: str | None = None
+    npi: str | None = None
+    plan: str = ""
+    state: str | None = None
+    zip: str | None = None
+    tin: str | None = None
+    base_url: str | None = None
+    stedi_network_status: str = "UNKNOWN"
 
 
 class OverrideRequest(BaseModel):
@@ -425,9 +438,36 @@ def eligibility(req: CheckRequest, ctx: RequestContext = Depends(enforce_quota))
         dob=dob,
     )
     rid = uuid.uuid4().hex[:12]
-    result = check_eligibility(q, base_url=(req.base_url or None), tenant_id=ctx.tenant_id)
+    result = check_eligibility(
+        q, base_url=(req.base_url or None), tenant_id=ctx.tenant_id,
+        stedi_payer_id=(req.stedi_payer_id or None),
+    )
     write_audit(ctx, "eligibility", q, result, rid)
     return {"payer": req.payer, "request_id": rid, **result.to_dict()}
+
+
+@app.post("/api/eligibility/recheck-network")
+def recheck_network_route(req: RecheckRequest, ctx: RequestContext = Depends(enforce_quota)):
+    """Re-run the network/directory leg only, for a plan the user picked from the 271's candidates.
+    No 270 is sent; the caller passes back the 271's own network status to preserve the merge."""
+    from network_probe.domain.eligibility import recheck_network
+
+    if req.base_url:
+        try:
+            assert_safe_url(req.base_url)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail={"message": str(e)})
+    if req.npi and not valid_npi(req.npi):
+        raise HTTPException(status_code=400, detail={"message": "invalid NPI"})
+    q = ProviderQuery(
+        payer=req.payer, plan_hint=req.plan or "", npi=req.npi or None,
+        state=req.state or None, zip_code=req.zip or None, tin=req.tin or None,
+    )
+    try:
+        stedi_status = NetworkStatus(req.stedi_network_status)
+    except ValueError:
+        stedi_status = NetworkStatus.UNKNOWN
+    return recheck_network(q, stedi_status, base_url=(req.base_url or None), tenant_id=ctx.tenant_id)
 
 
 # sync `def` so FastAPI runs the blocking httpx calls in a threadpool

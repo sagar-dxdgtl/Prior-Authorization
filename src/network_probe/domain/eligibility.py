@@ -77,3 +77,45 @@ def check_eligibility(
             ]
             result.source_audit = {**(result.source_audit or {}), "override": f"{ov.verified_by} {ov.verified_at}"}
     return result
+
+
+def recheck_network(
+    q: ProviderQuery,
+    stedi_status: NetworkStatus,
+    base_url: str | None = None,
+    catalogue: PayerCatalogue | None = None,
+    tenant_id=None,
+    override_store=None,
+) -> dict:
+    """Re-run ONLY the directory leg for a newly chosen plan and re-merge against the prior 271
+    status. No 270 is sent. Mirrors check_eligibility's merge + override tail."""
+    cat = catalogue or DbPayerCatalogue()
+    kw: dict = {"catalogue": cat}
+    if base_url:
+        kw["base_url"] = base_url
+    try:
+        verdict = check_network(q, **kw)
+    except Exception:
+        verdict = None
+    status, corr = reconcile(stedi_status, verdict)
+    store = override_store
+    if store is None and tenant_id is not None:
+        from network_probe.domain.overrides import DbOverrideStore
+
+        store = DbOverrideStore(tenant_id)
+    if store is not None:
+        ov = store.lookup(q)
+        if ov is not None:
+            status = NetworkStatus(ov.status)
+            corr = (corr or []) + [
+                {
+                    "source": "override",
+                    "result": "authoritative",
+                    "detail": f"{ov.status} confirmed by {ov.verified_by} ({ov.verified_at})",
+                }
+            ]
+    return {
+        "network_status": status.value,
+        "network_verdict": verdict.to_dict() if verdict else None,
+        "corroboration": corr,
+    }

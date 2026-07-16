@@ -98,3 +98,28 @@ def test_payers_search_roster_hits(auth_header, seed_payers, monkeypatch):
 def test_payers_search_requires_auth():
     c = TestClient(app, raise_server_exceptions=False)
     assert c.get("/api/payers/search", params={"q": "aetna"}).status_code == 401
+
+
+@pytest.mark.db
+def test_recheck_network_route(auth_header):
+    # 'mystery' has no adapter -> check_network raises -> verdict None -> keeps the given 271 status
+    c = TestClient(app, raise_server_exceptions=False)
+    r = c.post(
+        "/api/eligibility/recheck-network",
+        json={"payer": "mystery", "npi": "1679766943", "plan": "SILVER",
+              "stedi_network_status": "OUT_OF_NETWORK"},
+        headers=auth_header,
+    )
+    assert r.status_code == 200
+    assert r.json()["network_status"] == "OUT_OF_NETWORK"
+
+
+@pytest.mark.db
+def test_recheck_network_route_rejects_ssrf(auth_header):
+    c = TestClient(app, raise_server_exceptions=False)
+    r = c.post(
+        "/api/eligibility/recheck-network",
+        json={"payer": "fhir", "plan": "X", "base_url": "http://169.254.169.254/"},
+        headers=auth_header,
+    )
+    assert r.status_code == 400

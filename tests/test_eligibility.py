@@ -171,3 +171,28 @@ def test_stedi_payer_id_bypasses_catalogue(monkeypatch):
         stedi_payer_id="128KY",
     )
     assert seen["payer_id"] == "128KY"
+
+
+def test_recheck_network_reconciles_new_plan(monkeypatch):
+    monkeypatch.setattr(elig, "check_network", lambda q, **k: _verdict(NetworkStatus.OUT_OF_NETWORK))
+    out = elig.recheck_network(
+        ProviderQuery(payer="oscar", plan_hint="OTHER PLAN", npi="1679766943"),
+        NetworkStatus.IN_NETWORK,
+        catalogue=FakeCat("OSCAR"),
+    )
+    # directory OUT vs 271 IN -> REVIEW; no 270 was run
+    assert out["network_status"] == "REVIEW"
+    assert out["network_verdict"]["status"] == "OUT_OF_NETWORK"
+
+
+def test_recheck_network_no_adapter_keeps_stedi_status(monkeypatch):
+    def boom(q, **k):
+        raise ValueError("No adapter")
+
+    monkeypatch.setattr(elig, "check_network", boom)
+    out = elig.recheck_network(
+        ProviderQuery(payer="mystery", plan_hint="X"),
+        NetworkStatus.OUT_OF_NETWORK,
+        catalogue=FakeCat(None),
+    )
+    assert out["network_status"] == "OUT_OF_NETWORK" and out["network_verdict"] is None
