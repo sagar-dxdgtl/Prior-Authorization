@@ -206,7 +206,9 @@ export default function ResultsView({ result }: { result: EligibilityResponse | 
     );
   }
 
-  const tinSignal = result.corroboration?.find((s) => s.source === 'TIN-scope') ?? null;
+  // Provider-network provenance: the resolver emits source "TIC" (credentialing/TiC short-circuit);
+  // the directory-corroboration path emits "TIN-scope". Surface whichever is present.
+  const tinSignal = result.corroboration?.find((s) => s.source === 'TIC' || s.source === 'TIN-scope') ?? null;
   const tinTone: Tone = tinSignal ? tinScopeTone(tinSignal.result) : 'neutral';
   const networkTone = networkStatusTone(result.network_status);
   const costShareTone: Tone = result.benefits.length > 0 ? 'success' : 'neutral';
@@ -223,13 +225,18 @@ export default function ResultsView({ result }: { result: EligibilityResponse | 
                 {result.network_verdict.status.replace(/_/g, ' ')} · confidence: {result.network_verdict.confidence}
               </div>
               {result.network_verdict.notes && <div style={{ ...styles.verdictBody, marginTop: 6 }}>{result.network_verdict.notes}</div>}
-              {result.network_verdict.source_url && (
-                <div style={{ marginTop: 8 }}>
-                  <a href={result.network_verdict.source_url} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>
-                    View source
-                  </a>
-                </div>
-              )}
+              {result.network_verdict.source_url &&
+                (/^https?:\/\//.test(result.network_verdict.source_url) ? (
+                  <div style={{ marginTop: 8 }}>
+                    <a href={result.network_verdict.source_url} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>
+                      View source
+                    </a>
+                  </div>
+                ) : (
+                  <div style={{ ...styles.verdictBody, marginTop: 8, fontSize: 12 }}>
+                    Source: {result.network_verdict.source_url}
+                  </div>
+                ))}
             </>
           ) : result.source_audit?.note ? (
             <>
@@ -247,19 +254,20 @@ export default function ResultsView({ result }: { result: EligibilityResponse | 
     },
     {
       key: 'tin',
-      label: <TabLabel tone={tinTone} text="TIN-Scope" />,
+      label: <TabLabel tone={tinTone} text="TiC / TIN" />,
       children: (
         <div style={styles.tabPad}>
           {tinSignal ? (
             <div>
               <span style={{ ...styles.statPill, color: TONE_COLORS[tinTone].text, background: TONE_COLORS[tinTone].bg }}>
-                {tinSignal.result.toUpperCase()}
+                {tinSignal.result === 'n/a' ? 'N/A' : tinSignal.result.toUpperCase()}
               </span>
               <div style={{ ...styles.verdictBody, marginTop: 6 }}>{tinSignal.detail}</div>
             </div>
           ) : (
             <Text type="secondary" style={{ fontSize: 12 }}>
-              No billing TIN evaluated for this case.
+              No billing TIN provided — enter the billing TIN to check the provider’s network status
+              via Transparency-in-Coverage (commercial) or the clinic credentialing matrix.
             </Text>
           )}
         </div>
