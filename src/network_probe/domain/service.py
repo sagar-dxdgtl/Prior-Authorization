@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from network_probe.domain.models import NetworkVerdict, ProviderQuery
+from network_probe.domain.models import NetworkStatus, NetworkVerdict, ProviderQuery
 from network_probe.payers.adapters.base import PayerAdapter
 from network_probe.payers.adapters.db_directory import DbDirectoryAdapter
 from network_probe.payers.adapters.devoted import DevotedAdapter
@@ -177,6 +177,28 @@ def get_adapter(payer: str, catalogue=None, **kwargs) -> PayerAdapter:
 def check_network(
     q: ProviderQuery, corroborate: bool = True, catalogue=None, **adapter_kwargs
 ) -> NetworkVerdict:
+    # (0) Clinic credentialing matrix — the authoritative, plan-scoped provider-INN signal, keyed on
+    # the billing TIN. When the clinic's own contract record answers (payer, plan, NPI, TIN), it
+    # settles the verdict WITHOUT the unreliable public directory, and covers MA/Medicaid lines that
+    # TiC can't. Fires only when a billing TIN is present to key on; otherwise fall through as before.
+    if q.npi and q.tin:
+        from network_probe.domain.credentialing import default_credentialing
+
+        cred = default_credentialing().lookup(q.payer, q.npi, q.tin, plan=q.plan_hint)
+        if cred is not None:
+            io = "IN" if cred.in_network else "OUT"
+            return NetworkVerdict(
+                status=NetworkStatus.IN_NETWORK if cred.in_network else NetworkStatus.OUT_OF_NETWORK,
+                matched_provider={"npi": q.npi, "tin": q.tin, "credentialing": True, "plan": cred.plan},
+                plan_or_network_checked=f"{q.payer} credentialing (plan: {cred.plan or q.plan_hint or '—'})",
+                source_url="credentialing-matrix",
+                confidence="high",
+                notes=(
+                    f"NPI {q.npi} billing under TIN {q.tin} is {io}-of-network for {q.payer} per "
+                    f"clinic credentialing ({cred.source})."
+                ),
+            )
+
     adapter = get_adapter(q.payer, catalogue=catalogue, **adapter_kwargs)
     raw = adapter.check_network(q)
     snapshot = {
