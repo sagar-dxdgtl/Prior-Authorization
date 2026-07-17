@@ -56,6 +56,8 @@ export interface EligibilityResponse {
   plan_candidates: PlanCandidate[];
   selected_plan: string | null;
   stedi_network_status: string | null;
+  out_of_network_benefits: boolean | null;
+  determination: { code: string; label: string; reason: string } | null;
   source_audit?: { source?: string; note?: string; error_codes?: string[] } | null;
 }
 
@@ -118,6 +120,13 @@ function networkStatusTone(status: EligibilityResponse['network_status']): Tone 
   if (status === 'IN_NETWORK') return 'success';
   if (status === 'OUT_OF_NETWORK') return 'danger';
   if (status === 'REVIEW') return 'warning';
+  return 'neutral';
+}
+
+function determinationTone(code: string | undefined): Tone {
+  if (code === 'IN_NETWORK') return 'success';
+  if (code === 'OUT_OF_NETWORK') return 'danger';
+  if (code === 'OUT_OF_NETWORK_WITH_BENEFITS' || code === 'REVIEW') return 'warning';
   return 'neutral';
 }
 
@@ -292,6 +301,11 @@ export default function ResultsView({ result }: { result: EligibilityResponse | 
   return (
     <div>
       <div style={styles.statRow}>
+        <StatTile
+          label="Determination"
+          value={result.determination?.label ?? result.network_status.replace(/_/g, ' ')}
+          tone={determinationTone(result.determination?.code)}
+        />
         <StatTile
           label="Coverage"
           value={result.coverage_active == null ? 'N/A' : result.coverage_active ? 'ACTIVE' : 'INACTIVE'}
