@@ -47,6 +47,45 @@ def test_determination_serializes():
     assert js["code"] == "OUT_OF_NETWORK_WITH_BENEFITS" and "label" in js and "reason" in js
 
 
+# --- physician-OON vs payer-OON (group TIN contracted or not) ---
+
+def test_oon_group_contracted_is_physician_oon():
+    # the clinic's TIN IS contracted with the payer, but this physician isn't in-network -> Physician OON
+    d = final_determination(NetworkStatus.OUT_OF_NETWORK, out_of_network_benefits=False, group_contracted=True)
+    assert d.code == "PHYSICIAN_OUT_OF_NETWORK"
+    assert "physician" in d.label.lower()
+
+
+def test_physician_oon_takes_precedence_over_benefits():
+    # group contracted -> the client labels it Physician OON regardless of the plan's OON tier
+    d = final_determination(NetworkStatus.OUT_OF_NETWORK, out_of_network_benefits=True, group_contracted=True)
+    assert d.code == "PHYSICIAN_OUT_OF_NETWORK"
+
+
+def test_oon_group_not_contracted_is_payer_oon():
+    # no group contract at all -> payer-level OON; reason names the payer-level gap
+    d = final_determination(NetworkStatus.OUT_OF_NETWORK, out_of_network_benefits=False, group_contracted=False)
+    assert d.code == "OUT_OF_NETWORK"
+    assert "payer" in d.reason.lower()
+
+
+def test_oon_group_not_contracted_but_plan_pays_is_oon_w_benefits():
+    # payer OON but the plan still pays out-of-network -> OON w/ Benefits (not physician OON)
+    d = final_determination(NetworkStatus.OUT_OF_NETWORK, out_of_network_benefits=True, group_contracted=False)
+    assert d.code == "OUT_OF_NETWORK_WITH_BENEFITS"
+
+
+def test_group_contracted_none_keeps_prior_behavior():
+    # unknown group status -> unchanged from before (plain OON)
+    d = final_determination(NetworkStatus.OUT_OF_NETWORK, out_of_network_benefits=False, group_contracted=None)
+    assert d.code == "OUT_OF_NETWORK"
+
+
+def test_in_network_ignores_group_contracted():
+    d = final_determination(NetworkStatus.IN_NETWORK, out_of_network_benefits=None, group_contracted=True)
+    assert d.code == "IN_NETWORK"
+
+
 def test_check_eligibility_produces_oon_with_benefits_end_to_end(monkeypatch):
     # End-to-end (no DB / no live calls): 271 says active + plan pays OON; credentialing says the
     # provider is OON -> the final determination is "OON w/ Benefits" (Desormeaux's real case).

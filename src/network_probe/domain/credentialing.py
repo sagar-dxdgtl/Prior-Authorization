@@ -137,6 +137,15 @@ class CredentialingMatrix:
         # multiple records for the same (payer, npi, tin) → pick the best plan match
         return max(hits, key=lambda r: _plan_overlap(plan, r.plan))
 
+    def group_contracted(self, payer, tin) -> bool | None:
+        """Is the billing TIN in-network with this payer under ANY NPI (group-level)? True on positive
+        evidence (some NPI at this (payer, TIN) is in-network); None otherwise — an all-OON set doesn't
+        prove the group is out (we may only hold the OON physicians)."""
+        pl, t = (payer or "").lower(), _norm_tin(tin)
+        if any(r.payer.lower() == pl and _norm_tin(r.tin) == t and r.in_network for r in self._items):
+            return True
+        return None
+
     def __bool__(self) -> bool:
         return bool(self._items)
 

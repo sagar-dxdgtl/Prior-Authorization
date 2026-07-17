@@ -80,7 +80,31 @@ def check_eligibility(
     # directory → override) combined with the 271's out-of-network benefit tier.
     from network_probe.domain.determination import final_determination
 
-    result.determination = final_determination(result.network_status, result.out_of_network_benefits).to_dict()
+    # Group-contract signal (physician-OON vs payer-OON) — only meaningful when the provider is OON.
+    gc = None
+    if result.network_status == NetworkStatus.OUT_OF_NETWORK and q.npi and q.tin:
+        from network_probe.domain.provider_network import group_contracted
+
+        try:
+            gc = group_contracted(q.payer, q.tin)
+        except Exception:
+            gc = None
+    result.determination = final_determination(
+        result.network_status, result.out_of_network_benefits, group_contracted=gc
+    ).to_dict()
+    # Side-by-side evidence panel: what each source (Stedi 271, credentialing, TiC, payer directory)
+    # independently says. Best-effort — a live directory read never throws; benefit_type gates TiC.
+    from network_probe.domain.evidence import assemble_evidence
+
+    try:
+        result.evidence_sources = assemble_evidence(
+            q, result,
+            benefit_type=getattr(payer, "benefit_type", None) if payer else None,
+            catalogue=cat,
+            run_directory=True,
+        )
+    except Exception:
+        result.evidence_sources = []
     return result
 
 

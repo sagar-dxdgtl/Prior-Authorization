@@ -30,6 +30,43 @@ from network_probe.domain.tic_network import tic_network_status
 _EXEMPT = {"medicare", "medicaid", "dual", "federal"}
 
 
+def group_contracted(payer, tin, credentialing=None, crosswalk=None, store=None) -> bool | None:
+    """Is the clinic's billing TIN contracted with this payer under ANY NPI? True on positive evidence
+    (an in-network credentialing row at that TIN, a TiC MRF hit for that TIN, or a persisted
+    provider-network fact); None when there's no positive evidence (absence isn't proof). This splits
+    Physician OON (group contracted, physician not) from payer-level OON.
+
+    Sources are resolved lazily so callers can pass just what they have (or nothing → defaults)."""
+    if not tin:
+        return None
+    if credentialing is None:
+        from network_probe.domain.credentialing import default_credentialing
+
+        credentialing = default_credentialing()
+    if credentialing is not None and credentialing.group_contracted(payer, tin) is True:
+        return True
+    if crosswalk is None:
+        from network_probe.domain.tin_crosswalk import default_crosswalk
+
+        crosswalk = default_crosswalk()
+    if crosswalk is not None and crosswalk.has_tin(payer, tin):
+        return True
+    if store is None:
+        try:
+            from network_probe.domain.network_facts import default_provider_network_store
+
+            store = default_provider_network_store()
+        except Exception:
+            store = None
+    if store is not None:
+        try:
+            if store.group_contracted(payer, tin) is True:
+                return True
+        except Exception:
+            pass
+    return None
+
+
 def _sig(result: str, detail: str) -> dict:
     return {"source": "TIC", "result": result, "detail": detail}
 

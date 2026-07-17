@@ -83,6 +83,9 @@ class EligibilityResult:
     # Final client-facing INN/OON determination {code,label,reason}: provider network_status combined
     # with out_of_network_benefits (IN / OON / OON-with-benefits / REVIEW / UNKNOWN). Set by check_eligibility.
     determination: dict | None = None
+    # Side-by-side evidence: what EACH source independently says (Stedi 271, credentialing, TiC,
+    # payer directory) as [{source, answers, status, tone, detail}]. Set by check_eligibility.
+    evidence_sources: list = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -104,4 +107,5 @@ class EligibilityResult:
             "stedi_network_status": self.stedi_network_status.value if self.stedi_network_status else None,
             "out_of_network_benefits": self.out_of_network_benefits,
             "determination": self.determination,
+            "evidence_sources": self.evidence_sources,
         }

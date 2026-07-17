@@ -21,6 +21,7 @@ from __future__ import annotations
 import csv
 import json
 import os
+import re
 from pathlib import Path
 
 
@@ -66,6 +67,17 @@ class TinCrosswalk:
         hit = self._index.get(((payer or "").strip().lower(), npi), set())
         anyp = self._index.get(("*", npi), set())
         return sorted(hit | anyp)
+
+    def has_tin(self, payer: str | None, tin: str | None) -> bool:
+        """Is this billing TIN present for the payer under ANY NPI (group-level contract signal)?"""
+        if not tin:
+            return False
+        want = re.sub(r"\D", "", str(tin))
+        pl = (payer or "").strip().lower()
+        for (p, _npi), tins in self._index.items():
+            if p in (pl, "*") and any(re.sub(r"\D", "", str(t)) == want for t in tins):
+                return True
+        return False
 
     def __bool__(self) -> bool:
         return bool(self._index)

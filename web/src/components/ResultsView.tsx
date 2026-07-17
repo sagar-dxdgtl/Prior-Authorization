@@ -40,6 +40,14 @@ export interface PlanCandidate {
   rank: number;
 }
 
+export interface EvidenceSource {
+  source: string;
+  answers: string;
+  status: string;
+  tone: 'success' | 'warning' | 'danger' | 'neutral';
+  detail: string;
+}
+
 export interface EligibilityResponse {
   request_id: string;
   coverage_active: boolean | null;
@@ -58,6 +66,7 @@ export interface EligibilityResponse {
   stedi_network_status: string | null;
   out_of_network_benefits: boolean | null;
   determination: { code: string; label: string; reason: string } | null;
+  evidence_sources?: EvidenceSource[];
   source_audit?: { source?: string; note?: string; error_codes?: string[] } | null;
 }
 
@@ -126,7 +135,9 @@ function networkStatusTone(status: EligibilityResponse['network_status']): Tone 
 function determinationTone(code: string | undefined): Tone {
   if (code === 'IN_NETWORK') return 'success';
   if (code === 'OUT_OF_NETWORK') return 'danger';
-  if (code === 'OUT_OF_NETWORK_WITH_BENEFITS' || code === 'REVIEW') return 'warning';
+  // physician-OON and OON-with-benefits are distinct, still-actionable states → amber, not red
+  if (code === 'OUT_OF_NETWORK_WITH_BENEFITS' || code === 'PHYSICIAN_OUT_OF_NETWORK' || code === 'REVIEW')
+    return 'warning';
   return 'neutral';
 }
 
@@ -213,7 +224,69 @@ export default function ResultsView({ result }: { result: EligibilityResponse | 
   const networkTone = networkStatusTone(result.network_status);
   const costShareTone: Tone = result.benefits.length > 0 ? 'success' : 'neutral';
 
+  const evidence = result.evidence_sources ?? [];
+  const evidenceColumns: TableColumnsType<EvidenceSource> = [
+    {
+      title: 'Source',
+      dataIndex: 'source',
+      key: 'source',
+      width: 180,
+      render: (v: string, row: EvidenceSource) => (
+        <div>
+          <div style={{ fontWeight: 600 }}>{v}</div>
+          <div style={{ fontSize: 11, color: palette.slate400 }}>answers: {row.answers}</div>
+        </div>
+      ),
+    },
+    {
+      title: 'Finding',
+      dataIndex: 'status',
+      key: 'status',
+      width: 150,
+      render: (v: string, row: EvidenceSource) => (
+        <span style={{ ...styles.statPill, color: TONE_COLORS[row.tone].text, background: TONE_COLORS[row.tone].bg }}>
+          {v.replace(/_/g, ' ')}
+        </span>
+      ),
+    },
+    { title: 'Detail', dataIndex: 'detail', key: 'detail', render: (v: string) => <span style={{ fontSize: 12 }}>{v}</span> },
+  ];
+
   const tabItems = [
+    {
+      key: 'sources',
+      label: <TabLabel tone={determinationTone(result.determination?.code)} text="Sources" />,
+      children: (
+        <div style={styles.tabPad}>
+          <div style={{ ...styles.verdictBody, marginBottom: 10, fontSize: 12 }}>
+            Each source answers independently. The determination combines the <b>provider-network</b> signal
+            (credentialing → TiC → directory) with the <b>plan tier</b> from the Stedi 271.
+          </div>
+          {evidence.length > 0 ? (
+            <Table size="small" pagination={false} rowKey="source" dataSource={evidence} columns={evidenceColumns} />
+          ) : (
+            <Text type="secondary" style={{ fontSize: 12 }}>No source breakdown for this result.</Text>
+          )}
+          <div style={{ marginTop: 14 }}>
+            <span style={styles.statLabel}>Calculated determination</span>
+            <div style={{ marginTop: 4 }}>
+              <span
+                style={{
+                  ...styles.statPill,
+                  color: TONE_COLORS[determinationTone(result.determination?.code)].text,
+                  background: TONE_COLORS[determinationTone(result.determination?.code)].bg,
+                }}
+              >
+                {result.determination?.label ?? result.network_status.replace(/_/g, ' ')}
+              </span>
+            </div>
+            {result.determination?.reason && (
+              <div style={{ ...styles.verdictBody, marginTop: 6, fontSize: 12 }}>{result.determination.reason}</div>
+            )}
+          </div>
+        </div>
+      ),
+    },
     {
       key: 'network',
       label: <TabLabel tone={networkTone} text="Network Finding" />,

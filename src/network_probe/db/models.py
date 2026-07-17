@@ -113,6 +113,33 @@ class ReviewCase(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
 
 
+class ProviderNetworkFact(Base):
+    """Durable store of provider-network facts (payer, NPI, billing TIN → in/out), from the
+    credentialing export, TiC MRF ingests, and directory reads. No PHI — contract facts only.
+
+    - `npi` may be null for a group-level fact (TIN contracted with the payer under no specific NPI).
+    - `source`: "credentialing" | "tic" | "directory".
+    - Global rows are tenant_id NULL (readable by every tenant, like `payers`); a tenant may layer its
+      own rows on top. The resolver / group-contracted check read these; ingest scripts write them.
+    """
+
+    __tablename__ = "provider_network_facts"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "payer_key", "npi", "tin", "source", name="uq_pnf_identity"),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tenants.id"), nullable=True, index=True)
+    payer_key: Mapped[str] = mapped_column(String(120), index=True)
+    npi: Mapped[str | None] = mapped_column(String(10), nullable=True, index=True)
+    tin: Mapped[str] = mapped_column(String(20), index=True)
+    in_network: Mapped[bool] = mapped_column(Boolean)
+    source: Mapped[str] = mapped_column(String(20))
+    plan: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    network_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    effective_date: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class UsageCounter(Base):
     """Per-tenant request counter for daily/monthly quota enforcement. No PHI — just counts."""
 
