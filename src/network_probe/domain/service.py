@@ -161,6 +161,15 @@ def get_adapter(payer: str, catalogue=None, **kwargs) -> PayerAdapter:
         return DbDirectoryAdapter(
             payer_name=getattr(row, "key", key), payer_label=getattr(row, "label", key), **kwargs
         )
+    # (c) bespoke short-key adapter reached via a roster key. Payers like Oscar register their
+    # adapter only under a short key ("oscar") but callers resolve them by roster key
+    # ("oscar-fl-south-florida"), which has no fhir_base_url to fall through to. Map the first key
+    # segment onto the short-key factory so those resolve instead of raising "No adapter". Reached
+    # only after the base_url/pdf paths fail, so FHIR-base payers (UHC/Cigna/Humana/Devoted) are
+    # unaffected.
+    seg = key.split("-", 1)[0]
+    if seg and seg != key and seg in _ADAPTER_FACTORIES:
+        return _ADAPTER_FACTORIES[seg](**kwargs)
     supported = ", ".join(sorted(_ADAPTER_FACTORIES)) or "(none)"
     raise ValueError(f"No adapter for payer {payer!r}. Supported: {supported}.")
 

@@ -34,6 +34,18 @@ def _unknown(reason: str) -> EligibilityResult:
     )
 
 
+# AAA subscriber-identity reject codes worth retrying with a different subscriber shape:
+# 72 = Invalid/Missing Subscriber ID (often a dependent/sequence suffix like "-01" the payer rejects),
+# 73 = Invalid/Missing Subscriber Name (payer matches on ID+DOB; our name didn't match its records),
+# 75 = Subscriber Not Found (name or a member-id suffix may be the mismatch). 71 (DOB) is excluded --
+# no name-drop or suffix-strip can fix a wrong birth date.
+_IDENTITY_RETRY_CODES = {"72", "73", "75"}
+
+
+def _subscriber_identity_error(data: dict) -> bool:
+    return any(str(e.get("code")) in _IDENTITY_RETRY_CODES for e in (data.get("errors") or []))
+
+
 def _dob(dob: str | None) -> str | None:
     """Normalize MM/DD/YYYY or YYYY-MM-DD to Stedi's YYYYMMDD."""
     if not dob:
@@ -94,27 +106,53 @@ class StediEligibilityClient:
         # no provider lastName was supplied, add organizationName so every check validates.
         if not provider.get("lastName"):
             provider["organizationName"] = self.provider_org_name
-        body = {
-            "tradingPartnerServiceId": self.payer_id,
-            "provider": provider,
-            "subscriber": {
-                k: v
-                for k, v in {
-                    "memberId": q.member_id,
-                    "dateOfBirth": _dob(q.dob),
-                    "firstName": q.first_name,
-                    "lastName": q.last_name,
-                }.items()
-                if v
-            },
-            "encounter": {"serviceTypeCodes": self.stc},
-        }
-        try:
-            data = self.client.post_json(
-                self.url,
-                content=json.dumps(body),
-                headers={"Authorization": self.api_key, "content-type": "application/json"},
-            )
-        except Exception:
-            return _unknown("Stedi eligibility call failed")
-        return parse_271_benefits(data)
+
+        dob = _dob(q.dob)
+
+        def _subscriber(member: str | None, include_name: bool) -> dict:
+            fields = {"memberId": member, "dateOfBirth": dob}
+            if include_name:
+                fields["firstName"] = q.first_name
+                fields["lastName"] = q.last_name
+            return {k: v for k, v in fields.items() if v}
+
+        def _post(subscriber: dict) -> dict | None:
+            body = {
+                "tradingPartnerServiceId": self.payer_id,
+                "provider": provider,
+                "subscriber": subscriber,
+                "encounter": {"serviceTypeCodes": self.stc},
+            }
+            try:
+                return self.client.post_json(
+                    self.url,
+                    content=json.dumps(body),
+                    headers={"Authorization": self.api_key, "content-type": "application/json"},
+                )
+            except Exception:
+                return None
+
+        # Payers reject subscriber identity in fixable ways: UHC wants memberId+DOB (name mismatch →
+        # AAA-73/75); Oscar rejects a dependent/sequence suffix like "OSC…-01" (AAA-72). Try the
+        # identity as given, then progressively simpler shapes, stopping at the first that isn't a
+        # retryable identity error. If all fail, report the original (as-given) response's error.
+        had_name = bool(q.first_name or q.last_name)
+        stripped = re.sub(r"-\d+$", "", q.member_id) if q.member_id else q.member_id
+        variants = [_subscriber(q.member_id, had_name)]
+        if had_name:
+            variants.append(_subscriber(q.member_id, False))
+        if stripped and stripped != q.member_id:
+            variants.append(_subscriber(stripped, False))
+            if had_name:
+                variants.append(_subscriber(stripped, True))
+
+        first_data = None
+        for subscriber in variants:
+            data = _post(subscriber)
+            if data is None:
+                return _unknown("Stedi eligibility call failed")
+            if first_data is None:
+                first_data = data
+            if not _subscriber_identity_error(data):
+                return parse_271_benefits(data)
+        return parse_271_benefits(first_data)

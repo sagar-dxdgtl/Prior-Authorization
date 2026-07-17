@@ -15,6 +15,11 @@ _CATEGORY = {
 }
 _LEVEL = {"IND": CoverageLevel.INDIVIDUAL, "FAM": CoverageLevel.FAMILY}
 _NET = {"Y": Network.IN, "N": Network.OON}
+# Service-type codes for physician/professional services a specialist provider renders. An OON
+# copay/coinsurance on one of these = the plan genuinely pays out-of-network for the provider's care
+# (the "w/ benefits" in "OON w/ benefits"); OON deductible/OOP-max on general coverage (stc "30")
+# does not, and is excluded.
+_PROFESSIONAL_STC = {"1", "96", "98", "BY", "BZ", "UC"}
 _TIME = {"23": "calendar year", "29": "remaining", "27": "visit", "22": "service year"}
 _COB_ALLOW = {
     "primaryPayer",
@@ -136,6 +141,26 @@ def parse_271_benefits(data: dict) -> EligibilityResult:
     else:
         status = NetworkStatus.UNKNOWN  # mixed/none → defer to the directory engine, never guess
 
+    # Plan-level OON coverage, labelled the way an RCM team does: "OON w/ benefits" ONLY when the
+    # plan actually pays out-of-network for a PHYSICIAN/professional service (a real OON copay or
+    # coinsurance on those service types). A PPO returns those (Desormeaux: OON physician copay $45);
+    # an HMOPOS / D-SNP returns OON lines too, but only structural deductible/OOP-max on general
+    # coverage and no OON physician cost-share (Birenbaum) → that's plain "OON", not "OON w/ benefits".
+    # False = has cost-share tiers but doesn't pay OON professional; None = no tiers to tell.
+    pays_oon_professional = any(
+        l.network == Network.OON
+        and l.category in (BenefitCategory.COPAY, BenefitCategory.COINSURANCE)
+        and l.service_type in _PROFESSIONAL_STC
+        for l in lines
+    )
+    has_tiers = Network.IN in nets or Network.OON in nets
+    if pays_oon_professional:
+        oon_benefits: bool | None = True
+    elif has_tiers:
+        oon_benefits = False
+    else:
+        oon_benefits = None
+
     candidates, selected = derive_plan_candidates(infos)
     plan = data.get("planInformation") or {}
     return EligibilityResult(
@@ -154,4 +179,5 @@ def parse_271_benefits(data: dict) -> EligibilityResult:
         source_audit={"source": "stedi-271"},
         plan_candidates=candidates,
         selected_plan=selected,
+        out_of_network_benefits=oon_benefits,
     )

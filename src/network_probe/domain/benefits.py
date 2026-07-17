@@ -75,6 +75,11 @@ class EligibilityResult:
     plan_candidates: list = field(default_factory=list)
     selected_plan: str | None = None
     stedi_network_status: NetworkStatus | None = None
+    # Plan-level out-of-network coverage from the 271 benefit tiers: True if the plan returns OON
+    # cost-shares (PPO-style → pays OON, i.e. "OON w/ benefits"), False if in-network-only (HMO-style),
+    # None if the 271 carried no cost-share tiers to tell. Distinct from network_status, which is the
+    # provider-specific verdict the 271 can't give.
+    out_of_network_benefits: bool | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -94,4 +99,5 @@ class EligibilityResult:
             "plan_candidates": self.plan_candidates,
             "selected_plan": self.selected_plan,
             "stedi_network_status": self.stedi_network_status.value if self.stedi_network_status else None,
+            "out_of_network_benefits": self.out_of_network_benefits,
         }

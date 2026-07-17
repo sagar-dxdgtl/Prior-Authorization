@@ -377,13 +377,16 @@ def payers() -> list[dict]:
 
 
 @app.get("/api/payers/search")
-def payers_search(q: str = "", limit: int = 20, ctx: RequestContext = Depends(get_context)) -> list[dict]:
+def payers_search(
+    q: str = "", state: str = "", limit: int = 20, ctx: RequestContext = Depends(get_context)
+) -> list[dict]:
     """Searchable payer options for the eligibility UI: curated roster first, then the Stedi live
     payer directory (deduped) for the long tail. Auth-gated so unauthenticated callers can't drive
-    Stedi lookups."""
+    Stedi lookups. `state` is the member's state from the form; it biases roster ranking toward that
+    market so a verbose client name ("UHC AARP Medicare Advantage") lands on the right-state row."""
     from network_probe.payers.search import load_roster_rows, search_roster, search_stedi
 
-    roster = search_roster(load_roster_rows(), q, limit)
+    roster = search_roster(load_roster_rows(), q, limit, state=state or None)
     # Roster-first: if the curated roster answers, return it immediately — never block the typeahead
     # on the (6-10s) live Stedi directory call. Stedi is only for the long tail: payers NOT in the
     # roster at all. Cap it with a short timeout so an unknown-payer search can't hang the UI.

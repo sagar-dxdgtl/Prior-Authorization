@@ -17,6 +17,53 @@ def test_active_and_inn_oon_copays():
     assert nets[Network.IN] == Decimal("30") and nets[Network.OON] == Decimal("60")
 
 
+def test_out_of_network_benefits_true_when_plan_has_oon_tiers():
+    # The fixture returns both IN ($30) and OON ($60) cost-share tiers -> the plan pays out-of-network
+    # ("OON w/ benefits"). network_status stays UNKNOWN (mixed tiers are never a provider verdict), but
+    # the plan-level OON-coverage fact must be surfaced so the app can label OON vs OON-w-benefits.
+    r = parse_271_benefits(DATA)
+    assert r.out_of_network_benefits is True
+    assert r.network_status == NetworkStatus.UNKNOWN
+
+
+def test_out_of_network_benefits_false_for_in_network_only_plan():
+    data = {"benefitsInformation": [
+        {"code": "B", "inPlanNetworkIndicatorCode": "Y", "benefitAmount": "20", "serviceTypeCodes": ["98"]},
+    ]}
+    r = parse_271_benefits(data)
+    assert r.out_of_network_benefits is False
+    assert r.network_status == NetworkStatus.IN_NETWORK
+
+
+def test_out_of_network_benefits_none_when_no_cost_share_tiers():
+    data = {"benefitsInformation": [{"code": "1", "serviceTypeCodes": ["30"]}]}  # active coverage, no tiers
+    r = parse_271_benefits(data)
+    assert r.out_of_network_benefits is None
+
+
+def test_out_of_network_benefits_included_in_dict():
+    assert parse_271_benefits(DATA).to_dict()["out_of_network_benefits"] is True
+
+
+def test_out_of_network_benefits_false_when_oon_is_structural_only():
+    # HMOPOS / D-SNP shape (the live Dual Complete case): OON lines exist, but only as
+    # deductible / OOP-max on general coverage — NO OON copay/coinsurance for a physician service.
+    # The plan does not actually pay out-of-network, so this is "OON", not "OON w/ benefits".
+    data = {"benefitsInformation": [
+        {"code": "B", "inPlanNetworkIndicatorCode": "Y", "benefitAmount": "20", "serviceTypeCodes": ["98"]},
+        {"code": "C", "inPlanNetworkIndicatorCode": "N", "benefitAmount": "0", "serviceTypeCodes": ["30"]},
+        {"code": "G", "inPlanNetworkIndicatorCode": "N", "benefitAmount": "0", "serviceTypeCodes": ["30"]},
+    ]}
+    assert parse_271_benefits(data).out_of_network_benefits is False
+
+
+def test_out_of_network_benefits_true_for_oon_coinsurance_on_physician():
+    data = {"benefitsInformation": [
+        {"code": "A", "inPlanNetworkIndicatorCode": "N", "benefitPercent": "0.4", "serviceTypeCodes": ["96"]},
+    ]}
+    assert parse_271_benefits(data).out_of_network_benefits is True
+
+
 def test_met_paired_and_cob_redacted():
     r = parse_271_benefits(DATA)
     ded = next(b for b in r.benefits if b.category == BenefitCategory.DEDUCTIBLE and b.time_period == "calendar year")

@@ -10,8 +10,10 @@ export interface PayerOption {
   source: 'roster' | 'stedi';
 }
 
-export async function searchPayers(q: string): Promise<PayerOption[]> {
-  const res = await apiFetch(`/payers/search?q=${encodeURIComponent(q)}`);
+export async function searchPayers(q: string, state?: string): Promise<PayerOption[]> {
+  const params = new URLSearchParams({ q });
+  if (state) params.set('state', state);
+  const res = await apiFetch(`/payers/search?${params.toString()}`);
   if (!res.ok) return [];
   return (await res.json()) as PayerOption[];
 }

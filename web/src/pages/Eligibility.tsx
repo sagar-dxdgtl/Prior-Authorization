@@ -46,7 +46,7 @@ export default function Eligibility() {
     setPayerSearching(true);
     const seq = ++searchSeq.current;
     searchTimer.current = setTimeout(() => {
-      searchPayers(q)
+      searchPayers(q, form.getFieldValue('state'))
         .then((opts) => {
           if (seq === searchSeq.current) setPayerOptions(opts);
         })
