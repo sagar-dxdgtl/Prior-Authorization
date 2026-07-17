@@ -80,6 +80,9 @@ class EligibilityResult:
     # None if the 271 carried no cost-share tiers to tell. Distinct from network_status, which is the
     # provider-specific verdict the 271 can't give.
     out_of_network_benefits: bool | None = None
+    # Final client-facing INN/OON determination {code,label,reason}: provider network_status combined
+    # with out_of_network_benefits (IN / OON / OON-with-benefits / REVIEW / UNKNOWN). Set by check_eligibility.
+    determination: dict | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -100,4 +103,5 @@ class EligibilityResult:
             "selected_plan": self.selected_plan,
             "stedi_network_status": self.stedi_network_status.value if self.stedi_network_status else None,
             "out_of_network_benefits": self.out_of_network_benefits,
+            "determination": self.determination,
         }

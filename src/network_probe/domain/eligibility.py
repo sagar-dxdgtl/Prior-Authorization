@@ -76,6 +76,11 @@ def check_eligibility(
                 }
             ]
             result.source_audit = {**(result.source_audit or {}), "override": f"{ov.verified_by} {ov.verified_at}"}
+    # Final client-facing label: the reconciled provider network status (credentialing → TiC →
+    # directory → override) combined with the 271's out-of-network benefit tier.
+    from network_probe.domain.determination import final_determination
+
+    result.determination = final_determination(result.network_status, result.out_of_network_benefits).to_dict()
     return result
 
 
