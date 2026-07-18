@@ -34,6 +34,11 @@ def _stedi_source(result) -> dict:
     status = "ACTIVE" if active is True else ("INACTIVE" if active is False else "UNKNOWN")
     oonb = result.out_of_network_benefits
     oon_str = "yes" if oonb is True else ("no" if oonb is False else "undetermined")
+    # When coverage is unknown, say WHY (payer couldn't find the member, or the payer isn't mapped) —
+    # so a reviewer sees "verify member ID" / "map the payer" instead of a bare "unknown".
+    audit = result.source_audit or {}
+    reason = audit.get("error_note") or (audit.get("note") if status == "UNKNOWN" else None)
+    why = f" Reason: {reason}." if (status == "UNKNOWN" and reason) else ""
     return {
         "source": "Stedi 271 (eligibility)",
         "answers": "coverage + plan tier",
@@ -42,6 +47,7 @@ def _stedi_source(result) -> dict:
         "detail": (
             f"Coverage {status.lower()}; plan '{result.plan_name or '—'}'. Plan-level out-of-network "
             f"benefits: {oon_str}. A 271 gives plan-tier only — provider-specific network is UNKNOWN here."
+            + why
         ),
     }
 
@@ -175,7 +181,8 @@ def _pbp_source(q, result, benefit_type, run_pbp: bool, store=None) -> dict:
     """The OON benefit TIER from the public CMS PBP files (Medicare-only). Answers a different
     question than the network sources: given the provider is OON, does the plan pay OON benefits, and
     what is the MOOP. Never a provider-network signal (PBP has no rosters)."""
-    plan = q.plan_hint or result.plan_name
+    # Prefer the Stedi 271 plan name (carries the H-number / product type) over a coarse plan_hint.
+    plan = result.selected_plan or result.plan_name or q.plan_hint
     base = {"source": "Plan benefits (CMS PBP)", "answers": "OON benefit tier"}
     if line_of_business(plan, benefit_type) not in ("medicare", "dual"):
         return {**base, "status": "N/A", "tone": "neutral",

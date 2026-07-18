@@ -67,8 +67,28 @@ def _pair_met(lines: list[BenefitLine]) -> list[BenefitLine]:
     return [l for l in lines if id(l) not in drop_ids]
 
 
+# AAA reject code → static, PHI-safe meaning (never surface the payer's raw description verbatim).
+_AAA_MEANINGS = {
+    "42": "payer unable to respond right now — retry",
+    "71": "date of birth mismatch",
+    "72": "invalid or missing member ID",
+    "73": "subscriber name mismatch",
+    "75": "subscriber not found — verify member ID",
+    "79": "invalid participant identification",
+}
+
+
 def parse_271_benefits(data: dict) -> EligibilityResult:
     if data.get("errors"):
+        errs = data["errors"]
+        codes = [e.get("code") for e in errs if e.get("code")]
+        # PHI-safe reason for the UI: map the AAA CODE to STATIC text — never echo the payer's raw
+        # description, which can contain the member ID. AAA-72/73/75 mean the payer couldn't match
+        # the subscriber (fix the member ID / DOB / name); 42 is a transient payer outage.
+        error_note = (
+            "; ".join(f"{_AAA_MEANINGS.get(c, 'payer could not respond')} (AAA {c})" for c in codes)
+            if codes else "payer could not respond"
+        )
         return EligibilityResult(
             coverage_active=None,
             plan_name=None,
@@ -84,7 +104,8 @@ def parse_271_benefits(data: dict) -> EligibilityResult:
             corroboration=[],
             source_audit={
                 "source": "stedi-271",
-                "error_codes": [e.get("code") for e in data["errors"]],
+                "error_codes": codes,
+                "error_note": error_note,
                 "note": "payer could not respond",
             },
         )

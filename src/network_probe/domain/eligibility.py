@@ -8,22 +8,24 @@ from network_probe.stedi.client import EligibilitySource, StediEligibilityClient
 
 
 def reconcile(stedi_status: NetworkStatus, verdict) -> tuple[NetworkStatus, list]:
-    """Merge the 271-derived network status with the directory verdict (the correctness core).
+    """Merge the 271-derived status with the provider-network verdict (the correctness core).
 
-    Rules (unchanged): directory IN vs 271 OUT -> REVIEW; directory OUT vs 271 IN -> REVIEW;
-    271 UNKNOWN + decisive directory -> take the directory; otherwise keep the 271 status.
+    Re-ranked: the provider-network verdict (credentialing / TiC / directory / enrollment) is the
+    AUTHORITY on provider network. A 271 gives coverage + the plan's OON tier — NOT reliable
+    provider-specific network — so:
+      * a decisive verdict (IN / OON / REVIEW) wins outright. A 271-vs-verdict disagreement is NOT a
+        conflict: genuine provider-source conflicts (e.g. credentialing vs TiC) already arrive as
+        verdict.status == REVIEW and are preserved here.
+      * only when the verdict is silent (None / UNKNOWN) does the weak 271 status stand as a fallback.
+    This stops the 271's unreliable network indicator from demoting a real credentialing/TiC finding
+    to REVIEW (the Perry/Munar false-conflicts).
     """
     if verdict is None:
         return stedi_status, []
     corr = verdict.corroboration or []
-    status = stedi_status
-    if verdict.status == NetworkStatus.IN_NETWORK and stedi_status == NetworkStatus.OUT_OF_NETWORK:
-        status = NetworkStatus.REVIEW
-    elif verdict.status == NetworkStatus.OUT_OF_NETWORK and stedi_status == NetworkStatus.IN_NETWORK:
-        status = NetworkStatus.REVIEW
-    elif stedi_status == NetworkStatus.UNKNOWN and verdict.status != NetworkStatus.UNKNOWN:
-        status = verdict.status
-    return status, corr
+    if verdict.status != NetworkStatus.UNKNOWN:
+        return verdict.status, corr
+    return stedi_status, corr
 
 
 def check_eligibility(
@@ -99,7 +101,11 @@ def check_eligibility(
         from network_probe.domain.plan_benefits import default_plan_benefit_store, resolve_plan_type
 
         pbp_store = default_plan_benefit_store() if live_enabled() else None
-        plan_cap = resolve_plan_type(q.plan_hint or result.selected_plan, benefit_type, store=pbp_store).capability
+        # Prefer the Stedi 271's own plan name — it carries the H-number / product type (e.g.
+        # "...DUAL COMPLETE HMOPOS FULL H0321", "...(PPO)") that pins the exact CMS PBP plan; the
+        # caller's plan_hint is often a coarse marketing string. Fall back to the hint if the 271 was thin.
+        plan_for_pbp = result.selected_plan or result.plan_name or q.plan_hint
+        plan_cap = resolve_plan_type(plan_for_pbp, benefit_type, store=pbp_store).capability
     except Exception:
         plan_cap = None
     result.determination = final_determination(

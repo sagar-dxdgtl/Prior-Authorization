@@ -119,3 +119,32 @@ def test_pbp_source_not_run_when_disabled():
     q = ProviderQuery(payer="p", plan_hint="AARP Medicare Advantage (PPO)", npi="1", tin="2")
     pbp = _by(_ev(q, "Medicare Advantage", run_pbp=False), "plan benefit")
     assert pbp["status"] == "NOT_RUN"
+
+
+def test_pbp_prefers_stedi_271_plan_over_generic_hint():
+    # the 271's own plan name carries the product type; it beats a coarse plan_hint that has none
+    q = ProviderQuery(payer="p", plan_hint="UHC AARP Medicare Advantage", npi="1", tin="2")
+    res = _result(plan_name="x", selected_plan="AARP MA FL-0026 (PPO)")
+    ev = assemble_evidence(q, res, benefit_type="Medicare Advantage", credentialing=CredentialingMatrix(records=[]),
+                           crosswalk=TinCrosswalk(records=[]), run_directory=False, run_enrollment=False)
+    assert _by(ev, "plan benefit")["status"] == "HAS_OON_BENEFITS"  # resolved PPO from the 271 plan
+
+
+# --- Stedi source surfaces WHY coverage is unknown (member-not-found / payer-not-mapped) ---
+
+def test_stedi_source_surfaces_member_not_found():
+    res = _result(coverage_active=None, plan_name=None,
+                  source_audit={"source": "stedi-271", "error_note": "Subscriber/Insured Not Found (AAA 75)"})
+    q = ProviderQuery(payer="p", plan_hint="Humana Medicare CO", npi="1", tin="2")
+    ev = assemble_evidence(q, res, benefit_type="Medicare Advantage", credentialing=CredentialingMatrix(records=[]),
+                           crosswalk=TinCrosswalk(records=[]), run_directory=False, run_enrollment=False)
+    assert "not found" in _by(ev, "stedi")["detail"].lower()
+
+
+def test_stedi_source_surfaces_payer_not_mapped():
+    res = _result(coverage_active=None, plan_name=None,
+                  source_audit={"source": "stedi", "note": "no Stedi payer id for 'bcbs-az-blueshield-ca'"})
+    q = ProviderQuery(payer="bcbs-az-blueshield-ca", plan_hint="BCBS", npi="1", tin="2")
+    ev = assemble_evidence(q, res, benefit_type="Commercial", credentialing=CredentialingMatrix(records=[]),
+                           crosswalk=TinCrosswalk(records=[]), run_directory=False, run_enrollment=False)
+    assert "payer id" in _by(ev, "stedi")["detail"].lower()

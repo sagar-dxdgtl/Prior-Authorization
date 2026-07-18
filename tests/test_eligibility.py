@@ -53,24 +53,26 @@ def _verdict(status):
     )
 
 
-def test_directory_in_stedi_oon_is_review(monkeypatch):
+def test_provider_verdict_in_wins_over_stedi_oon(monkeypatch):
+    # the provider-network verdict is the authority; the 271's status never forces REVIEW
     monkeypatch.setattr(elig, "check_network", lambda q, **k: _verdict(NetworkStatus.IN_NETWORK))
     r = elig.check_eligibility(
         ProviderQuery(payer="oscar", plan_hint=""),
         catalogue=FakeCat("OSCAR"),
         stedi=FakeStedi(_res(NetworkStatus.OUT_OF_NETWORK)),
     )
-    assert r.network_status == NetworkStatus.REVIEW and r.network_verdict is not None
+    assert r.network_status == NetworkStatus.IN_NETWORK and r.network_verdict is not None
 
 
-def test_directory_oon_stedi_in_is_review(monkeypatch):
+def test_provider_verdict_oon_wins_over_stedi_in(monkeypatch):
+    # Perry/Munar fix: credentialing/TiC "OON" wins over the 271's unreliable "IN" indicator
     monkeypatch.setattr(elig, "check_network", lambda q, **k: _verdict(NetworkStatus.OUT_OF_NETWORK))
     r = elig.check_eligibility(
         ProviderQuery(payer="oscar", plan_hint=""),
         catalogue=FakeCat("OSCAR"),
         stedi=FakeStedi(_res(NetworkStatus.IN_NETWORK)),
     )
-    assert r.network_status == NetworkStatus.REVIEW
+    assert r.network_status == NetworkStatus.OUT_OF_NETWORK
 
 
 def test_stedi_unknown_adopts_directory(monkeypatch):
@@ -180,8 +182,8 @@ def test_recheck_network_reconciles_new_plan(monkeypatch):
         NetworkStatus.IN_NETWORK,
         catalogue=FakeCat("OSCAR"),
     )
-    # directory OUT vs 271 IN -> REVIEW; no 270 was run
-    assert out["network_status"] == "REVIEW"
+    # provider-network verdict OON wins over the 271's IN; no 270 was run
+    assert out["network_status"] == "OUT_OF_NETWORK"
     assert out["network_verdict"]["status"] == "OUT_OF_NETWORK"
 
 
