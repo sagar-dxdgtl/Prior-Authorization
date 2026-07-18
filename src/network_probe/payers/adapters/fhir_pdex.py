@@ -80,6 +80,17 @@ def _match_score(hint: str, network: str) -> float:
     return net_recall + hint_recall
 
 
+def _is_network_org(org: dict) -> bool:
+    """True if this Organization is a PDEX *network* (type coding code == 'ntwk'). Distinguishes a
+    real plan network from a practice-group org — flex.optum (UHC) points network-reference at BOTH,
+    and only the ntwk ones are actual networks."""
+    for t in org.get("type") or []:
+        for c in t.get("coding") or []:
+            if (c.get("code") or "").lower() == "ntwk":
+                return True
+    return False
+
+
 class FhirPdexAdapter(PayerAdapter):
     def __init__(
         self,
@@ -162,20 +173,31 @@ class FhirPdexAdapter(PayerAdapter):
 
     def _fetch_practitioner_roles(
         self, practitioner_ref: str
-    ) -> tuple[list[str], list[str], set[str], int]:
+    ) -> tuple[list[str], list[str], dict, set[str], int]:
         """Fetch one query attempt's worth of PractitionerRole pages for `practitioner_ref`
         (either a bare id or a full "Practitioner/<id>" reference -- the caller decides which).
-        Returns (inline_names, org_refs, specialties, role_count) -- no Organization-reference
-        resolution yet; that happens once in _networks_for(), after the winning attempt is
-        chosen, so a retry never resolves the same Organization twice."""
-        url = f"{self.base_url}/PractitionerRole?practitioner={quote(practitioner_ref)}&_count=50"
+
+        Uses ``_include=PractitionerRole:network`` so the referenced network Organizations come back
+        IN THE SAME bundle (with their ``type`` — a directly-read Organization on flex.optum 404s or
+        returns an empty type, so per-ref reads can't tell a network from a practice group). Returns
+        (inline_names, org_refs, included_orgs, specialties, role_count); _networks_for resolves refs
+        against ``included_orgs`` (network-typed only) with a per-ref read as a last-resort fallback."""
+        url = (
+            f"{self.base_url}/PractitionerRole?practitioner={quote(practitioner_ref)}"
+            f"&_include=PractitionerRole:network&_count=50"
+        )
         names: list[str] = []
         refs: list[str] = []
+        included: dict[str, dict] = {}  # "Organization/<id>" -> resource
         specialties: set[str] = set()
         roles = 0
         pages = 0
         while url and pages < MAX_ROLE_PAGES:
             bundle = self._get(url)
+            for e in bundle.get("entry") or []:
+                r = e.get("resource") or {}
+                if r.get("resourceType") == "Organization" and r.get("id"):
+                    included[f"Organization/{r['id']}"] = r
             for e in bundle.get("entry") or []:
                 r = e.get("resource") or {}
                 if r.get("resourceType") != "PractitionerRole":
@@ -194,45 +216,57 @@ class FhirPdexAdapter(PayerAdapter):
                             specialties.add(cd["display"])
             url = self._next_link(bundle)
             pages += 1
-        return names, refs, specialties, roles
+        return names, refs, included, specialties, roles
 
     def _networks_for(self, practitioner_id: str) -> tuple[list[str], list[str], int]:
         """Return (network_names, specialties, role_count) across all PractitionerRole pages.
 
-        Network name comes from the PDEX network-reference extension's display when present
-        (Humana); when only an Organization reference is given (Cigna), resolve it to a name.
+        Network name comes from the network-reference extension's inline display (Humana), else from
+        the ``_include``'d Organization when it is a *network* (type=ntwk) — this filters out
+        practice-group orgs that flex.optum (UHC) also points network-reference at. Only refs NOT in
+        the included set fall back to a direct Organization read (Cigna-style servers without
+        _include support), capped at MAX_ORG_RESOLVE.
 
-        Tries a bare practitioner id first (the default -- UHC/HCSC/Humana/Cigna/Kaiser/Molina
-        are all verified working with this form). Some servers (confirmed: Centene's HAPI FHIR)
-        reject a bare id for the `practitioner=` search param and only return roles for the full
-        `Practitioner/<id>` reference form -- HCSC's Sapphire server is the reverse (bare id
-        works, full reference returns nothing), so neither form is safe to hardcode. Retrying
-        once with the full reference form only when the bare id found zero roles keeps every
-        already-working server on its current path. See docs/superpowers/specs/
-        2026-07-15-centene-practitioner-ref-fix-design.md.
+        Tries a bare practitioner id first (UHC/HCSC/Humana/Cigna/Kaiser/Molina verified). Some
+        servers (Centene HAPI) only accept the full ``Practitioner/<id>`` form; HCSC's Sapphire is
+        the reverse -- so retry once with the full reference only when the bare id found zero roles.
+        See docs/superpowers/specs/2026-07-15-centene-practitioner-ref-fix-design.md.
         """
-        names, refs, specialties, roles = self._fetch_practitioner_roles(practitioner_id)
+        names, refs, included, specialties, roles = self._fetch_practitioner_roles(practitioner_id)
         if roles == 0:
-            names, refs, specialties, roles = self._fetch_practitioner_roles(f"Practitioner/{practitioner_id}")
-        # resolve Organization references that lacked an inline display name
-        uniq_refs, seen_ref = [], set()
+            names, refs, included, specialties, roles = self._fetch_practitioner_roles(
+                f"Practitioner/{practitioner_id}"
+            )
+        # unique refs normalized to "Organization/<id>"
+        uniq: list[tuple[str, str]] = []
+        seen_ref: set[str] = set()
         for ref in refs:
-            if ref not in seen_ref:
-                seen_ref.add(ref)
-                uniq_refs.append(ref)
-        for ref in uniq_refs[:MAX_ORG_RESOLVE]:
+            key = f"Organization/{ref.rsplit('/Organization/', 1)[-1].rsplit('/', 1)[-1]}"
+            if key not in seen_ref:
+                seen_ref.add(key)
+                uniq.append((ref, key))
+        unresolved: list[str] = []
+        for ref, key in uniq:
+            org = included.get(key)
+            if org is not None:
+                # _include'd: keep only real network orgs (excludes practice groups)
+                if _is_network_org(org) and org.get("name"):
+                    names.append(org["name"])
+            else:
+                unresolved.append(ref)  # server didn't _include it -> resolve directly (fallback)
+        for ref in unresolved[:MAX_ORG_RESOLVE]:
             nm = self._org_name(ref)
             if nm:
                 names.append(nm)
-        if len(uniq_refs) > MAX_ORG_RESOLVE:
-            names.append(f"(+{len(uniq_refs) - MAX_ORG_RESOLVE} more network organizations)")
+        if len(unresolved) > MAX_ORG_RESOLVE:
+            names.append(f"(+{len(unresolved) - MAX_ORG_RESOLVE} more network organizations)")
         # de-dup network names, preserve order
-        seen, uniq = set(), []
+        seen, out = set(), []
         for n in names:
             if n not in seen:
                 seen.add(n)
-                uniq.append(n)
-        return uniq, sorted(specialties), roles
+                out.append(n)
+        return out, sorted(specialties), roles
 
     @staticmethod
     def _practitioner_name(resource: dict) -> str:
@@ -257,15 +291,20 @@ class FhirPdexAdapter(PayerAdapter):
 
         found = self._find_practitioner(q.npi, q.provider_first_name, q.provider_last_name)
         if not found:
+            # Absence is NOT proof of out-of-network. Public payer directories are ~45–52% incomplete
+            # (CMS audits) and lag the payer's contract system by weeks — a genuinely contracted (INN)
+            # provider is routinely missing (new contract, new TIN, wrong DirectoryType segment, sync
+            # lag). So a directory miss is UNKNOWN, never OON; only the contract/claims data can deny.
             return NetworkVerdict(
-                status=NetworkStatus.OUT_OF_NETWORK,
+                status=NetworkStatus.UNKNOWN,
                 matched_provider=None,
                 plan_or_network_checked=f"{self.payer_name} FHIR directory (plan hint: {q.plan_hint!r})",
                 source_url=prac_url,
-                confidence="medium",
+                confidence="low",
                 notes=(
-                    f"NPI {q.npi} is not present in the {self.payer_name} FHIR Provider Directory, "
-                    f"so the provider is not a contracted/listed provider for this payer."
+                    f"NPI {q.npi} was not found in the {self.payer_name} public FHIR directory. Directory "
+                    f"absence is not proof of out-of-network (directories are incomplete and lag contracts) "
+                    f"— provider network is undetermined from this source."
                 ),
             )
         pid, prac = found
@@ -276,13 +315,16 @@ class FhirPdexAdapter(PayerAdapter):
         base_provider = {"npi": q.npi, "name": name, "specialty": ", ".join(specialties) or None, "networks": networks}
 
         if not networks:
+            # Provider is listed but we resolved no networks — could be a data/query gap, not proof of
+            # OON. Report UNKNOWN, not a false OON.
             return NetworkVerdict(
-                status=NetworkStatus.OUT_OF_NETWORK,
+                status=NetworkStatus.UNKNOWN,
                 matched_provider=base_provider,
                 plan_or_network_checked=f"{self.payer_name} (plan hint: {q.plan_hint!r})",
                 source_url=srcs,
-                confidence="medium",
-                notes=f"{name} (NPI {q.npi}) is in the directory but has no active network roles.",
+                confidence="low",
+                notes=f"{name} (NPI {q.npi}) is in the directory but no active network roles were resolved "
+                      f"— provider network undetermined (not proof of out-of-network).",
             )
 
         # rank the provider's networks against the plan hint AND any plan->network aliases

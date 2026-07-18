@@ -85,9 +85,11 @@ def test_kyle_no_hint_lists_networks_in_network():
     assert len(v.matched_provider["networks"]) >= 5
 
 
-def test_unknown_npi_is_out_of_network():
+def test_unknown_npi_is_unknown_not_oon():
+    # directory absence is NOT proof of OON (directories are incomplete/lagging) -> UNKNOWN, never OON
     v = _offline().check_network(_q("1000000004", "Medicare PPO"))
-    assert v.status == NetworkStatus.OUT_OF_NETWORK
+    assert v.status == NetworkStatus.UNKNOWN
+    assert "not proof of out-of-network" in v.notes
 
 
 def test_missing_npi_is_unknown():
@@ -168,11 +170,12 @@ def test_name_fallback_with_org_resolution_in_network():
     assert v.matched_provider["matched_network"] == "Open Access Plus"
 
 
-def test_name_fallback_npi_mismatch_is_oon():
+def test_name_fallback_npi_mismatch_is_unknown():
+    # name search found someone else (NPI didn't match) -> target NPI not confirmed present -> UNKNOWN
     v = _refserver().check_network(
         ProviderQuery(payer="cigna-fhir", plan_hint="X", npi="9999999999", provider_last_name="Smith")
     )
-    assert v.status == NetworkStatus.OUT_OF_NETWORK
+    assert v.status == NetworkStatus.UNKNOWN
 
 
 # --- plan-name -> network-name alias map ---
@@ -341,14 +344,15 @@ def test_centene_shaped_server_falls_back_to_full_reference():
     assert "IL SNP" in v.matched_provider["networks"]
 
 
-def test_centene_shaped_server_genuinely_zero_roles_reports_no_active_roles():
-    """Both the bare-id and Practitioner/<id> attempts legitimately return zero -> still an
-    honest 'no active network roles' result, not an error and not a false IN_NETWORK."""
+def test_centene_shaped_server_genuinely_zero_roles_is_unknown():
+    """Both the bare-id and Practitioner/<id> attempts legitimately return zero roles -> UNKNOWN
+    (provider is listed but no networks resolved), not an error, not a false IN_NETWORK, and not a
+    false OON (no active roles is a data/query gap, not proof of out-of-network)."""
     v = _centene_adapter().check_network(
         ProviderQuery(payer="meridian", plan_hint="", npi="1000000004", provider_last_name="Noroles")
     )
-    assert v.status == NetworkStatus.OUT_OF_NETWORK
-    assert "no active network roles" in v.notes
+    assert v.status == NetworkStatus.UNKNOWN
+    assert "no active network roles were resolved" in v.notes
 
 
 def test_bare_id_success_makes_no_fallback_request():

@@ -171,10 +171,11 @@ def test_in_network_through_authed_adapter():
     assert counter["n"] == 1  # one token served, then reused across Practitioner + PractitionerRole
 
 
-def test_unknown_npi_is_out_of_network_through_authed_adapter():
+def test_unknown_npi_is_unknown_through_authed_adapter():
+    # directory absence -> UNKNOWN (not proof of OON), same as the anon adapter, auth path unchanged
     a = _adapter(token_counter={"n": 0})
     v = a.check_network(ProviderQuery(payer="anthem", plan_hint="Blue Priority", npi="1999999999"))
-    assert v.status == NetworkStatus.OUT_OF_NETWORK
+    assert v.status == NetworkStatus.UNKNOWN
 
 
 def test_401_triggers_one_refresh_and_succeeds():
