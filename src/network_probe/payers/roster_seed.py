@@ -26,6 +26,13 @@ ROSTER = [
     ("BCBS / Empire (Anthem / Elevance)", "ACA", "AZ", "53589", "needs_enrollment"),
     ("BCBS / Empire (Anthem / Elevance)", "Commercial", "AZ", "53589", "needs_enrollment"),
     ("BCBS / Empire (Anthem / Elevance)", "Medicare Advantage", "AZ", "53589", "needs_enrollment"),
+    # Blue Shield of California — the BlueCard HOME plan for this client's member SRGB10057830 (alpha
+    # prefix SRG routes to Blue Shield of CA per 3 RCM prefix directories; SRQ would be Anthem). A CA
+    # member treated in AZ. Stedi 100935 (= stediId JDGWJ), eligibilityCheck=SUPPORTED; validated live
+    # 2026-07-18 (active, group "Sheet Metal Workers Local 104"). Distinct company from AZ Blue (53589)
+    # and Anthem. Commercial line -> TiC-eligible. NOTE (network): BlueCard in-network is via the LOCAL
+    # AZ Blue provider network, so the TiC/network check for this member is against AZ Blue, not BSC-CA.
+    ("Blue Shield of California", "Commercial", "AZ", "100935", "supported"),
     ("Cigna Healthcare", "ACA", "AZ", "62308", "needs_enrollment"),
     ("Cigna Healthcare", "Commercial", "AZ", "62308", "needs_enrollment"),
     ("DES/Division of Developmental Disabilities", "Managed Medicaid", "AZ", None, "needs_payer_id"),
@@ -489,6 +496,12 @@ SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
         None,
         "https://health1.aetna.com/app/public/",
         "https://www.aetna.com/individuals-families/find-a-doctor.html",
+        "needs-authorized-api",
+    ),
+    "Blue Shield of California": (
+        None,  # no verified public FHIR PDEX endpoint wired
+        None,  # TiC MRF not yet ingested; BlueCard in-network is via the LOCAL AZ Blue plan network
+        None,
         "needs-authorized-api",
     ),
     "Aetna Better Health": (
