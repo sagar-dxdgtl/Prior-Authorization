@@ -30,6 +30,38 @@ from network_probe.domain.tic_network import tic_network_status
 _EXEMPT = {"medicare", "medicaid", "dual", "federal"}
 
 
+def enrollment_negative(q, lob, pecos_fn=None, medicaid_fn=None):
+    """Decisive negative for Medicare/Medicaid lines: if the provider is CONFIRMED not enrolled in the
+    program (a *successful* PECOS/state-Medicaid lookup that found no match), return an OON verdict —
+    you cannot be in-network for a program you can't bill. Returns None on enrolled/undetermined/
+    commercial, or on a failed lookup (never a false OON). `enrolled is True` only clears the gate."""
+    if not q.npi:
+        return None
+    from network_probe.domain.enrollment import live_enabled, medicaid_enrollment, pecos_enrollment
+
+    if pecos_fn is None and medicaid_fn is None and not live_enabled():
+        return None  # test env, no injected lookup -> skip live enrollment (preserves prior behavior)
+    pecos_fn = pecos_fn or pecos_enrollment
+    medicaid_fn = medicaid_fn or medicaid_enrollment
+    if lob in ("medicare", "dual"):
+        res = pecos_fn(q.npi)  # dual is Medicare + Medicaid; PECOS covers the Medicare prerequisite
+    elif lob == "medicaid":
+        res = medicaid_fn(q.npi, q.state)
+    else:
+        return None
+    if res is None or res.enrolled is not False:
+        return None
+    return NetworkVerdict(
+        status=NetworkStatus.OUT_OF_NETWORK,
+        matched_provider={"npi": q.npi, "enrollment_program": res.program, "enrolled": False},
+        plan_or_network_checked=f"{q.payer} — {res.program} enrollment",
+        source_url="enrollment",
+        confidence="high",
+        notes=f"{res.detail} A provider not enrolled in the program cannot be in-network for it.",
+        corroboration=[{"source": "Enrollment", "result": "contradicts", "detail": res.detail}],
+    )
+
+
 def group_contracted(payer, tin, credentialing=None, crosswalk=None, store=None) -> bool | None:
     """Is the clinic's billing TIN contracted with this payer under ANY NPI? True on positive evidence
     (an in-network credentialing row at that TIN, a TiC MRF hit for that TIN, or a persisted
@@ -141,16 +173,22 @@ def resolve_provider_network(
     lob = line_of_business(q.plan_hint, benefit_type)
     cred = credentialing.lookup(q.payer, q.npi, q.tin, plan=q.plan_hint)
 
-    # TiC-exempt lines (Medicare/Medicaid/Dual/federal): credentialing only, TiC never consulted.
+    # TiC-exempt lines (Medicare/Medicaid/Dual/federal): credentialing first, TiC never consulted.
     if lob in _EXEMPT:
-        if cred is None:
-            return None
-        na = _sig(
-            "n/a",
-            "Transparency-in-Coverage MRFs do not cover this line — Medicare Advantage, Medicaid and "
-            "Dual are federally exempt; provider network taken from clinic credentialing.",
-        )
-        return _cred_verdict(q, cred, na)
+        if cred is not None:
+            na = _sig(
+                "n/a",
+                "Transparency-in-Coverage MRFs do not cover this line — Medicare Advantage, Medicaid and "
+                "Dual are federally exempt; provider network taken from clinic credentialing.",
+            )
+            return _cred_verdict(q, cred, na)
+        # No credentialing record — try the enrollment negative filter: a provider NOT enrolled in
+        # Medicare (PECOS) / the state's Medicaid cannot be in-network for this line → decisive OON.
+        # (Enrolled/undetermined → None, fall through to the directory leg — enrolled ≠ INN.)
+        ev = enrollment_negative(q, lob)
+        if ev is not None:
+            return ev
+        return None
 
     # Commercial (or unknown): TiC is the live signal.
     tic_status, known = tic_network_status(q.payer, q.npi, q.tin, crosswalk=crosswalk)

@@ -125,6 +125,34 @@ def _tic_source(q, result, benefit_type, crosswalk) -> dict:
     }
 
 
+def _enrollment_source(q, result, benefit_type, run_enrollment: bool) -> dict:
+    plan = q.plan_hint or result.plan_name
+    lob = line_of_business(plan, benefit_type)
+    base = {"source": "Program enrollment (PECOS/Medicaid)", "answers": "program eligibility"}
+    if lob not in ("medicare", "medicaid", "dual"):
+        return {**base, "status": "N/A", "tone": "neutral",
+                "detail": "Commercial/federal line — Medicare/Medicaid enrollment is not the gate here."}
+    from network_probe.domain.enrollment import live_enabled
+
+    if not run_enrollment or not live_enabled():
+        return {**base, "status": "NOT_RUN", "tone": "neutral", "detail": "Enrollment lookup not run."}
+    if lob in ("medicare", "dual"):
+        from network_probe.domain.enrollment import pecos_enrollment
+
+        r = pecos_enrollment(q.npi)
+        base["source"] = "Medicare enrollment (PECOS)"
+    else:
+        from network_probe.domain.enrollment import medicaid_enrollment
+
+        r = medicaid_enrollment(q.npi, q.state)
+        base["source"] = f"Medicaid enrollment ({(q.state or '?').upper()})"
+    status = {True: "ENROLLED", False: "NOT_ENROLLED", None: "UNDETERMINED"}[r.enrolled]
+    tone = {"ENROLLED": "success", "NOT_ENROLLED": "danger", "UNDETERMINED": "neutral"}[status]
+    tail = " (necessary, not sufficient — enrolled ≠ in-network)" if r.enrolled is True else (
+        " — cannot be in-network for this program → OON" if r.enrolled is False else "")
+    return {**base, "status": status, "tone": tone, "detail": r.detail + tail}
+
+
 def _directory_source(q, catalogue, run_directory: bool) -> dict:
     if not run_directory:
         return {"source": "Payer directory", "answers": "provider network", "status": "NOT_RUN",
@@ -152,9 +180,10 @@ def _directory_source(q, catalogue, run_directory: bool) -> dict:
 
 
 def assemble_evidence(q, result, benefit_type=None, credentialing=None, crosswalk=None,
-                      catalogue=None, run_directory: bool = True) -> list[dict]:
-    """Gather the four sources' independent findings for side-by-side display. `run_directory=False`
-    skips the (live) directory call — used in tests and when a directory read isn't wanted."""
+                      catalogue=None, run_directory: bool = True, run_enrollment: bool = True) -> list[dict]:
+    """Gather each source's independent finding for side-by-side display. `run_directory` /
+    `run_enrollment` gate the two live lookups (directory FHIR call, PECOS/Medicaid call) — set False
+    in tests and wherever a live read isn't wanted."""
     if credentialing is None:
         from network_probe.domain.credentialing import default_credentialing
 
@@ -163,5 +192,6 @@ def assemble_evidence(q, result, benefit_type=None, credentialing=None, crosswal
         _stedi_source(result),
         _credentialing_source(q, credentialing),
         _tic_source(q, result, benefit_type, crosswalk),
+        _enrollment_source(q, result, benefit_type, run_enrollment),
         _directory_source(q, catalogue, run_directory),
     ]
