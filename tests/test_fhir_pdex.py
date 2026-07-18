@@ -386,13 +386,14 @@ def test_kyle_in_network_live():
 
 
 @pytest.mark.live
-def test_unknown_npi_oon_live():
+def test_unknown_npi_is_unknown_live():
+    # a bogus NPI absent from Humana's live directory -> UNKNOWN, never a false OON (absence is not proof)
     a = FhirPdexAdapter(payer_name="humana-fhir", client=CachedClient(cache_dir=None, delay_seconds=0.3))
     try:
         v = a.check_network(_q("1000000004", "Medicare PPO"))
     except httpx.HTTPError as exc:
         pytest.skip(f"live FHIR unreachable: {exc}")
-    assert v.status == NetworkStatus.OUT_OF_NETWORK, v.notes
+    assert v.status == NetworkStatus.UNKNOWN, v.notes
 
 
 @pytest.mark.live
