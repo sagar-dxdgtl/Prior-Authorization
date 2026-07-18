@@ -153,6 +153,77 @@ def _enrollment_source(q, result, benefit_type, run_enrollment: bool) -> dict:
     return {**base, "status": status, "tone": tone, "detail": r.detail + tail}
 
 
+def _money(v) -> str:
+    try:
+        return "$" + format(int(round(float(v))), ",")
+    except (TypeError, ValueError):
+        return str(v)
+
+
+def _pbp_moop_str(rec) -> str:
+    parts = []
+    if rec.inn_moop:
+        parts.append(f"in-network {_money(rec.inn_moop)}")
+    if rec.comb_moop:
+        parts.append(f"combined in+out {_money(rec.comb_moop)}")
+    if rec.oon_moop:
+        parts.append(f"out-of-network {_money(rec.oon_moop)}")
+    return "; ".join(parts)
+
+
+def _pbp_source(q, result, benefit_type, run_pbp: bool, store=None) -> dict:
+    """The OON benefit TIER from the public CMS PBP files (Medicare-only). Answers a different
+    question than the network sources: given the provider is OON, does the plan pay OON benefits, and
+    what is the MOOP. Never a provider-network signal (PBP has no rosters)."""
+    plan = q.plan_hint or result.plan_name
+    base = {"source": "Plan benefits (CMS PBP)", "answers": "OON benefit tier"}
+    if line_of_business(plan, benefit_type) not in ("medicare", "dual"):
+        return {**base, "status": "N/A", "tone": "neutral",
+                "detail": "CMS PBP is Medicare-only — not the out-of-network tier source for this line."}
+    if not run_pbp:
+        return {**base, "status": "NOT_RUN", "tone": "neutral", "detail": "Plan-benefit lookup not run."}
+
+    from network_probe.domain.enrollment import live_enabled
+    from network_probe.domain.plan_benefits import default_plan_benefit_store, resolve_plan_type
+
+    if store is None and live_enabled():
+        try:
+            store = default_plan_benefit_store()
+        except Exception:  # noqa: BLE001 — best-effort; a missing table degrades to the string token
+            store = None
+    try:
+        res = resolve_plan_type(plan, benefit_type, store=store)
+    except Exception:  # noqa: BLE001
+        return {**base, "status": "UNRESOLVED", "tone": "neutral", "detail": "Plan-benefit lookup unavailable."}
+
+    cap = res.capability
+    tier = ("pays out-of-network benefits" if cap is True else
+            "has no routine out-of-network benefits (emergency/urgent only)" if cap is False else
+            "out-of-network tier deferred to the 271 (ambiguous plan type / D-SNP)")
+    if cap is True:
+        status, tone = "HAS_OON_BENEFITS", "success"
+    elif cap is False:
+        status, tone = "NO_OON_BENEFITS", "danger"
+    elif res.source == "none":
+        status, tone = "UNRESOLVED", "neutral"
+    else:
+        status, tone = "DEFER", "neutral"
+
+    rec = res.record
+    if rec is not None:
+        moop = _pbp_moop_str(rec)
+        detail = (f"{rec.plan_type.upper()} plan '{rec.plan_name}' "
+                  f"(contract {rec.contract_number}/{rec.pbp_id}{', D-SNP' if rec.dsnp else ''}) — {tier}."
+                  + (f" MOOP: {moop}." if moop else "") + " Source: live CMS PBP.")
+    elif res.source == "plan-string":
+        detail = (f"Plan type '{res.plan_type}' read from the plan string — {tier}. "
+                  "No PBP plan matched for MOOP detail.")
+    else:
+        detail = ("No plan-type token in the plan string and no PBP match — "
+                  "out-of-network tier deferred to the 271.")
+    return {**base, "status": status, "tone": tone, "detail": detail}
+
+
 def _directory_source(q, catalogue, run_directory: bool) -> dict:
     if not run_directory:
         return {"source": "Payer directory", "answers": "provider network", "status": "NOT_RUN",
@@ -180,16 +251,18 @@ def _directory_source(q, catalogue, run_directory: bool) -> dict:
 
 
 def assemble_evidence(q, result, benefit_type=None, credentialing=None, crosswalk=None,
-                      catalogue=None, run_directory: bool = True, run_enrollment: bool = True) -> list[dict]:
+                      catalogue=None, run_directory: bool = True, run_enrollment: bool = True,
+                      run_pbp: bool = True, plan_store=None) -> list[dict]:
     """Gather each source's independent finding for side-by-side display. `run_directory` /
-    `run_enrollment` gate the two live lookups (directory FHIR call, PECOS/Medicaid call) — set False
-    in tests and wherever a live read isn't wanted."""
+    `run_enrollment` / `run_pbp` gate the live lookups (directory FHIR call, PECOS/Medicaid call,
+    CMS PBP DB read) — set False in tests and wherever a live read isn't wanted."""
     if credentialing is None:
         from network_probe.domain.credentialing import default_credentialing
 
         credentialing = default_credentialing()
     return [
         _stedi_source(result),
+        _pbp_source(q, result, benefit_type, run_pbp, store=plan_store),
         _credentialing_source(q, credentialing),
         _tic_source(q, result, benefit_type, crosswalk),
         _enrollment_source(q, result, benefit_type, run_enrollment),

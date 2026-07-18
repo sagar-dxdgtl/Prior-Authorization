@@ -114,3 +114,49 @@ def test_check_eligibility_produces_oon_with_benefits_end_to_end(monkeypatch):
     res = eligibility.check_eligibility(q, catalogue=_FakeCat(), stedi=_FakeStedi(), tenant_id=None)
     assert res.determination["code"] == "OUT_OF_NETWORK_WITH_BENEFITS"
     assert res.to_dict()["determination"]["code"] == "OUT_OF_NETWORK_WITH_BENEFITS"
+
+
+# --- plan-type OON capability (fills a SILENT 271, never overrides a definite one) ---
+
+def test_silent_271_filled_by_ppo_capability():
+    # 271 gave no OON tier (None); the plan is a PPO -> plan type fills the gap -> OON w/ Benefits
+    d = final_determination(NetworkStatus.OUT_OF_NETWORK, None, plan_oon_capability=True)
+    assert d.code == "OUT_OF_NETWORK_WITH_BENEFITS"
+
+
+def test_silent_271_filled_by_hmo_capability():
+    # 271 silent; the plan is a pure HMO (no routine OON) -> plain OON
+    d = final_determination(NetworkStatus.OUT_OF_NETWORK, None, plan_oon_capability=False)
+    assert d.code == "OUT_OF_NETWORK"
+
+
+def test_definite_271_true_not_overridden_by_hmo_capability():
+    # the live 271 definitively shows OON benefits; capability(False) must NOT override it (demo-safe)
+    d = final_determination(NetworkStatus.OUT_OF_NETWORK, True, plan_oon_capability=False)
+    assert d.code == "OUT_OF_NETWORK_WITH_BENEFITS"  # 271 wins
+
+
+def test_definite_271_false_not_overridden_by_ppo_capability():
+    d = final_determination(NetworkStatus.OUT_OF_NETWORK, False, plan_oon_capability=True)
+    assert d.code == "OUT_OF_NETWORK"  # 271 wins
+
+
+def test_capability_none_is_exactly_prior_behavior():
+    assert final_determination(NetworkStatus.OUT_OF_NETWORK, True, plan_oon_capability=None).code \
+        == "OUT_OF_NETWORK_WITH_BENEFITS"
+    assert final_determination(NetworkStatus.OUT_OF_NETWORK, None, plan_oon_capability=None).code \
+        == "OUT_OF_NETWORK"
+
+
+def test_physician_oon_precedence_unaffected_by_capability():
+    d = final_determination(NetworkStatus.OUT_OF_NETWORK, None, group_contracted=True, plan_oon_capability=True)
+    assert d.code == "PHYSICIAN_OUT_OF_NETWORK"
+
+
+def test_reason_flags_when_plan_type_filled_the_tier():
+    # when the tier came from plan type (271 silent), the reason must say so — auditability
+    d = final_determination(NetworkStatus.OUT_OF_NETWORK, None, plan_oon_capability=True)
+    assert "plan type" in d.reason.lower()
+    # when the 271 spoke, no such inference note
+    d2 = final_determination(NetworkStatus.OUT_OF_NETWORK, True, plan_oon_capability=True)
+    assert "plan type" not in d2.reason.lower()

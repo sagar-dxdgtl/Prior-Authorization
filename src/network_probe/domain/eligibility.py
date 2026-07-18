@@ -89,19 +89,30 @@ def check_eligibility(
             gc = group_contracted(q.payer, q.tin)
         except Exception:
             gc = None
+    benefit_type = getattr(payer, "benefit_type", None) if payer else None
+    # Plan-type out-of-network TIER (Medicare/Dual only): resolve the member's plan to its structural
+    # OON capability — the live CMS PBP plan when available, else the token written in the plan string.
+    # This only FILLS a silent 271's OON tier; a definite 271 always wins (see final_determination).
+    plan_cap = None
+    try:
+        from network_probe.domain.enrollment import live_enabled
+        from network_probe.domain.plan_benefits import default_plan_benefit_store, resolve_plan_type
+
+        pbp_store = default_plan_benefit_store() if live_enabled() else None
+        plan_cap = resolve_plan_type(q.plan_hint or result.selected_plan, benefit_type, store=pbp_store).capability
+    except Exception:
+        plan_cap = None
     result.determination = final_determination(
-        result.network_status, result.out_of_network_benefits, group_contracted=gc
+        result.network_status, result.out_of_network_benefits,
+        group_contracted=gc, plan_oon_capability=plan_cap,
     ).to_dict()
-    # Side-by-side evidence panel: what each source (Stedi 271, credentialing, TiC, payer directory)
-    # independently says. Best-effort — a live directory read never throws; benefit_type gates TiC.
+    # Side-by-side evidence panel: what each source (Stedi 271, CMS PBP, credentialing, TiC, payer
+    # directory) independently says. Best-effort — a live read never throws; benefit_type gates TiC/PBP.
     from network_probe.domain.evidence import assemble_evidence
 
     try:
         result.evidence_sources = assemble_evidence(
-            q, result,
-            benefit_type=getattr(payer, "benefit_type", None) if payer else None,
-            catalogue=cat,
-            run_directory=True,
+            q, result, benefit_type=benefit_type, catalogue=cat, run_directory=True,
         )
     except Exception:
         result.evidence_sources = []

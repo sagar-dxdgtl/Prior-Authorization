@@ -140,6 +140,43 @@ class ProviderNetworkFact(Base):
     retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class PlanBenefit(Base):
+    """Medicare-Advantage plan benefit design from the public CMS PBP Benefits files (per contract
+    year). Keyed by contract (H/R/E number) + PBP id + segment — the identifiers a HETS/271 returns.
+
+    Benefit DESIGN only — plan type, SNP flag, and the in-network / combined / out-of-network MOOP.
+    Contains **no provider data** (PBP has no rosters); it answers the *tier* question (does an OON
+    provider get any benefit), never the network question. Public data → tenant_id is always NULL
+    (global, readable by every tenant, like `payers`).
+    """
+
+    __tablename__ = "plan_benefits"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "contract_number", "pbp_id", "segment_id", "year", name="uq_planben_identity"
+        ),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tenants.id"), nullable=True, index=True)
+    contract_number: Mapped[str] = mapped_column(String(10), index=True)
+    pbp_id: Mapped[str] = mapped_column(String(3))
+    segment_id: Mapped[str] = mapped_column(String(3), default="0")
+    year: Mapped[int] = mapped_column(Integer, index=True)
+    plan_type: Mapped[str] = mapped_column(String(12))  # hmo|hmopos|ppo|pffs|unknown
+    plan_type_code: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    plan_name: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
+    org_marketing_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    snp_type_code: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    dsnp: Mapped[bool] = mapped_column(Boolean, default=False)
+    network_flag: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    inn_moop: Mapped[str | None] = mapped_column(String(16), nullable=True)  # in-network MOOP
+    comb_moop_yn: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    comb_moop: Mapped[str | None] = mapped_column(String(16), nullable=True)  # combined in+out MOOP
+    oon_moop_yn: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    oon_moop: Mapped[str | None] = mapped_column(String(16), nullable=True)  # out-of-network MOOP
+    retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class UsageCounter(Base):
     """Per-tenant request counter for daily/monthly quota enforcement. No PHI — just counts."""
 

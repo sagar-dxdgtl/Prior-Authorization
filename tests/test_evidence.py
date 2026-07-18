@@ -85,3 +85,37 @@ def test_credentialing_no_record_is_explicit():
                            crosswalk=TinCrosswalk(records=[]), run_directory=False, run_enrollment=False)
     c = _by(ev, "credential")
     assert c["status"] == "NO_RECORD"
+
+
+# --- plan-benefits (CMS PBP) source: the OON tier (Medicare-only; no DB in tests) ---
+
+def _ev(q, benefit_type, **kw):
+    return assemble_evidence(q, _result(plan_name=q.plan_hint), benefit_type=benefit_type,
+                             credentialing=CredentialingMatrix(records=[]), crosswalk=TinCrosswalk(records=[]),
+                             run_directory=False, run_enrollment=False, **kw)
+
+
+def test_pbp_source_na_for_commercial():
+    q = ProviderQuery(payer="p", plan_hint="Ambetter ACA PPO", npi="1", tin="2")
+    pbp = _by(_ev(q, "ACA Commercial"), "plan benefit")
+    assert pbp is not None and pbp["status"] == "N/A"  # CMS PBP is Medicare-only
+
+
+def test_pbp_source_reads_ppo_from_plan_string_medicare():
+    # test env has no DB → string token only; explicit "(PPO)" → plan pays OON benefits
+    q = ProviderQuery(payer="p", plan_hint="AARP Medicare Advantage (PPO)", npi="1", tin="2")
+    pbp = _by(_ev(q, "Medicare Advantage"), "plan benefit")
+    assert pbp["status"] == "HAS_OON_BENEFITS"
+
+
+def test_pbp_source_defers_for_dual_without_type_token():
+    # "Dual Complete" carries no HMO/PPO token and no DB match → defer the tier to the 271
+    q = ProviderQuery(payer="p", plan_hint="UHC Medicare Dual Complete AZMCARE", npi="1", tin="2")
+    pbp = _by(_ev(q, "Dual Eligible (FIDE SNP)"), "plan benefit")
+    assert pbp["status"] == "UNRESOLVED"
+
+
+def test_pbp_source_not_run_when_disabled():
+    q = ProviderQuery(payer="p", plan_hint="AARP Medicare Advantage (PPO)", npi="1", tin="2")
+    pbp = _by(_ev(q, "Medicare Advantage", run_pbp=False), "plan benefit")
+    assert pbp["status"] == "NOT_RUN"

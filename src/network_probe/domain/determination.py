@@ -48,9 +48,19 @@ def final_determination(
     network_status: NetworkStatus,
     out_of_network_benefits: bool | None,
     group_contracted: bool | None = None,
+    plan_oon_capability: bool | None = None,
 ) -> Determination:
+    """`plan_oon_capability` is the structural OON-benefit signal derived from the plan TYPE
+    (PPO/PFFS → True, pure HMO → False, HMO-POS/POS/D-SNP/unknown → None). It only ever *fills a
+    silent 271* (out_of_network_benefits is None); a definite live 271 always wins, so we never
+    contradict what the payer actually returned."""
     if network_status == NetworkStatus.IN_NETWORK:
         return Determination("IN_NETWORK", "In-Network", "Provider is in-network for the member's plan.")
+
+    # The 271 wins when it spoke; the plan-type capability only fills a silent (None) 271.
+    filled = out_of_network_benefits is None and plan_oon_capability is not None
+    effective = out_of_network_benefits if out_of_network_benefits is not None else plan_oon_capability
+    infer = " (inferred from plan type)" if filled else ""
 
     if network_status == NetworkStatus.OUT_OF_NETWORK:
         # Group TIN contracted with the payer, but this physician isn't in-network → Physician OON.
@@ -59,13 +69,13 @@ def final_determination(
                 "PHYSICIAN_OUT_OF_NETWORK",
                 "Physician Out-of-Network",
                 f"The clinic's billing TIN is contracted with this payer, but this physician is not "
-                f"in-network; {_oon_tail(out_of_network_benefits)}.",
+                f"in-network; {_oon_tail(effective)}{infer}.",
             )
-        if out_of_network_benefits is True:
+        if effective is True:
             return Determination(
                 "OUT_OF_NETWORK_WITH_BENEFITS",
                 "Out-of-Network (with benefits)",
-                "Provider is out-of-network, but the plan pays out-of-network benefits.",
+                f"Provider is out-of-network, but the plan pays out-of-network benefits{infer}.",
             )
         payer_note = (
             " The clinic has no contract with this payer (payer-level out-of-network)."
@@ -75,18 +85,18 @@ def final_determination(
         return Determination(
             "OUT_OF_NETWORK",
             "Out-of-Network",
-            f"Provider is out-of-network and {_oon_tail(out_of_network_benefits)}.{payer_note}",
+            f"Provider is out-of-network and {_oon_tail(effective)}{infer}.{payer_note}",
         )
 
     if network_status == NetworkStatus.REVIEW:
         return Determination(
             "REVIEW",
             "Needs Review",
-            f"Provider network status conflicts across sources; {_oon_tail(out_of_network_benefits)}.",
+            f"Provider network status conflicts across sources; {_oon_tail(effective)}{infer}.",
         )
 
     return Determination(
         "UNKNOWN",
         "Undetermined",
-        f"Provider network status could not be confirmed; {_oon_tail(out_of_network_benefits)}.",
+        f"Provider network status could not be confirmed; {_oon_tail(effective)}{infer}.",
     )
