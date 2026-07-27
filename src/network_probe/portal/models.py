@@ -13,7 +13,7 @@ into OUT_OF_NETWORK. Absence-is-not-OON is the same rule the directory adapters 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 
 from network_probe.domain.models import NetworkStatus
@@ -78,7 +78,7 @@ class PortalCapture:
     matched_name: str | None = None  # the name the portal showed for our NPI, when it matched
     reachability: Reachability | None = None
     duration_ms: int | None = None
-    captured_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    captured_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     @property
     def decisive(self) -> bool:

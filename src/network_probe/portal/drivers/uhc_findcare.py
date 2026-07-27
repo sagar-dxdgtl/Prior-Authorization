@@ -1,0 +1,411 @@
+"""UHC Find Care (guest) — findcare.guest.uhc.com.
+
+Covers three of the eleven Ins Test 3 rows (UHC Medicare Advantage GA, UHC Commercial NHP Access HMO
+FL, UHC AARP Medicare Advantage FL) and is the reason this whole layer exists: on Test 2, flex.optum's
+FHIR said David Naar (NPI 1760457477) was IN-network for AARP Medicare Advantage FL-0026, while this
+portal showed him absent. The portal was right.
+
+Observed structure (2026-07-28): the entry URL hydrates into a Find Care shell with two Abyss-design
+inputs — `primary-search-input` (keyword: name, NPI, procedure) and `location-search-input`. Plan
+selection is a separate guest step; when the shell exposes it we drive it from the 271's plan string,
+and when we cannot confirm which network was searched the verdict stays UNKNOWN rather than OON.
+"""
+
+from __future__ import annotations
+
+import re
+
+from playwright.sync_api import Error as PlaywrightError
+from playwright.sync_api import Page
+from playwright.sync_api import TimeoutError as PlaywrightTimeout
+
+from network_probe.portal.drivers.base import PortalDriver
+from network_probe.portal.models import PortalCapture, PortalQuery, PortalStatus
+
+"""Observed guest flow (2026-07-28), each step gated on the previous:
+
+    /guest-plan-selection            "Type of coverage"  -> Employer and Individual | Medicare |
+                                                            Medicaid | ACA Marketplace | SHOP
+    /select-coverage-type?…=MR       "Type of care"      -> Medical | Behavioral Health | Dental | Vision
+    …                                county / ZIP        -> pick the member's county
+    …                                plan list           -> pick the 271's plan  <- pins the network
+    /browse                          "Find care"         -> primary-search-input + location-search-input
+
+Going straight to /browse (as the first cut did) yields an *unpinned* generic directory — the page
+even offers "Sign in for the most accurate plan". That path can never justify an OON, which is why the
+walk below is mandatory rather than an optimisation.
+"""
+
+ENTRY = "https://findcare.guest.uhc.com/guest-plan-selection"
+BROWSE = "https://findcare.guest.uhc.com/guest-plan-selection/browse"
+
+_SEARCH = "[data-testid='primary-search-input']"
+_LOCATION = "[data-testid='location-search-input']"
+
+# Dismissable overlays that sit on top of the first step.
+_OVERLAYS = (
+    "[data-testid='guest-start-modal-abyss-modal-base-close-button']",
+    "[data-testid='guest-coachmark-container-abyss-coachmark-close-button']",
+)
+
+# Coverage type -> the card to click, keyed by the line of business we infer from the plan string.
+# testids follow UHC's own abbreviations (ei/mr/cs/ifp/shop), with the visible label as fallback.
+_COVERAGE = {
+    "medicare": ("[data-testid='explore-mr-link-abyss-link-root']", "Medicare"),
+    "medicaid": ("[data-testid='explore-cs-link-abyss-link-root']", "Medicaid"),
+    "aca": ("[data-testid='explore-ifp-link-abyss-link-root']", "ACA Marketplace"),
+    "commercial": ("[data-testid='explore-ei-link-abyss-link-root']", "Employer and Individual"),
+}
+
+_RESULT_CARDS = (
+    "[data-testid*='provider-card']",
+    "[data-testid*='result-card']",
+    "[data-testid*='search-result']",
+    "[class*='provider-card']",
+)
+_PLAN_SURFACES = (
+    "[data-testid*='plan-card']",
+    "[data-testid*='plan-name']",
+    "[data-testid*='plan-list'] li",
+    "[role=radio]",
+    "[role=option]",
+)
+
+
+def _norm(s: str | None) -> str:
+    return re.sub(r"[^a-z]", "", (s or "").lower())
+
+
+class UhcFindCareDriver(PortalDriver):
+    key = "uhc-findcare"
+    portal_name = "UHC Find Care (guest)"
+
+    def capture(self, page: Page, q: PortalQuery, shot) -> PortalCapture:
+        trail_box: list[str] = []
+
+        def result(status: PortalStatus, note: str, **kw) -> PortalCapture:
+            # Always carry the walk trail: a verdict is only as trustworthy as the path that produced it.
+            if trail_box:
+                note = f"{note} [portal walk: {' → '.join(trail_box)}]"
+            return PortalCapture(
+                payer_key=q.payer_key, npi=q.npi, plan=q.plan, tin=q.tin, status=status,
+                portal_name=self.portal_name, portal_url=page.url, driver=self.key, note=note, **kw
+            )
+
+        try:
+            page.goto(ENTRY, wait_until="domcontentloaded", timeout=45_000)
+            page.wait_for_load_state("networkidle", timeout=10_000)
+        except PlaywrightTimeout:
+            pass
+        except PlaywrightError as e:
+            return result(PortalStatus.BLOCKED, f"navigation failed: {type(e).__name__}: {e}",
+                          screenshot=shot("nav-failed"))
+        page.wait_for_timeout(3_000)  # Abyss shell hydrates after networkidle
+
+        plan_confirmed, trail = self._walk_to_plan(page, q)
+        trail_box.extend(trail)
+        shot("plan-walk")
+        if not plan_confirmed:
+            # Fall through to the unpinned directory: still worth a screenshot and an IN if the
+            # provider shows up (presence in UHC's directory at all is a real signal), but never an OON.
+            try:
+                page.goto(BROWSE, wait_until="domcontentloaded", timeout=45_000)
+                page.wait_for_timeout(3_000)
+            except (PlaywrightTimeout, PlaywrightError):
+                pass
+
+        try:
+            search = page.locator(_SEARCH).first
+            search.wait_for(state="visible", timeout=15_000)
+        except (PlaywrightTimeout, PlaywrightError):
+            return result(PortalStatus.BLOCKED, "no provider-search input appeared — portal shell did "
+                          "not hydrate, or the guest flow changed.", screenshot=shot("no-search-input"))
+
+        if q.zip_code:
+            self._set_location(page, q.zip_code)
+
+        # NPI first (exact, unambiguous); fall back to the provider name, which is what a staffer types.
+        for term, kind in self._search_terms(q):
+            found, count, matched = self._run_search(page, search, term, q)
+            if found:
+                return result(
+                    PortalStatus.IN_NETWORK,
+                    f"NPI {q.npi} matched in UHC Find Care by {kind} ({term!r}) for plan "
+                    f"{q.plan or 'the selected guest plan'} near {q.zip_code or 'the clinic'} — "
+                    f"listed as {matched!r}.",
+                    result_count=count, matched_name=matched, screenshot=shot(f"match-{kind}"),
+                )
+            if count and plan_confirmed:
+                return result(
+                    PortalStatus.OUT_OF_NETWORK,
+                    f"UHC Find Care returned {count} result(s) for {kind} {term!r} in plan "
+                    f"{q.plan!r} near {q.zip_code or 'the clinic'}, and NPI {q.npi} is not among "
+                    f"them — out-of-network for this plan.",
+                    result_count=count, screenshot=shot(f"absent-{kind}"),
+                )
+            if count:
+                return result(
+                    PortalStatus.UNKNOWN,
+                    f"UHC Find Care returned {count} result(s) for {kind} {term!r} without NPI "
+                    f"{q.npi}, but the guest plan could not be confirmed — absence from an "
+                    f"unconfirmed network is not evidence of out-of-network.",
+                    result_count=count, screenshot=shot(f"absent-noplan-{kind}"),
+                )
+
+        return result(
+            PortalStatus.UNKNOWN,
+            f"UHC Find Care returned no results for NPI {q.npi} or "
+            f"{q.provider_last_name or 'the provider name'} near {q.zip_code or 'the clinic'}"
+            + (f" in plan {q.plan!r}" if plan_confirmed else " (guest plan unconfirmed)")
+            + ". An empty result set does not distinguish out-of-network from a failed search.",
+            result_count=0, screenshot=shot("no-results"),
+        )
+
+    # --- steps -------------------------------------------------------------------------------------
+
+    def _search_terms(self, q: PortalQuery):
+        """NPI first, then the provider's name — the two ways this portal can find one provider."""
+        terms = []
+        if q.npi:
+            terms.append((q.npi, "NPI"))
+        name = " ".join(p for p in (q.provider_first_name, q.provider_last_name) if p).strip()
+        if name:
+            terms.append((name, "name"))
+        elif q.provider_last_name:
+            terms.append((q.provider_last_name, "name"))
+        return terms
+
+    def _walk_to_plan(self, page: Page, q: PortalQuery) -> tuple[bool, list[str]]:
+        """Walk coverage type → type of care → county → plan list, pinning the member's network.
+
+        Returns (plan_confirmed, trail). `trail` records each step reached so a capture that stops
+        early says exactly where — the portals redesign often, and a silent partial walk that then
+        reports OON would be the worst possible failure mode.
+        """
+        trail: list[str] = []
+        self._dismiss_overlays(page)
+        trail.append("overlays dismissed")
+
+        sel, label = _COVERAGE[self._coverage_type(q)]
+        if not self._click_any(page, sel, label):
+            return False, trail + [f"coverage type {label!r} NOT clickable"]
+        trail.append(f"coverage: {label}")
+
+        # "Type of care" — always Medical for a physician network check.
+        if not self._click_any(page, "[data-testid*='medical']", "Medical"):
+            return False, trail + ["type of care 'Medical' NOT clickable"]
+        trail.append("care: Medical")
+
+        if q.zip_code and self._commit_location(page, q.zip_code):
+            trail.append(f"county via ZIP {q.zip_code}")
+        # "Plans will populate upon location selection" — the plan list does not exist until the
+        # location is *committed* with the Select button. Filling the ZIP is not enough.
+        if self._click_any(page, "[data-testid*='location-select']", "Select", timeout_ms=6_000):
+            trail.append("location committed (Select)")
+        self._dismiss_overlays(page)  # a fresh coachmark appears on the plan-selection step
+
+        picked = self._pick_plan(page, q.plan)
+        if picked:
+            trail.append(f"plan pinned: {picked}")
+            return True, trail
+        return False, trail + [f"no plan matched {q.plan!r} in the plan list"]
+
+    def _coverage_type(self, q: PortalQuery) -> str:
+        """Map the 271's plan string to UHC's coverage-type card. Reuses the domain's own LOB rules so
+        this driver and the network resolver can never disagree about what line a plan is."""
+        from network_probe.domain.line_of_business import line_of_business
+
+        lob = line_of_business(q.plan or "", None)
+        if lob in ("medicare", "dual"):
+            return "medicare"
+        if lob == "medicaid":
+            return "medicaid"
+        text = (q.plan or "").lower()
+        if any(k in text for k in ("marketplace", "exchange", "aca", "individual & family")):
+            return "aca"
+        return "commercial"
+
+    def _dismiss_overlays(self, page: Page) -> None:
+        for sel in _OVERLAYS:
+            try:
+                b = page.locator(sel).first
+                if b.is_visible():
+                    b.click()
+                    page.wait_for_timeout(1_000)
+            except (PlaywrightTimeout, PlaywrightError):
+                continue
+
+    def _click_any(self, page: Page, testid_sel: str, label: str, timeout_ms: int = 8_000) -> bool:
+        """Click by testid, falling back to the visible label. UHC renames testids between releases,
+        so the human-readable label is the more durable handle."""
+        # Order matters: testid, then the *button* with this accessible name, then loose text. Loose text
+        # is last because it is genuinely dangerous — get_by_text("Select") matched the heading "Select
+        # the area where you live…" and clicked that instead of the Select button, so the plan list never
+        # populated while the walk reported success.
+        for kind in ("testid", "role", "text"):
+            try:
+                if kind == "testid":
+                    loc = page.locator(testid_sel).first
+                elif kind == "role":
+                    loc = page.get_by_role("button", name=label, exact=True).first
+                else:
+                    loc = page.get_by_text(label, exact=False).first
+                loc.wait_for(state="visible", timeout=timeout_ms)
+                loc.click()
+            except (PlaywrightTimeout, PlaywrightError):
+                continue
+            # The click succeeded. Settling is best-effort and MUST NOT invalidate it — treating a
+            # networkidle timeout as a failed click is what made the first walk report
+            # "coverage type 'Medicare' NOT clickable" after it had already navigated.
+            self._settle(page)
+            return True
+        return False
+
+    def _settle(self, page: Page, pause_ms: int = 2_500) -> None:
+        """Best-effort wait for the next step to render. Never raises — these portals stream analytics
+        indefinitely and may never reach networkidle."""
+        try:
+            page.wait_for_load_state("networkidle", timeout=10_000)
+        except (PlaywrightTimeout, PlaywrightError):
+            pass
+        try:
+            page.wait_for_timeout(pause_ms)
+        except PlaywrightError:
+            pass
+
+    def _commit_location(self, page: Page, zip_code: str) -> bool:
+        """Enter the ZIP wherever the current step asks for it and commit the county suggestion."""
+        try:
+            inp = page.locator("input:visible").first
+            inp.wait_for(state="visible", timeout=8_000)
+            inp.click()
+            inp.fill(zip_code)
+            page.wait_for_timeout(2_500)
+            opts = page.locator("[role=option]:visible")
+            if opts.count():
+                opts.first.click()
+            else:
+                inp.press("Enter")
+        except (PlaywrightTimeout, PlaywrightError):
+            return False
+        self._settle(page)
+        return True
+
+    def _pick_plan(self, page: Page, plan: str | None) -> str | None:
+        """Choose the plan whose label shares the most distinctive tokens with the 271 plan string.
+        Returns the chosen label, or None — we never pick arbitrarily just to proceed."""
+        if not plan:
+            return None
+        for sel in _PLAN_SURFACES:
+            try:
+                loc = page.locator(f"{sel}:visible")
+                n = loc.count()
+                if not n:
+                    continue
+                idx = self._best_option(loc, plan)
+                if idx is None:
+                    continue
+                label = (loc.nth(idx).inner_text() or "").strip().splitlines()[0][:120]
+                loc.nth(idx).click()
+            except (PlaywrightTimeout, PlaywrightError):
+                continue
+            self._settle(page, 3_000)  # post-click, so a slow settle cannot discard a pinned plan
+            return label
+        return None
+
+    def _best_option(self, opts, plan: str) -> int | None:
+        """Pick the autocomplete option sharing the most distinctive tokens with the 271 plan string.
+        Never guess: with no token overlap we return None and the network stays unconfirmed."""
+        want = {t for t in re.split(r"[^A-Za-z0-9]+", plan.upper()) if len(t) >= 4}
+        best, best_score = None, 0
+        for i in range(min(opts.count(), 12)):
+            try:
+                text = (opts.nth(i).inner_text() or "").upper()
+            except PlaywrightError:
+                continue
+            score = len({t for t in re.split(r"[^A-Za-z0-9]+", text) if len(t) >= 4} & want)
+            if score > best_score:
+                best, best_score = i, score
+        return best
+
+    def _set_location(self, page: Page, zip_code: str) -> None:
+        try:
+            loc = page.locator(_LOCATION).first
+            loc.wait_for(state="visible", timeout=6_000)
+            loc.click()
+            loc.fill(zip_code)
+            page.wait_for_timeout(2_000)
+            opts = page.locator("[role=option]")
+            if opts.count():
+                opts.first.click()
+            else:
+                loc.press("Enter")
+            page.wait_for_timeout(2_000)
+        except (PlaywrightTimeout, PlaywrightError):
+            pass  # a failed location narrows nothing; the search still runs
+
+    def _run_search(self, page: Page, search, term: str, q: PortalQuery) -> tuple[bool, int, str | None]:
+        """Search one term. Returns (matched_us, result_count, matched_display_name)."""
+        # This is a typeahead: Enter alone does NOT submit (proven live — the form sat unchanged with
+        # the NPI typed in). Commit by clicking the suggestion, and only fall back to Enter/button.
+        try:
+            search.click()
+            search.fill(term)
+            page.wait_for_timeout(3_000)
+            opts = page.locator("[role=option]:visible")
+            if opts.count():
+                opts.first.click()
+            else:
+                search.press("Enter")
+                page.wait_for_timeout(1_500)
+                for sel in ("[data-testid*='search-submit']", "button[type=submit]"):
+                    try:
+                        btn = page.locator(sel).first
+                        if btn.is_visible():
+                            btn.click()
+                            break
+                    except PlaywrightError:
+                        continue
+            page.wait_for_load_state("networkidle", timeout=15_000)
+        except (PlaywrightTimeout, PlaywrightError):
+            pass
+        page.wait_for_timeout(3_500)
+
+        cards, count = self._cards(page)
+        if q.npi and q.npi in (self._page_text(page)):
+            return True, count, self._matched_name(cards, q) or f"NPI {q.npi} present on page"
+        want = _norm(q.provider_last_name)
+        if want:
+            for text in cards:
+                if want in _norm(text):
+                    return True, count, text.strip().splitlines()[0][:120] if text.strip() else None
+        return False, count, None
+
+    def _cards(self, page: Page) -> tuple[list[str], int]:
+        for sel in _RESULT_CARDS:
+            try:
+                loc = page.locator(sel)
+                n = loc.count()
+                if n:
+                    return [loc.nth(i).inner_text() or "" for i in range(min(n, 60))], n
+            except PlaywrightError:
+                continue
+        # No recognisable cards. Fall back to the portal's own result copy — but NOT to the typeahead's
+        # "N results available" live region, which counts autocomplete suggestions and produced a false
+        # result_count=2 on the first live run. Only "N providers/results found|for" counts.
+        text = self._page_text(page)
+        m = re.search(r"([\d,]+)\s+(?:provider|result|doctor)s?\s+(?:found|for|match)", text, re.I)
+        return [], int(m.group(1).replace(",", "")) if m else 0
+
+    def _matched_name(self, cards: list[str], q: PortalQuery) -> str | None:
+        want = _norm(q.provider_last_name)
+        for text in cards:
+            if q.npi in text or (want and want in _norm(text)):
+                return text.strip().splitlines()[0][:120] if text.strip() else None
+        return None
+
+    def _page_text(self, page: Page) -> str:
+        try:
+            return page.inner_text("body") or ""
+        except PlaywrightError:
+            return ""
