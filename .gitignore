@@ -22,3 +22,7 @@ web/dist/
 *.egg-info/
 build/
 dist/
+
+# Live portal captures are run artifacts (evidence lives in portal_captures + the served file)
+src/network_probe/api/static/portal/live/
+.cache/
