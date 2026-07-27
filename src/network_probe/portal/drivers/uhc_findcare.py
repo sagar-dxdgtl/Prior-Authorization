@@ -165,14 +165,17 @@ class UhcFindCareDriver(PortalDriver):
 
     def _search_terms(self, q: PortalQuery):
         """NPI first, then the provider's name — the two ways this portal can find one provider."""
-        terms = []
+        # Broadest-last is wrong for a typeahead: it matches prefixes, so the bare SURNAME finds more
+        # than "First Last" does. Verified live — "Orem" returned 2 suggestions, "Randall Orem" returned
+        # none. Order: NPI (exact, if indexed) -> surname (the staffer's own search) -> full name.
+        terms: list[tuple[str, str]] = []
         if q.npi:
             terms.append((q.npi, "NPI"))
-        name = " ".join(p for p in (q.provider_first_name, q.provider_last_name) if p).strip()
-        if name:
-            terms.append((name, "name"))
-        elif q.provider_last_name:
-            terms.append((q.provider_last_name, "name"))
+        if q.provider_last_name:
+            terms.append((q.provider_last_name, "surname"))
+        full = " ".join(p for p in (q.provider_first_name, q.provider_last_name) if p).strip()
+        if full and full != (q.provider_last_name or ""):
+            terms.append((full, "full name"))
         return terms
 
     def _walk_to_plan(self, page: Page, q: PortalQuery) -> tuple[bool, list[str]]:
@@ -345,41 +348,64 @@ class UhcFindCareDriver(PortalDriver):
             pass  # a failed location narrows nothing; the search still runs
 
     def _run_search(self, page: Page, search, term: str, q: PortalQuery) -> tuple[bool, int, str | None]:
-        """Search one term. Returns (matched_us, result_count, matched_display_name)."""
-        # This is a typeahead: Enter alone does NOT submit (proven live — the form sat unchanged with
-        # the NPI typed in). Commit by clicking the suggestion, and only fall back to Enter/button.
+        """Search one term against the pinned plan. Returns (matched_us, result_count, matched_name).
+
+        The typeahead suggestion list IS the result set for a provider-name query — this portal answers
+        "who in this plan matches what you typed" inline rather than on a results page. That is exactly
+        the surface the Test 2 manual checks read: searching "Desir Hedson" returned other people, and
+        that absence-among-present-results is what made the verdict OON. So we read the suggestions.
+
+        The plan-selection step leaves the search page's own location field EMPTY (verified live), so it
+        is refilled here — an unscoped search is not the search a staffer performs.
+        """
+        if q.zip_code:
+            self._set_location(page, q.zip_code)
         try:
             search.click()
             search.fill(term)
-            page.wait_for_timeout(3_000)
-            opts = page.locator("[role=option]:visible")
-            if opts.count():
-                opts.first.click()
-            else:
-                search.press("Enter")
-                page.wait_for_timeout(1_500)
-                for sel in ("[data-testid*='search-submit']", "button[type=submit]"):
-                    try:
-                        btn = page.locator(sel).first
-                        if btn.is_visible():
-                            btn.click()
-                            break
-                    except PlaywrightError:
-                        continue
-            page.wait_for_load_state("networkidle", timeout=15_000)
+        except (PlaywrightTimeout, PlaywrightError):
+            return False, 0, None
+        page.wait_for_timeout(4_000)  # the typeahead debounces, then queries the pinned plan's network
+
+        cands = self._suggestions(page)
+        # Try to open a full results page too; when it works the cards are richer than the suggestions.
+        cards = []
+        try:
+            search.press("Enter")
+            self._settle(page, 3_000)
+            cards, _ = self._cards(page)
         except (PlaywrightTimeout, PlaywrightError):
             pass
-        page.wait_for_timeout(3_500)
 
-        cards, count = self._cards(page)
-        if q.npi and q.npi in (self._page_text(page)):
-            return True, count, self._matched_name(cards, q) or f"NPI {q.npi} present on page"
+        pool = [t for t in (cands + cards) if t.strip()]
+        count = len(cands) if cands else len(cards)
+        page_text = self._page_text(page)
+
+        if q.npi and q.npi in page_text:
+            return True, count, self._matched_name(pool, q) or f"NPI {q.npi} present on page"
         want = _norm(q.provider_last_name)
         if want:
-            for text in cards:
+            for text in pool:
                 if want in _norm(text):
-                    return True, count, text.strip().splitlines()[0][:120] if text.strip() else None
+                    return True, count, text.strip().splitlines()[0][:120]
         return False, count, None
+
+    def _suggestions(self, page: Page) -> list[str]:
+        """The typeahead's provider suggestions. Read via UHC's own suggestion testid first, because
+        `[role=option]` also matches the location autocomplete and the category chips."""
+        for sel in (
+            "[data-testid*='typeahead-suggestion-section']",
+            "[data-testid*='typeahead-suggestion']",
+            "[role=option]:visible",
+        ):
+            try:
+                loc = page.locator(sel)
+                n = loc.count()
+                if n:
+                    return [loc.nth(i).inner_text() or "" for i in range(min(n, 40))]
+            except PlaywrightError:
+                continue
+        return []
 
     def _cards(self, page: Page) -> tuple[list[str], int]:
         for sel in _RESULT_CARDS:
