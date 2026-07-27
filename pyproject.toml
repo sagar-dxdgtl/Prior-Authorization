@@ -24,6 +24,13 @@ dependencies = [
     "bcrypt==4.2.1",
     "boto3==1.35.80",
     "ijson>=3.3",
+    # Portal capture drives the payers' own find-a-doctor portals in a real browser. Note the browser
+    # binary is NOT pip-installed — after `pip install -e .` run `python -m playwright install chromium`.
+    "playwright==1.61.0",
+    # Tier-3 plan disambiguation only: matching a 271 plan name to a portal dropdown entry when no
+    # contract identifier is present on either side (see portal/plan_match.py for tiers 1-2, which
+    # are deterministic and need no API key).
+    "anthropic>=0.116",
 ]
 
 [project.optional-dependencies]

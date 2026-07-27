@@ -177,6 +177,50 @@ class PlanBenefit(Base):
     retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class PortalCapture(Base):
+    """APPEND-ONLY log of live payer-portal captures — the evidence trail, not a fact table.
+
+    One row per capture attempt, including the ones that produced no answer: a BLOCKED capture with a
+    screenshot of the block is evidence too. Deliberately has no unique constraint — the point is the
+    history of what a payer's own directory said, and when. That is what a No Surprises Act
+    directory-accuracy dispute turns on (PHSA §2799B-9 requires 90-day verification and holds the
+    member harmless at in-network cost share when the directory is wrong), so rows are never updated
+    in place and never deduplicated.
+
+    `status` carries the portal vocabulary (IN_NETWORK / OUT_OF_NETWORK / UNKNOWN / BLOCKED) rather
+    than a bare boolean, because "the portal refused automated access" is a transport outcome and must
+    never collapse into out-of-network. `in_network` is a nullable convenience mirror, NULL for the
+    two non-answers.
+
+    `plan_pinned` and `plan_match_basis` exist because the verdict is only valid for the plan that was
+    actually selected: a capture is auditable only if it records which plan it pinned and why. No PHI —
+    provider, clinic and plan data only.
+    """
+
+    __tablename__ = "portal_captures"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tenants.id"), nullable=True, index=True)
+    payer_key: Mapped[str] = mapped_column(String(120), index=True)
+    npi: Mapped[str] = mapped_column(String(10), index=True)
+    tin: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    status: Mapped[str] = mapped_column(String(20))
+    in_network: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    plan: Mapped[str | None] = mapped_column(String(200), nullable=True)  # as the 271 described it
+    plan_pinned: Mapped[str | None] = mapped_column(String(200), nullable=True)  # what the portal selected
+    plan_match_basis: Mapped[str | None] = mapped_column(String(400), nullable=True)  # why it pinned that
+    portal_name: Mapped[str] = mapped_column(String(160))
+    portal_url: Mapped[str | None] = mapped_column(String(400), nullable=True)
+    driver: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    screenshot: Mapped[str | None] = mapped_column(String(200), nullable=True)  # file under static/portal/live/
+    result_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    matched_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    reachability: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    walk_trail: Mapped[str | None] = mapped_column(String(700), nullable=True)  # each step the driver reached
+    note: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+
 class UsageCounter(Base):
     """Per-tenant request counter for daily/monthly quota enforcement. No PHI — just counts."""
 
