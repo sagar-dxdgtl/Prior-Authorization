@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -209,14 +209,17 @@ class PortalCapture(Base):
     plan_pinned: Mapped[str | None] = mapped_column(String(200), nullable=True)  # what the portal selected
     plan_match_basis: Mapped[str | None] = mapped_column(String(400), nullable=True)  # why it pinned that
     portal_name: Mapped[str] = mapped_column(String(160))
-    portal_url: Mapped[str | None] = mapped_column(String(400), nullable=True)
+    # TEXT, not a bounded VARCHAR: this is "the exact URL the answer was read from", and Cigna's
+    # runs to ~600 chars with the medicalProductCode/medicalEcnCode proof at the very end. A 400-cap
+    # silently dropped precisely the best-corroborated captures (see migration 0030).
+    portal_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     driver: Mapped[str | None] = mapped_column(String(60), nullable=True)
     screenshot: Mapped[str | None] = mapped_column(String(200), nullable=True)  # file under static/portal/live/
     result_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     matched_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     reachability: Mapped[str | None] = mapped_column(String(20), nullable=True)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    walk_trail: Mapped[str | None] = mapped_column(String(700), nullable=True)  # each step the driver reached
+    walk_trail: Mapped[str | None] = mapped_column(Text, nullable=True)  # each step the driver reached
     note: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
 

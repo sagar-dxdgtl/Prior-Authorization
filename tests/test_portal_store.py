@@ -96,3 +96,31 @@ def test_missing_identifiers_are_safe(store):
     assert store.latest("", "1234567893") is None
     assert store.latest("some-payer", "") is None
     assert store.history("") == []
+
+
+def test_long_portal_url_and_walk_trail_survive_the_roundtrip(store):
+    """A capture must not be silently dropped for being well-evidenced.
+
+    The clean Cigna run on 2026-07-28 read its answer from a 596-character URL whose tail —
+    medicalProductCode/medicalEcnCode — is the proof of WHICH network answered, and the insert
+    failed on `character varying(400)`. `run_capture._record` is best-effort, so the row vanished
+    with only a log line. Both columns are TEXT as of migration 0030.
+    """
+    npi = f"9{uuid.uuid4().int % 10**9:09d}"
+    url = (
+        "https://hcpdirectory.cigna.com/web/public/consumer/directory/doctors?"
+        + "&".join(f"param{i}=value-{i:03d}" for i in range(40))
+        + "&medicalProductCode=OAP&medicalEcnCode=OA001"
+    )
+    trail = " → ".join(f"walk step {i} with an explanatory clause" for i in range(30))
+    assert len(url) > 400 and len(trail) > 700, "fixture must exceed the OLD column caps"
+
+    cap = _capture(PortalStatus.UNKNOWN, npi)
+    cap.portal_url = url
+    store.record(cap, walk_trail=trail)
+
+    rows = store.history(npi)
+    assert len(rows) == 1
+    assert rows[0].portal_url == url  # not truncated
+    assert rows[0].portal_url.endswith("medicalEcnCode=OA001")  # the proof survived
+    assert rows[0].walk_trail == trail
