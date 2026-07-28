@@ -128,13 +128,12 @@ class UhcFindCareDriver(PortalDriver):
         for term, kind in self._search_terms(q):
             found, count, matched = self._run_search(page, search, term, q)
             if found:
-                return result(
-                    PortalStatus.IN_NETWORK,
-                    f"NPI {q.npi} matched in UHC Find Care by {kind} ({term!r}) for plan "
-                    f"{q.plan or 'the selected guest plan'} near {q.zip_code or 'the clinic'} — "
-                    f"listed as {matched!r}.",
-                    result_count=count, matched_name=matched, screenshot=shot(f"match-{kind}"),
+                status, note = self.presence_verdict(
+                    plan_confirmed=plan_confirmed, kind=kind, term=term, matched=matched,
+                    npi=q.npi, zip_code=q.zip_code, plan=q.plan,
                 )
+                return result(status, note, result_count=count, matched_name=matched,
+                              screenshot=shot(f"match-{kind}"))
             if count and plan_confirmed:
                 return result(
                     PortalStatus.OUT_OF_NETWORK,
@@ -346,6 +345,30 @@ class UhcFindCareDriver(PortalDriver):
             page.wait_for_timeout(2_000)
         except (PlaywrightTimeout, PlaywrightError):
             pass  # a failed location narrows nothing; the search still runs
+
+
+    def presence_verdict(self, *, plan_confirmed: bool, kind: str, term: str, matched, npi,
+                         zip_code, plan):
+        """Presence in the directory -> (status, note). Decisive ONLY when the plan is pinned.
+
+        The un-pinned directory is a union of every network UHC sells, so being listed in it proves
+        the provider is contracted with UHC — not that they are in THIS member's network. Caught
+        live: Test 2 row 2 (Dual Complete) returned a confident IN_NETWORK from the un-pinned
+        directory, reached via the "Employer and Individual" commercial path because no plan was
+        given, against a staff determination of OON. AZ Blue's driver already refuses this shape.
+        """
+        where = f"near {zip_code or 'the clinic'}"
+        if plan_confirmed:
+            return PortalStatus.IN_NETWORK, (
+                f"NPI {npi} matched in UHC Find Care by {kind} ({term!r}) for plan "
+                f"{plan or 'the selected guest plan'} {where} — listed as {matched!r}."
+            )
+        return PortalStatus.UNKNOWN, (
+            f"NPI {npi} IS listed in UHC Find Care by {kind} ({term!r}) {where} — as {matched!r} — "
+            f"but no plan was pinned, so this is the un-pinned directory: a union of every network "
+            f"UHC sells. That proves the provider is contracted with UHC, not that they are in this "
+            f"member's network. Supply the member's plan to settle it."
+        )
 
     def _run_search(self, page: Page, search, term: str, q: PortalQuery) -> tuple[bool, int, str | None]:
         """Search one term against the pinned plan. Returns (matched_us, result_count, matched_name).
