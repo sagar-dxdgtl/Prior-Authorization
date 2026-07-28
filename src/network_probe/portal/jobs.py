@@ -39,6 +39,9 @@ class CaptureJob:
     status: JobStatus = "queued"
     capture: PortalCapture | None = None
     error: str | None = None
+    #: The verdict as it stood when the walk was submitted, so the caller can reconcile the portal
+    #: answer against it on completion. Opaque here — this layer tracks jobs, it does not judge.
+    prior: dict | None = None
     _future: Future | None = field(default=None, repr=False, compare=False)
 
     def to_dict(self) -> dict:
@@ -78,8 +81,8 @@ class CaptureJobStore:
 
         return run_capture
 
-    def submit(self, q: PortalQuery) -> str:
-        job = CaptureJob(id=uuid.uuid4().hex[:12], payer_key=q.payer_key, npi=q.npi)
+    def submit(self, q: PortalQuery, prior: dict | None = None) -> str:
+        job = CaptureJob(id=uuid.uuid4().hex[:12], payer_key=q.payer_key, npi=q.npi, prior=prior)
         with self._lock:
             self._jobs[job.id] = job
 

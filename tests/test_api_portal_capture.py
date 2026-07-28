@@ -138,3 +138,57 @@ def test_provider_name_is_resolved_from_nppes_not_supplied_by_the_caller(monkeyp
     ).json()["job_id"]
     store.wait(job_id, timeout=5)
     assert seen == {"first": "Hedson", "last": "Desir"}
+
+
+@pytest.mark.db
+def test_poll_reconciles_the_portal_answer_into_the_verdict(monkeypatch, auth_header):
+    """The Naar case: a public directory says IN, the member-facing portal says OON. The portal
+    wins and the determination is recomputed — it must not sit beside an unchanged verdict."""
+    _stub_store(monkeypatch)  # stub returns OUT_OF_NETWORK
+    c = _client()
+    job_id = c.post(
+        "/api/portal/capture",
+        json={"payer_key": AZ, "npi": NPI,
+              "prior_network_status": "IN_NETWORK",
+              "prior_source_url": "https://flex.optum.com/fhirpublic/R4",
+              "out_of_network_benefits": True},
+        headers=auth_header,
+    ).json()["job_id"]
+    from network_probe.portal.jobs import default_capture_jobs
+    default_capture_jobs().wait(job_id, timeout=5)
+
+    r = c.get(f"/api/portal/capture/{job_id}", headers=auth_header).json()["reconciled"]
+    assert r["network_status_before"] == "IN_NETWORK"
+    assert r["network_status_after"] == "OUT_OF_NETWORK"
+    assert r["changed"] is True
+    assert r["signal"]["result"] == "overrides"
+    assert r["determination"]["code"] == "OUT_OF_NETWORK_WITH_BENEFITS"
+
+
+@pytest.mark.db
+def test_portal_disagreeing_with_contract_evidence_becomes_review(monkeypatch, auth_header):
+    _stub_store(monkeypatch)  # OUT_OF_NETWORK
+    c = _client()
+    job_id = c.post(
+        "/api/portal/capture",
+        json={"payer_key": AZ, "npi": NPI,
+              "prior_network_status": "IN_NETWORK", "prior_source_url": "credentialing-matrix"},
+        headers=auth_header,
+    ).json()["job_id"]
+    from network_probe.portal.jobs import default_capture_jobs
+    default_capture_jobs().wait(job_id, timeout=5)
+
+    r = c.get(f"/api/portal/capture/{job_id}", headers=auth_header).json()["reconciled"]
+    assert r["network_status_after"] == "REVIEW"
+    assert r["determination"]["code"] == "REVIEW"
+
+
+@pytest.mark.db
+def test_no_prior_verdict_means_no_reconciliation_block(monkeypatch, auth_header):
+    _stub_store(monkeypatch)
+    c = _client()
+    job_id = c.post("/api/portal/capture", json={"payer_key": AZ, "npi": NPI},
+                    headers=auth_header).json()["job_id"]
+    from network_probe.portal.jobs import default_capture_jobs
+    default_capture_jobs().wait(job_id, timeout=5)
+    assert "reconciled" not in c.get(f"/api/portal/capture/{job_id}", headers=auth_header).json()

@@ -367,6 +367,14 @@ class PortalCaptureRequest(BaseModel):
     city: str | None = None
     zip: str | None = None
     tin: str | None = None
+    # The verdict as it stands when the walk starts, so the portal answer can be reconciled against
+    # it on completion instead of sitting beside it as decoration. All optional: with none of it the
+    # capture still runs and simply reports its own finding.
+    prior_network_status: str | None = None
+    prior_source_url: str | None = None
+    out_of_network_benefits: bool | None = None
+    group_contracted: bool | None = None
+    plan_oon_capability: bool | None = None
 
 
 class OverrideRequest(BaseModel):
@@ -597,7 +605,14 @@ def portal_capture_start(req: PortalCaptureRequest, ctx: RequestContext = Depend
         zip_code=req.zip or None,
         tin=req.tin or None,
     )
-    job_id = default_capture_jobs().submit(q)
+    prior = {
+        "network_status": req.prior_network_status,
+        "source_url": req.prior_source_url,
+        "out_of_network_benefits": req.out_of_network_benefits,
+        "group_contracted": req.group_contracted,
+        "plan_oon_capability": req.plan_oon_capability,
+    }
+    job_id = default_capture_jobs().submit(q, prior=prior if req.prior_network_status else None)
     log.info("portal capture %s queued for %s/%s", job_id, req.payer_key, req.npi)
     return {"job_id": job_id, "status": "queued", "poll": f"/api/portal/capture/{job_id}"}
 
@@ -611,7 +626,47 @@ def portal_capture_status(job_id: str, ctx: RequestContext = Depends(get_context
     job = default_capture_jobs().get(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail={"message": "unknown capture job"})
-    return job.to_dict()
+    body = job.to_dict()
+    if job.status == "done" and job.capture is not None and job.prior:
+        body["reconciled"] = _reconcile_capture(job)
+    return body
+
+
+def _reconcile_capture(job) -> dict:
+    """Fold the finished capture into the verdict that stood when the walk started.
+
+    The portal outranks a public directory read but never contract evidence — a credentialing or
+    TiC disagreement becomes REVIEW rather than a silent flip. See domain/portal_reconcile.
+    """
+    from network_probe.domain.determination import final_determination
+    from network_probe.domain.models import NetworkStatus
+    from network_probe.domain.portal_reconcile import reconcile_portal
+
+    prior = job.prior or {}
+    try:
+        before = NetworkStatus(prior.get("network_status"))
+    except ValueError:
+        before = NetworkStatus.UNKNOWN
+
+    after, signal = reconcile_portal(
+        before,
+        job.capture.status,
+        source_url=prior.get("source_url"),
+        portal_name=job.capture.portal_name,
+    )
+    determination = final_determination(
+        after,
+        prior.get("out_of_network_benefits"),
+        group_contracted=prior.get("group_contracted"),
+        plan_oon_capability=prior.get("plan_oon_capability"),
+    )
+    return {
+        "network_status_before": before.value,
+        "network_status_after": after.value,
+        "changed": after != before,
+        "signal": signal,
+        "determination": determination.to_dict(),
+    }
 
 
 @app.get("/api/portal/screenshot/{name}")

@@ -279,6 +279,13 @@ export default function Eligibility() {
                 state: submitted.state ?? null,
                 zip: submitted.zip ?? null,
                 tin: submitted.tin ?? null,
+                // The verdict as it stands now, so the portal answer is reconciled against it
+                // rather than displayed beside it.
+                prior_network_status: result?.network_status ?? null,
+                prior_source_url: result?.network_verdict?.source_url ?? null,
+                out_of_network_benefits: result?.out_of_network_benefits ?? null,
+                group_contracted:
+                  (result?.network_verdict?.matched_provider?.group_contracted as boolean | undefined) ?? null,
                 // NB: submitted.first_name / last_name are the MEMBER's — never sent to a portal.
                 // The server resolves the provider's name from NPPES by NPI instead.
               }

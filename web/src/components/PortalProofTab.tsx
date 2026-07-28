@@ -16,6 +16,10 @@ export interface PortalTarget {
   payer_key: string;
   npi: string;
   plan?: string | null;
+  prior_network_status?: string | null;
+  prior_source_url?: string | null;
+  out_of_network_benefits?: boolean | null;
+  group_contracted?: boolean | null;
   provider_first_name?: string | null;
   provider_last_name?: string | null;
   state?: string | null;
@@ -24,9 +28,18 @@ export interface PortalTarget {
   tin?: string | null;
 }
 
+interface Reconciled {
+  network_status_before: string;
+  network_status_after: string;
+  changed: boolean;
+  signal: { source: string; result: string; detail: string };
+  determination: { code: string; label: string; reason: string };
+}
+
 interface CaptureStatus {
   job_id: string;
   status: 'queued' | 'running' | 'done' | 'error';
+  reconciled?: Reconciled | null;
   error: string | null;
   verdict: string | null;
   portal_name: string | null;
@@ -210,6 +223,29 @@ export default function PortalProofTab({ target }: { target: PortalTarget | null
             </span>
           </div>
 
+          {state.reconciled && (
+            <div style={state.reconciled.changed ? styles.reconChanged : styles.reconSame}>
+              <div style={styles.reconHead}>
+                {state.reconciled.changed ? (
+                  <>
+                    Verdict updated
+                    <span style={styles.reconArrow}>
+                      {state.reconciled.network_status_before.replace(/_/g, ' ')} →{' '}
+                      <strong>{state.reconciled.network_status_after.replace(/_/g, ' ')}</strong>
+                    </span>
+                  </>
+                ) : (
+                  <>Verdict unchanged · {state.reconciled.network_status_after.replace(/_/g, ' ')}</>
+                )}
+              </div>
+              <div style={styles.reconBody}>{state.reconciled.signal.detail}</div>
+              <div style={styles.reconDet}>
+                Determination: <strong>{state.reconciled.determination.label}</strong> —{' '}
+                {state.reconciled.determination.reason}
+              </div>
+            </div>
+          )}
+
           {prose && <div style={styles.note}>{prose}</div>}
 
           {steps.length > 0 && (
@@ -330,6 +366,26 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 8,
     display: 'block',
   },
+  reconChanged: {
+    borderLeft: `3px solid ${palette.brand500}`,
+    background: palette.brand50,
+    borderRadius: 8,
+    padding: '10px 14px',
+    marginBottom: 12,
+    maxWidth: 760,
+  },
+  reconSame: {
+    borderLeft: `3px solid ${palette.slate300}`,
+    background: palette.slate100,
+    borderRadius: 8,
+    padding: '10px 14px',
+    marginBottom: 12,
+    maxWidth: 760,
+  },
+  reconHead: { fontSize: 12, fontWeight: 600, color: palette.slate900, display: 'flex', gap: 8, flexWrap: 'wrap' },
+  reconArrow: { fontWeight: 400, color: palette.slate600 },
+  reconBody: { fontSize: 12, color: palette.slate600, marginTop: 4, lineHeight: 1.6 },
+  reconDet: { fontSize: 12, color: palette.slate700, marginTop: 6, lineHeight: 1.6 },
   shotSkeleton: {
     border: `1px dashed ${palette.slate300}`,
     borderRadius: 8,
