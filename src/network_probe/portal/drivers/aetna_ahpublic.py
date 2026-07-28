@@ -212,6 +212,9 @@ def _tokens(s: str) -> set[str]:
 
 
 class AetnaFindCareDriver(PortalDriver):
+    # Akamai refuses the plan-scoped publicdse_providersearch call when sec-ch-ua says
+    # HeadlessChrome (403 "Access Denied"), and serves it from the same walk headed.
+    requires_headed = True
     key = "aetna-ahpublic"
     portal_name = "Aetna Find Care (guest provider directory)"
 

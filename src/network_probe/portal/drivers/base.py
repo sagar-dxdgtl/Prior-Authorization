@@ -34,6 +34,15 @@ class PortalDriver(ABC):
     #: human-readable portal name, shown in the UI next to the screenshot
     portal_name: str
 
+    #: Some portals refuse a headless browser outright. Declaring it here rather than leaving it to
+    #: the caller is what stops those drivers returning BLOCKED forever in a default headless run.
+    #: This is not evasion — headed is a first-class mode and the browser is left unmasked.
+    requires_headed: bool = False
+
+    #: A few SPAs wedge when a previous session's storage_state is restored (an empty search field, a
+    #: stale results counter). Those drivers must start from a clean context every capture.
+    requires_fresh_context: bool = False
+
     @abstractmethod
     def capture(self, page: Page, q: PortalQuery, shot) -> PortalCapture:
         """Drive the portal for one provider and return what it said.

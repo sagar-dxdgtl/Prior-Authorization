@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import re
 import threading
 import time
@@ -19,14 +20,37 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from network_probe.portal import browser as pb
+from network_probe.portal.drivers.aetna_ahpublic import AetnaFindCareDriver
 from network_probe.portal.drivers.base import PortalDriver
+from network_probe.portal.drivers.bcbsil_provider_finder import BcbsilProviderFinderDriver
+from network_probe.portal.drivers.cigna_hcp import CignaHcpDriver
+from network_probe.portal.drivers.healthsparq import HealthSparqDriver
+from network_probe.portal.drivers.humana_finder import HumanaFinderDriver
+from network_probe.portal.drivers.molina_provider_search import MolinaProviderSearchDriver
+from network_probe.portal.drivers.oscar_care_options import OscarCareOptionsDriver
 from network_probe.portal.drivers.uhc_findcare import UhcFindCareDriver
+from network_probe.portal.drivers.wellcare_hub import WellcareHubDriver
 from network_probe.portal.models import PortalCapture, PortalQuery, PortalStatus
 from network_probe.portal.targets import target_for_payer
 
-# One driver per portal UI. Drivers are added only where the probe proved a real browser reaches a
-# usable search control (docs/discovery/PORTAL-PROBE-2026-07-28.md).
-DRIVERS: tuple[PortalDriver, ...] = (UhcFindCareDriver(),)
+# One driver per portal UI, each adversarially reviewed before landing here (2026-07-28). Registration
+# is NOT an assertion that a driver produces decisive answers — Oscar and Humana structurally cannot,
+# because no label on either portal carries an identifier `plan_match` can match, so they return
+# UNKNOWN plus a screenshot. They are registered as evidence sources; the decisive answer for those
+# rows comes from the payer's FHIR directory or a human.
+DRIVERS: tuple[PortalDriver, ...] = (
+    UhcFindCareDriver(),
+    HealthSparqDriver(),
+    AetnaFindCareDriver(),
+    CignaHcpDriver(),
+    BcbsilProviderFinderDriver(),
+    MolinaProviderSearchDriver(),
+    WellcareHubDriver(),
+    OscarCareOptionsDriver(),
+    HumanaFinderDriver(),
+)
+
+log = logging.getLogger(__name__)
 
 _LOCK = threading.Lock()  # serialise captures: never two concurrent hits at one payer
 
@@ -67,16 +91,48 @@ def run_capture(q: PortalQuery, headed: bool | None = None, shot_dir: Path | Non
     out = shot_dir or LIVE_SHOT_DIR
     started = time.monotonic()
 
+    # The driver's own launch requirements win over the ambient default. An explicit `headed=` from the
+    # caller still wins over both — but a driver that declares requires_headed can never be forced
+    # headless by omission, which is what would otherwise make it return BLOCKED on every run.
+    if headed is None and driver.requires_headed:
+        headed = True
+
     with _LOCK:
         with pb.browser_session(headed=headed) as browser:
-            with pb.portal_page(browser, portal_key=driver.key) as page:
+            with pb.portal_page(
+                browser, portal_key=driver.key,
+                reuse_session=not driver.requires_fresh_context,
+            ) as page:
                 def shot(label: str) -> str | None:
                     return pb.screenshot(page, out, f"{driver.key}-{q.npi}-{_slug(label)}-{stamp}")
 
                 cap = driver.capture(page, q, shot)
 
     cap.duration_ms = int((time.monotonic() - started) * 1000)
+    _record(cap)
     return cap
+
+
+def _walk_trail(note: str | None) -> str | None:
+    """Pull the "[portal walk: ...]" the drivers append to their note.
+
+    Stored as its own column because a verdict is only as trustworthy as the path that produced it,
+    and a reviewer should be able to read the path without parsing prose.
+    """
+    m = re.search(r"\[portal walk:\s*(.+?)\]\s*$", note or "", re.S)
+    return m.group(1).strip()[:700] if m else None
+
+
+def _record(cap: PortalCapture) -> None:
+    """Append the capture to the audit log. Best-effort by design: a capture that reached the payer and
+    produced a screenshot is still a valid answer if the database is down. Losing the audit row is bad;
+    losing the answer as well would be worse."""
+    try:
+        from network_probe.portal.store import default_capture_store
+
+        default_capture_store().record(cap, walk_trail=_walk_trail(cap.note))
+    except Exception:  # noqa: BLE001
+        log.warning("portal capture not persisted for %s/%s", cap.payer_key, cap.npi)
 
 
 def main() -> None:

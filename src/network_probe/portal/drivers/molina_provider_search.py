@@ -213,6 +213,8 @@ class ResultSet:
 
 
 class MolinaProviderSearchDriver(PortalDriver):
+    # Restoring storage_state wedges this Sapphire SPA — established live during the review.
+    requires_fresh_context = True
     key = "molina-provider-search"
     portal_name = "Molina Provider Search (Zelis / Sapphire)"
 

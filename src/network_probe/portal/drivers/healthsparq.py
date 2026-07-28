@@ -220,6 +220,9 @@ def _is_chrome(line: str) -> bool:
 
 
 class HealthSparqDriver(PortalDriver):
+    # Imperva 403s the app's own /service/domain/plans XHR when headless: reproduced 4/4
+    # headless vs 0/6 headed. Nothing is bypassed — headless simply does not get served.
+    requires_headed = True
     key = "azblue-healthsparq"
     portal_name = "AZ Blue / HealthSparq"
 
