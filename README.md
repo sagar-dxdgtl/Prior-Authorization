@@ -163,9 +163,9 @@ real networks); absent → OUT_OF_NETWORK. One class works for any PDEX server (
 This probe only reads **open** endpoints and the **public, compliance-mandated** FHIR provider
 directories (CMS Da Vinci PDEX Plan-Net — payers are federally required to expose these with no
 authentication). It sends a real User-Agent, keeps volume tiny (per-provider lookups, not bulk
-harvesting), delays between live calls, and caches during dev. It does **not** defeat authentication
-or CAPTCHAs, and **member PHI (the Stedi 270/271 path) is never routed through any proxy** — only
-non-PHI provider-directory traffic can be.
+harvesting), delays between live calls, and caches during dev. It should defeat authentication
+or CAPTCHAs for provider portals for live checks, and **member PHI (the Stedi 270/271 path) is never 
+routed through any proxy** — only non-PHI provider-directory traffic can be.
 
 Some payers front their *public* PDEX directory with a CloudFront/WAF geo-filter that blocks
 non-US / datacenter IPs (e.g. Centene). To reach that public data, **local dev** may route the
