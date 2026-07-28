@@ -62,19 +62,20 @@ class TestPlanString:
 class TestPhiBoundary:
     def test_group_field_is_never_included(self):
         """In this client's own data the "Ins Group Number" column holds member identifiers such as
-        SRGB10057830. This string is typed into a public payer search box and stored in the audit note,
+        AAAA00000000. This string is typed into a public payer search box and stored in the audit note,
         so sweeping that field in would leak a member id into both."""
-        r = _r271(selected_plan="BCBS AZ Statewide PPO", group="SRGB10057830")
+        r = _r271(selected_plan="BCBS AZ Statewide PPO", group="AAAA00000000")
         out = plan_string_from_271(r)
-        assert "SRGB10057830" not in out
+        assert "AAAA00000000" not in out
         q = portal_query_from_271(r, OREM, payer_key="bcbs-empire-anthem-elevance-az")
-        assert "SRGB10057830" not in (q.plan or "")
+        assert "AAAA00000000" not in (q.plan or "")
 
     def test_query_carries_no_member_identifier_at_all(self):
-        r = _r271(selected_plan="AARP Medicare Advantage FL-0026 (PPO)", group="969040367")
+        r = _r271(selected_plan="AARP Medicare Advantage FL-0026 (PPO)", group="999888777")
         q = portal_query_from_271(r, OREM, payer_key="unitedhealthcare-fl-south-florida")
         blob = " ".join(str(v) for v in vars(q).values() if v is not None)
-        for member_datum in ("969040367", "1946-09-05", "376178"):
+        # Synthetic stand-ins for the member id / DOB / MRN shapes this must never carry.
+        for member_datum in ("999888777", "1900-01-01", "111222"):
             assert member_datum not in blob
         # The provider/clinic data that SHOULD be there still is.
         assert q.npi == "1497741409" and q.zip_code == "34986" and q.tin == "463812940"

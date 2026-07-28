@@ -72,8 +72,8 @@ def plan_string_from_271(result) -> str | None:
     HIGH match may license an out-of-network verdict.
 
     `EligibilityResult.group` is EXCLUDED on purpose. It reads like plan metadata, but in this client's
-    own data the "Ins Group Number" column holds values such as SRGB10057830 and 101601541800 — member
-    identifiers, not group numbers. Since this string is typed into a public payer search box and
+    own data the "Ins Group Number" column holds alpha-prefixed and 12-digit numeric values that are
+    MEMBER identifiers, not group numbers. Since this string is typed into a public payer search box and
     persisted in the audit note, including it risks leaking a member id into both. If a genuine group
     number is ever needed for plan pinning, pass it explicitly rather than sweeping the field in.
 

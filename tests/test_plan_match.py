@@ -130,7 +130,7 @@ def test_hios_does_not_match_a_different_issuer_or_product():
 
 def test_long_digit_runs_are_not_mistaken_for_hios_ids():
     """Phone numbers, NPIs and member ids must never read as plan identifiers."""
-    for noise in ("5551234567", "1234567890", "member 101601541800", "NPI 1902811656"):
+    for noise in ("5551234567", "1234567890", "member 999888777666", "NPI 1902811656"):
         assert identifiers(noise) == set(), f"{noise!r} must yield no plan identifier"
 
 
