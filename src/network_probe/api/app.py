@@ -615,11 +615,20 @@ def portal_capture_status(job_id: str, ctx: RequestContext = Depends(get_context
 
 
 @app.get("/api/portal/screenshot/{name}")
-def portal_screenshot(name: str):
-    """Serve one capture screenshot by filename.
+def portal_screenshot(name: str, ctx: RequestContext = Depends(get_context)):
+    """Serve one capture screenshot by filename, to authenticated callers only.
 
-    Deliberately NOT a mounted static directory: only a plain .png basename resolving inside
-    LIVE_SHOT_DIR is served, so a crafted name cannot walk out of it.
+    Two guards, because the filename is the only input:
+      * auth, matching the sibling capture routes. Screenshot names embed the NPI and a
+        timestamp, and NPIs are public — so without auth the set is effectively enumerable, and
+        which providers a clinic is checking is not something to hand out.
+      * path containment: only a plain .png basename resolving inside LIVE_SHOT_DIR is served,
+        so a crafted name cannot walk out of it. Deliberately NOT a mounted static directory.
+
+    The names stay descriptive (driver-npi-label-timestamp) rather than random: they are the
+    link between `portal_captures.screenshot` and the file, and a reviewer reading the audit
+    table needs to find the proof. Auth is the access control; the name is a locator, not a
+    secret.
     """
     from fastapi.responses import FileResponse
 

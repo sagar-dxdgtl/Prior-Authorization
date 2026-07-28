@@ -59,6 +59,7 @@ export default function PortalProofTab({ target }: { target: PortalTarget | null
   const [starting, setStarting] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  const [shotUrl, setShotUrl] = useState<string | null>(null);
   const timer = useRef<number | null>(null);
   const poller = useRef<number | null>(null);
 
@@ -70,6 +71,27 @@ export default function PortalProofTab({ target }: { target: PortalTarget | null
   }, []);
 
   useEffect(() => stop, [stop]);
+
+  // The screenshot route is authenticated, and an <img src> cannot carry a bearer token — so
+  // fetch it through apiFetch and hand the <img> an object URL instead. Revoked on replacement
+  // and unmount so a long session does not leak blobs.
+  useEffect(() => {
+    const name = state?.status === 'done' ? state.screenshot : null;
+    if (!name) return;
+    let url: string | null = null;
+    let cancelled = false;
+    (async () => {
+      const r = await apiFetch(`/api/portal/screenshot/${encodeURIComponent(name)}`);
+      if (!r.ok || cancelled) return;
+      url = URL.createObjectURL(await r.blob());
+      setShotUrl(url);
+    })();
+    return () => {
+      cancelled = true;
+      if (url) URL.revokeObjectURL(url);
+      setShotUrl(null);
+    };
+  }, [state?.status, state?.screenshot]);
 
   const start = useCallback(async () => {
     if (!target) return;
@@ -204,11 +226,15 @@ export default function PortalProofTab({ target }: { target: PortalTarget | null
 
           {state.screenshot ? (
             <figure style={styles.figure}>
-              <img
-                src={`/api/portal/screenshot/${state.screenshot}`}
-                alt={`Screenshot of ${state.portal_name} showing the result for NPI ${target.npi}`}
-                style={styles.shot}
-              />
+              {shotUrl ? (
+                <img
+                  src={shotUrl}
+                  alt={`Screenshot of ${state.portal_name} showing the result for NPI ${target.npi}`}
+                  style={styles.shot}
+                />
+              ) : (
+                <div style={styles.shotSkeleton}>Loading the screenshot…</div>
+              )}
               <figcaption style={styles.caption}>
                 {state.portal_url && (
                   <a href={state.portal_url} target="_blank" rel="noreferrer" style={styles.link}>
@@ -303,6 +329,15 @@ const styles: Record<string, React.CSSProperties> = {
     border: `1px solid ${palette.slate200}`,
     borderRadius: 8,
     display: 'block',
+  },
+  shotSkeleton: {
+    border: `1px dashed ${palette.slate300}`,
+    borderRadius: 8,
+    padding: '48px 16px',
+    textAlign: 'center',
+    color: palette.slate400,
+    fontSize: 12,
+    background: palette.slate100,
   },
   caption: { fontSize: 11, color: palette.slate400, marginTop: 6 },
   link: { color: palette.brand500 },

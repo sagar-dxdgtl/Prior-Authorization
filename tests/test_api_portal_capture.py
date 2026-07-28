@@ -97,10 +97,19 @@ def test_unknown_job_is_404(monkeypatch, auth_header):
     assert _client().get("/api/portal/capture/deadbeef", headers=auth_header).status_code == 404
 
 
+@pytest.mark.db
+def test_screenshot_requires_auth():
+    """Names embed the NPI and a timestamp, and NPIs are public — unauthenticated access would
+    make the set effectively enumerable, and which providers a clinic is checking is not public."""
+    assert _client().get("/api/portal/screenshot/anything.png").status_code == 401
+
+
+@pytest.mark.db
 @pytest.mark.parametrize("name", ["../../../../etc/passwd", "..%2Fsecret.png", "notapng.txt", "a/b.png"])
-def test_screenshot_endpoint_refuses_path_traversal(name):
-    """Screenshots are served by name, so the name must never walk out of LIVE_SHOT_DIR."""
-    r = _client().get(f"/api/portal/screenshot/{name}")
+def test_screenshot_endpoint_refuses_path_traversal(name, auth_header):
+    """Screenshots are served by name, so the name must never walk out of LIVE_SHOT_DIR —
+    checked with a VALID token, so containment is proven independently of the auth gate."""
+    r = _client().get(f"/api/portal/screenshot/{name}", headers=auth_header)
     assert r.status_code in (400, 404), f"{name} returned {r.status_code}"
 
 
