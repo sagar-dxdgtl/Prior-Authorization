@@ -183,8 +183,10 @@ def check_network(
     # directory: commercial members can resolve LIVE from TiC even with no credentialing row, while
     # MA/Medicaid/Dual stay on credentialing (TiC is federally exempt there). The member's real plan
     # (271, via q.plan_hint) plus the payer row's benefit_type decide the line of business. Fires
-    # only when a billing TIN is present; otherwise fall through to the directory leg as before.
-    if q.npi and q.tin:
+    # whenever an NPI is present — the resolver gates on the billing TIN itself, EXCEPT for
+    # no-network coverage (Original Medicare / Medigap), which is settled by Medicare participation
+    # and needs only the NPI. With no NPI, fall through to the directory leg as before.
+    if q.npi:
         from network_probe.domain.provider_network import resolve_provider_network
 
         row = _catalogue_row(q.payer, catalogue)

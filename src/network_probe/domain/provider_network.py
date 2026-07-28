@@ -23,9 +23,13 @@ Returns a NetworkVerdict to short-circuit check_network, or None to let the dire
 
 from __future__ import annotations
 
-from network_probe.domain.line_of_business import line_of_business
+from network_probe.domain.line_of_business import has_provider_network, line_of_business
 from network_probe.domain.models import NetworkStatus, NetworkVerdict, ProviderQuery
-from network_probe.domain.tic_network import tic_network_status
+from network_probe.domain.tic_network import (
+    tic_network_status,
+    tic_roster_networks,
+    tic_tin_in_roster,
+)
 
 _EXEMPT = {"medicare", "medicaid", "dual", "federal"}
 
@@ -59,6 +63,76 @@ def enrollment_negative(q, lob, pecos_fn=None, medicaid_fn=None):
         confidence="high",
         notes=f"{res.detail} A provider not enrolled in the program cannot be in-network for it.",
         corroboration=[{"source": "Enrollment", "result": "contradicts", "detail": res.detail}],
+    )
+
+
+def no_network_verdict(q, pecos_fn=None) -> NetworkVerdict:
+    """Settle coverage that has NO provider network — Original Medicare (FFS) and Medicare
+    Supplement / Medigap.
+
+    There is nothing to be in or out of: a provider who accepts Medicare assignment is in-network by
+    definition, and one not enrolled in Medicare cannot bill it at all. So Medicare participation
+    (PECOS) IS the answer here, and a network directory — which has no opinion to give — must never
+    be consulted. This ALWAYS returns a verdict rather than None: returning None would fall through
+    to the directory leg, which is precisely the false-OON path this branch exists to close.
+    """
+    if not q.npi:
+        return NetworkVerdict(
+            status=NetworkStatus.UNKNOWN,
+            matched_provider=None,
+            plan_or_network_checked=f"{q.payer} — {q.plan_hint or 'Original Medicare / Medigap'}",
+            source_url="enrollment",
+            confidence="low",
+            notes=(
+                "This coverage has no provider network (Original Medicare / Medicare Supplement), so "
+                "Medicare participation decides it — but no NPI was supplied to check."
+            ),
+        )
+
+    from network_probe.domain.enrollment import live_enabled, pecos_enrollment
+
+    if pecos_fn is None and live_enabled():
+        pecos_fn = pecos_enrollment
+    res = pecos_fn(q.npi) if pecos_fn is not None else None
+
+    base = (
+        f"{q.plan_hint or 'This coverage'} has no provider network — it pays alongside Original "
+        f"Medicare — so a Medicare-participating provider is in-network by definition and the payer's "
+        f"network directory has no opinion to give."
+    )
+    if res is not None and res.enrolled is True:
+        return NetworkVerdict(
+            status=NetworkStatus.IN_NETWORK,
+            matched_provider={"npi": q.npi, "tin": q.tin, "enrollment_program": res.program, "enrolled": True},
+            plan_or_network_checked=f"{q.payer} — {res.program} participation (no provider network)",
+            source_url="enrollment",
+            confidence="high",
+            notes=f"{base} {res.detail}",
+            corroboration=[{"source": "Enrollment", "result": "corroborates", "detail": res.detail}],
+        )
+    if res is not None and res.enrolled is False:
+        return NetworkVerdict(
+            status=NetworkStatus.OUT_OF_NETWORK,
+            matched_provider={"npi": q.npi, "tin": q.tin, "enrollment_program": res.program, "enrolled": False},
+            plan_or_network_checked=f"{q.payer} — {res.program} participation (no provider network)",
+            source_url="enrollment",
+            confidence="high",
+            notes=f"{base} {res.detail} A provider not enrolled in Medicare cannot bill it at all.",
+            corroboration=[{"source": "Enrollment", "result": "contradicts", "detail": res.detail}],
+        )
+    detail = res.detail if res is not None else "no Medicare enrollment lookup was available"
+    return NetworkVerdict(
+        status=NetworkStatus.UNKNOWN,
+        matched_provider={"npi": q.npi, "tin": q.tin},
+        plan_or_network_checked=f"{q.payer} — Medicare participation (no provider network)",
+        source_url="enrollment",
+        confidence="low",
+        notes=(
+            f"{base} Medicare participation could not be confirmed ({detail}), so this is UNKNOWN — "
+            f"deliberately NOT referred to the payer's network directory, which could only answer "
+            f"about a network this member does not have."
+        ),
+        corroboration=[{"source": "Enrollment", "result": "inconclusive", "detail": detail}],
     )
 
 
@@ -137,6 +211,61 @@ def _tic_in_verdict(q: ProviderQuery, known: list) -> NetworkVerdict:
     )
 
 
+def _physician_gap_verdict(
+    q: ProviderQuery, others: list, networks: list | None = None, npi_tins: list | None = None
+) -> NetworkVerdict:
+    """The one OON that Transparency-in-Coverage can license: the billing TIN is in the payer's
+    in-network roster under other NPIs, ours is not. `group_contracted` is set so the determination
+    layer labels it Physician OON rather than payer-level OON.
+
+    `networks` names the roster(s) the evidence came from. A payer key can span several networks
+    (Oscar GA sells both 063 and 065), and a TIN in one roster says nothing about the other — so
+    the scope of the evidence goes in the note rather than being quietly generalised."""
+    scope = (
+        f" Evidence is from {', '.join(networks)}; a TIN in one network's roster says nothing "
+        f"about the payer's other networks."
+        if networks
+        else ""
+    )
+    # "Contracted, but under a different tax ID" is a contracting problem, not a credentialing
+    # one — and it is actionable in a way that a flat OON is not. Say which TIN, when we know.
+    elsewhere = (
+        f" NOTE: this NPI IS in-network with this payer under other billing TIN(s) "
+        f"{', '.join(npi_tins)} — claims billed under {q.tin} would still price out-of-network, "
+        f"but the provider is contracted, just not under this tax ID."
+        if npi_tins
+        else ""
+    )
+    return NetworkVerdict(
+        status=NetworkStatus.OUT_OF_NETWORK,
+        matched_provider={
+            "npi": q.npi,
+            "tin": q.tin,
+            "tic": True,
+            "group_contracted": True,
+            "roster_npis_at_tin": others,
+            "roster_networks": networks or [],
+            "in_network_tins_for_npi": npi_tins or [],
+        },
+        plan_or_network_checked=f"{q.payer} Transparency-in-Coverage in-network MRF (roster at TIN {q.tin})",
+        source_url="tic-mrf",
+        confidence="medium",
+        notes=(
+            f"Physician gap: billing TIN {q.tin} is in-network in {q.payer}'s Transparency-in-Coverage "
+            f"MRF under {len(others)} other NPI(s), but NPI {q.npi} is not among them — the group is "
+            f"contracted and this physician is not. This is presence-under-other-NPIs, not absence: a "
+            f"TIN merely missing from an MRF would prove nothing." + scope + elsewhere
+        ),
+        corroboration=[
+            _sig(
+                "contradicts",
+                f"Billing TIN {q.tin} is in {q.payer}'s Transparency-in-Coverage in-network MRF under "
+                f"{len(others)} other NPI(s); NPI {q.npi} is absent from that roster.",
+            )
+        ],
+    )
+
+
 def _conflict_verdict(q: ProviderQuery, cred, known: list) -> NetworkVerdict:
     return NetworkVerdict(
         status=NetworkStatus.REVIEW,
@@ -161,8 +290,16 @@ def resolve_provider_network(
     benefit_type: str | None = None,
     credentialing=None,
     crosswalk=None,
+    store=None,
+    pecos_fn=None,
 ) -> NetworkVerdict | None:
     """Resolve provider-INN from credentialing + TiC, gated by line of business. See module docstring."""
+    # Checked FIRST, and ahead of the billing-TIN gate: coverage with no provider network at all
+    # (Original Medicare FFS / Medicare Supplement-Medigap) is answered by Medicare participation,
+    # not by any network source, and needs only an NPI.
+    if not has_provider_network(q.plan_hint, benefit_type):
+        return no_network_verdict(q, pecos_fn=pecos_fn)
+
     if not (q.npi and q.tin):
         return None
     if credentialing is None:
@@ -191,7 +328,7 @@ def resolve_provider_network(
         return None
 
     # Commercial (or unknown): TiC is the live signal.
-    tic_status, known = tic_network_status(q.payer, q.npi, q.tin, crosswalk=crosswalk)
+    tic_status, known = tic_network_status(q.payer, q.npi, q.tin, crosswalk=crosswalk, store=store)
     tic_in = tic_status == NetworkStatus.IN_NETWORK
 
     if cred is not None and tic_in:
@@ -205,7 +342,26 @@ def resolve_provider_network(
             return v
         return _conflict_verdict(q, cred, known)
 
+    # Our (NPI, TIN) pair isn't in the MRF. Is the TIN there under OTHER NPIs? That is the
+    # physician gap — the group is contracted, this physician is not — and the only OON that
+    # TiC can license. A TIN simply absent from the MRF still proves nothing.
+    gap_present, gap_others = tic_tin_in_roster(
+        q.payer, q.tin, npi=q.npi, crosswalk=crosswalk, store=store
+    )
+    gap = gap_present and bool(gap_others)
+
     if cred is not None:
+        if gap:
+            detail = (
+                f"Billing TIN {q.tin} IS in {q.payer}'s Transparency-in-Coverage in-network MRF under "
+                f"{len(gap_others)} other NPI(s), but NPI {q.npi} is not among them — the group is "
+                f"contracted and this physician is not."
+            )
+            # A credentialing OON and an MRF physician gap say the same thing; a credentialing IN
+            # is not contradicted by it, because absence from an MRF is never proof of OON.
+            return _cred_verdict(
+                q, cred, _sig("corroborates" if not cred.in_network else "inconclusive", detail)
+            )
         detail = (
             f"Billing TIN {q.tin} not found in {q.payer}'s Transparency-in-Coverage MRF"
             + (f" (MRF lists other TINs for this NPI: {sorted(known)})" if known else "")
@@ -215,5 +371,12 @@ def resolve_provider_network(
 
     if tic_in:
         return _tic_in_verdict(q, known)
+
+    if gap:
+        return _physician_gap_verdict(
+            q, gap_others,
+            networks=tic_roster_networks(q.payer, q.tin, store=store),
+            npi_tins=known,  # in-network TINs the MRF holds for THIS NPI (see tic_network_status)
+        )
 
     return None  # nothing decisive → let the directory leg run

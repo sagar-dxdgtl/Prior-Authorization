@@ -68,3 +68,40 @@ def test_unknown_both_is_not_commercial():
     # conservative: with no signal either way, do NOT claim commercial (would wrongly invite TiC)
     assert line_of_business(None, None) == "unknown"
     assert is_commercial(None, None) is False
+
+
+# ---- P3: coverage that has NO provider network at all ----------------------------------
+#
+# Original Medicare (FFS) and Medicare Supplement / Medigap have no network. Asking a
+# network directory about such a member can only return UNKNOWN or a false OON, because a
+# Medicare-participating provider is in-network by definition.
+# See HANDOFF-2026-07-28.md §1 P3 (Roulhac, NPI 1801837109, Humana CO — staff INN).
+
+from network_probe.domain.line_of_business import has_provider_network  # noqa: E402
+
+
+def test_medicare_supplement_has_no_provider_network():
+    assert has_provider_network("Humana Medicare Supplement Plan G", None) is False
+
+
+def test_medigap_has_no_provider_network():
+    assert has_provider_network("Medigap Plan F", None) is False
+
+
+def test_original_medicare_has_no_provider_network():
+    assert has_provider_network("Original Medicare", None) is False
+    assert has_provider_network(None, "Medicare FFS") is False
+
+
+def test_medicare_advantage_does_have_a_network():
+    assert has_provider_network("AARP Medicare Advantage PPO", None) is True
+    assert has_provider_network("Humana Honor PPO H1036", None) is True
+
+
+def test_commercial_has_a_network():
+    assert has_provider_network("Cigna Open Access Plus", "Commercial") is True
+
+
+def test_advantage_wins_over_a_bare_supplemental_word():
+    """'Supplemental benefits' is standard Medicare Advantage marketing — not Medigap."""
+    assert has_provider_network("UHC Medicare Advantage with supplemental dental", None) is True

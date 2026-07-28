@@ -29,6 +29,21 @@ _FEDERAL = re.compile(r"tricare|champva|\bva\b|veteran", re.I)
 # commercial markers — checked only when NO non-commercial marker is present anywhere
 _COMMERCIAL = re.compile(r"commercial|\baca\b|exchange|marketplace|\bppo\b|\bhmo\b|\bepo\b|\bpos\b|open access", re.I)
 
+# --- "is there a network at all?" markers (a different axis again — see has_provider_network) ---
+# Medicare Advantage (Part C) HAS a network. Checked first so it always beats the two below: an H/R/S
+# contract number or the word "Advantage" is decisive MA, and "supplemental benefits" is routine MA
+# marketing copy that must never be read as Medigap.
+_ADVANTAGE = re.compile(r"advantage|\bmapd\b|\bma-?pd\b|\bpart c\b|\bh\d{4}\b|\br\d{4}\b|\bs\d{4}\b", re.I)
+# Medicare Supplement / Medigap — pays alongside Original Medicare, no network of its own.
+_MEDIGAP = re.compile(r"medigap|medicare\s+supplement|\bmed\s?supp\b|supplement\s+plan\b", re.I)
+# Original Medicare / fee-for-service Part A & B. "medicare a"/"medicare part b" style only — the
+# \b after the letter keeps "Medicare Advantage" from matching on its leading "a".
+_ORIGINAL_MEDICARE = re.compile(
+    r"original\s+medicare|traditional\s+medicare|medicare\s+ffs|fee-?for-?service"
+    r"|medicare\s+(part\s+)?(a\s*(and|&|/|\+)\s*b|[ab])\b",
+    re.I,
+)
+
 
 def _noncommercial_lob(text: str | None) -> str | None:
     t = text or ""
@@ -63,6 +78,22 @@ def line_of_business(plan: str | None, benefit_type: str | None) -> str:
 def is_commercial(plan: str | None, benefit_type: str | None) -> bool:
     """True only for commercial/ACA lines — the ones subject to the TiC MRF mandate."""
     return line_of_business(plan, benefit_type) == "commercial"
+
+
+def has_provider_network(plan: str | None, benefit_type: str | None) -> bool:
+    """Does this coverage have a provider network at all?
+
+    False for **Original Medicare (FFS)** and **Medicare Supplement / Medigap**: neither has a
+    network, so a Medicare-participating provider is in-network by definition and a network
+    directory has no opinion to give. Asking one anyway can only yield UNKNOWN or a false OON.
+
+    Medicare Advantage is checked FIRST and always wins: an MA plan does have a network, and
+    "supplemental benefits" is standard MA marketing language that must not read as Medigap.
+    """
+    blob = f"{plan or ''} {benefit_type or ''}"
+    if _ADVANTAGE.search(blob):
+        return True
+    return not (_MEDIGAP.search(blob) or _ORIGINAL_MEDICARE.search(blob))
 
 
 # --- plan TYPE (a different axis than line of business) ------------------------------------------
