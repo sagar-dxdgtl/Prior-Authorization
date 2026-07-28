@@ -78,11 +78,22 @@ def test_kyle_fl_medicare_hmo_is_unknown_not_oon():
     assert "Medicare PPO" in (v.matched_provider["networks"])
 
 
-def test_kyle_no_hint_lists_networks_in_network():
+def test_kyle_no_hint_lists_networks_but_is_unknown():
+    """Presence in SOME network is not presence in the MEMBER's network.
+
+    With a plan hint that matches nothing the adapter already returned UNKNOWN; with NO plan hint
+    it returned IN_NETWORK — less information yielding a MORE confident verdict. Live proof of the
+    harm (2026-07-28): Ins Test 3 row 1 is UHC **Medicare Advantage Georgia**, and flex.optum put
+    NPI 1902811656 IN_NETWORK on the strength of "New Mexico Choice Network" and "AZ Individual
+    Exchange Benefit Plan" — not one Georgia MA network among them. Row 10 (Wellcare **Medicare
+    Advantage** GA) read IN_NETWORK off "Exchange GA" / "Medicaid GA".
+
+    The networks are still reported: this is UNKNOWN for want of a plan, not a denial.
+    """
     v = _offline().check_network(_q(KYLE_NPI, ""))
-    assert v.status == NetworkStatus.IN_NETWORK
-    assert v.confidence == "medium"
-    assert len(v.matched_provider["networks"]) >= 5
+    assert v.status == NetworkStatus.UNKNOWN
+    assert len(v.matched_provider["networks"]) >= 5   # the evidence survives
+    assert "network" in v.notes.lower()
 
 
 def test_unknown_npi_is_unknown_not_oon():
@@ -336,12 +347,18 @@ def _centene_adapter() -> FhirPdexAdapter:
 
 def test_centene_shaped_server_falls_back_to_full_reference():
     """Bare id returns zero roles (Centene's real behavior) -> retry with Practitioner/<id> ->
-    resolves the real network."""
+    resolves the real network.
+
+    Asserts the FALLBACK, not the verdict: with no plan hint the status is UNKNOWN (a directory
+    spans lines of business, so presence in some network is not the member's network — see
+    test_kyle_no_hint_lists_networks_but_is_unknown). What this test pins is that the retry
+    actually resolved the network rather than returning empty, which the payload proves.
+    """
     v = _centene_adapter().check_network(
         ProviderQuery(payer="meridian", plan_hint="", npi=CENTENE_NPI, provider_last_name="Petermann")
     )
-    assert v.status == NetworkStatus.IN_NETWORK
-    assert "IL SNP" in v.matched_provider["networks"]
+    assert "IL SNP" in v.matched_provider["networks"]  # the fallback resolved it
+    assert v.status == NetworkStatus.UNKNOWN           # but no plan given -> network not pinned
 
 
 def test_centene_shaped_server_genuinely_zero_roles_is_unknown():
@@ -406,3 +423,4 @@ def test_uhc_optum_public_fhir_live():
         pytest.skip(f"live UHC FHIR unreachable: {exc}")
     assert v.status == NetworkStatus.IN_NETWORK, v.notes
     assert v.matched_provider["networks"], "expected resolved network names"
+

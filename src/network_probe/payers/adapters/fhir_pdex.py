@@ -354,16 +354,26 @@ class FhirPdexAdapter(PayerAdapter):
             )
 
         if not (q.plan_hint or "").strip():
+            # Presence in SOME network is not presence in the MEMBER's network, and a payer's
+            # directory spans lines of business and states: Ins Test 3 row 1 (UHC Medicare
+            # Advantage GEORGIA) resolved onto "New Mexico Choice Network" / "AZ Individual
+            # Exchange Benefit Plan", and row 10 (Wellcare Medicare Advantage GA) onto "Exchange
+            # GA" / "Medicaid GA". Reporting those as IN_NETWORK is a false IN.
+            # This mirrors the branch below — plan given but unmatched is already UNKNOWN, so no
+            # plan at all cannot be MORE certain. The networks stay in the payload as evidence.
             return NetworkVerdict(
-                status=NetworkStatus.IN_NETWORK,
+                status=NetworkStatus.UNKNOWN,
                 matched_provider=base_provider,
-                plan_or_network_checked=f"{self.payer_name} (any network)",
+                plan_or_network_checked=f"{self.payer_name} (no plan given — network not pinned)",
                 source_url=srcs,
-                confidence="medium",
+                confidence="low",
                 notes=(
-                    f"{name} (NPI {q.npi}) is a contracted {self.payer_name} provider in "
+                    f"{name} (NPI {q.npi}) is in the {self.payer_name} directory under "
                     f"{len(networks)} network(s): {', '.join(networks[:8])}"
-                    f"{'…' if len(networks) > 8 else ''}. No plan hint given to narrow to one."
+                    f"{'…' if len(networks) > 8 else ''}. No plan was given, so the member's network "
+                    f"could not be pinned — a payer's directory spans lines of business and states, "
+                    f"so participation in one of these is not participation in the member's plan. "
+                    f"Provider is contracted with this payer; which network remains undetermined."
                 ),
             )
 
