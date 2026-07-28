@@ -354,6 +354,21 @@ class RecheckRequest(BaseModel):
     stedi_network_status: str = "UNKNOWN"
 
 
+class PortalCaptureRequest(BaseModel):
+    """A find-a-doctor walk for one provider. Provider + clinic fields ONLY — no member PHI ever
+    reaches a portal (HANDOFF §7); `plan` is the network to pin, taken from the live 271."""
+
+    payer_key: str
+    npi: str
+    plan: str | None = None
+    provider_first_name: str | None = None
+    provider_last_name: str | None = None
+    state: str | None = None
+    city: str | None = None
+    zip: str | None = None
+    tin: str | None = None
+
+
 class OverrideRequest(BaseModel):
     payer: str
     npi: str
@@ -535,6 +550,87 @@ def check_from_report(file: UploadFile = File(...), ctx: RequestContext = Depend
         return JSONResponse(status_code=400, content={"message": "could not complete check", "request_id": rid})
     write_audit(ctx, "report_ingest", q, _result_from_verdict(verdict), rid)
     return {"payer": q.payer, "parsed": parsed, "request_id": rid, **verdict.to_dict()}
+
+
+@app.post("/api/portal/capture")
+def portal_capture_start(req: PortalCaptureRequest, ctx: RequestContext = Depends(enforce_quota)):
+    """Start a find-a-doctor walk for one provider and return immediately with a job id.
+
+    A walk takes 40-210s live, so it cannot block the eligibility response. The caller renders the
+    fast verdict (directory + TiC + credentialing + PBP) at once, then polls
+    /api/portal/capture/{job_id} for the portal proof.
+
+    `plan` should be the network pinned from the member's live 271: a portal verdict is only valid
+    for the network it was searched in, and with no plan the drivers correctly return UNKNOWN
+    rather than answer from an un-pinned directory.
+    """
+    if not valid_npi(req.npi):
+        raise HTTPException(status_code=400, detail={"message": "invalid NPI"})
+    from network_probe.portal.capture import driver_for
+    from network_probe.portal.jobs import default_capture_jobs
+    from network_probe.portal.models import PortalQuery
+
+    if driver_for(req.payer_key) is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"message": f"no portal driver for payer {req.payer_key!r}"},
+        )
+    # The provider's name comes from NPPES (a public registry keyed by NPI) when the caller does not
+    # supply it — NEVER from the member fields on the eligibility form. Portals are searched by
+    # provider name + clinic ZIP, and a member name reaching a payer's public search box is exactly
+    # what HANDOFF §7 forbids. Resolving it server-side means a caller cannot get this wrong.
+    first, last = req.provider_first_name or None, req.provider_last_name or None
+    if not last:
+        from network_probe.core._http import CachedClient
+        from network_probe.domain.report_ingest import _nppes_name
+
+        first, last = _nppes_name(req.npi, CachedClient())
+
+    q = PortalQuery(
+        payer_key=req.payer_key,
+        npi=req.npi,
+        provider_first_name=first,
+        provider_last_name=last,
+        plan=req.plan or None,
+        state=req.state or None,
+        city=req.city or None,
+        zip_code=req.zip or None,
+        tin=req.tin or None,
+    )
+    job_id = default_capture_jobs().submit(q)
+    log.info("portal capture %s queued for %s/%s", job_id, req.payer_key, req.npi)
+    return {"job_id": job_id, "status": "queued", "poll": f"/api/portal/capture/{job_id}"}
+
+
+@app.get("/api/portal/capture/{job_id}")
+def portal_capture_status(job_id: str, ctx: RequestContext = Depends(get_context)):
+    """Poll a capture. `status` is queued | running | done | error; the portal verdict and the
+    screenshot filename appear once it is done."""
+    from network_probe.portal.jobs import default_capture_jobs
+
+    job = default_capture_jobs().get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail={"message": "unknown capture job"})
+    return job.to_dict()
+
+
+@app.get("/api/portal/screenshot/{name}")
+def portal_screenshot(name: str):
+    """Serve one capture screenshot by filename.
+
+    Deliberately NOT a mounted static directory: only a plain .png basename resolving inside
+    LIVE_SHOT_DIR is served, so a crafted name cannot walk out of it.
+    """
+    from fastapi.responses import FileResponse
+
+    from network_probe.portal.capture import LIVE_SHOT_DIR
+
+    if "/" in name or "\\" in name or not name.endswith(".png"):
+        raise HTTPException(status_code=400, detail={"message": "bad screenshot name"})
+    path = (LIVE_SHOT_DIR / name).resolve()
+    if not str(path).startswith(str(Path(LIVE_SHOT_DIR).resolve())) or not path.is_file():
+        raise HTTPException(status_code=404, detail={"message": "screenshot not found"})
+    return FileResponse(path, media_type="image/png")
 
 
 @app.post("/api/override")

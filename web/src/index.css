@@ -53,3 +53,18 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.4px;
 }
+
+/* Portal-proof tab: the capture takes 40-210s against a live payer, so the wait needs to look
+   alive without faking progress we don't have. The bar loops rather than fills — it reports
+   "still working", not a percentage we cannot know. */
+@keyframes portalPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.35; transform: scale(0.8); }
+}
+@keyframes portalSlide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(320%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  [style*="portalPulse"], [style*="portalSlide"] { animation: none !important; }
+}

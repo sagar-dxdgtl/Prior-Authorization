@@ -266,7 +266,25 @@ export default function Eligibility() {
         </Card>
       )}
 
-      <ResultsView result={result} />
+      <ResultsView
+        result={result}
+        portalTarget={
+          submitted?.npi
+            ? {
+                payer_key: submitted.payer,
+                npi: submitted.npi,
+                // The network to pin, from the live 271. Without it the drivers correctly
+                // return UNKNOWN rather than answer from an un-pinned directory.
+                plan: result?.selected_plan ?? result?.plan_name ?? null,
+                state: submitted.state ?? null,
+                zip: submitted.zip ?? null,
+                tin: submitted.tin ?? null,
+                // NB: submitted.first_name / last_name are the MEMBER's — never sent to a portal.
+                // The server resolves the provider's name from NPPES by NPI instead.
+              }
+            : null
+        }
+      />
     </AppShell>
   );
 }

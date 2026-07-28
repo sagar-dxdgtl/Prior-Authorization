@@ -1,6 +1,7 @@
 import { Table, Card, Typography, Divider, Tabs } from 'antd';
 import type { TableColumnsType } from 'antd';
 import { palette } from '../theme/tokens';
+import PortalProofTab, { type PortalTarget } from './PortalProofTab';
 
 const { Text } = Typography;
 
@@ -208,7 +209,15 @@ const matrixColumns: TableColumnsType<MatrixRow> = [
   },
 ];
 
-export default function ResultsView({ result }: { result: EligibilityResponse | null }) {
+export default function ResultsView({
+  result,
+  portalTarget = null,
+}: {
+  result: EligibilityResponse | null;
+  /** Provider + clinic only. The member's name must never reach a payer portal, so it is
+   *  deliberately absent here — the server resolves the provider's name from NPPES by NPI. */
+  portalTarget?: PortalTarget | null;
+}) {
   if (!result) {
     return (
       <div style={styles.emptyState}>
@@ -252,7 +261,20 @@ export default function ResultsView({ result }: { result: EligibilityResponse | 
     { title: 'Detail', dataIndex: 'detail', key: 'detail', render: (v: string) => <span style={{ fontSize: 12 }}>{v}</span> },
   ];
 
+  const portalTone: Tone =
+    result.network_verdict?.status === 'IN_NETWORK'
+      ? 'success'
+      : result.network_verdict?.status === 'OUT_OF_NETWORK'
+        ? 'danger'
+        : 'neutral';
+
   const tabItems = [
+    {
+      key: 'portal',
+      label: <TabLabel tone={portalTone} text="Portal proof" />,
+      children: <PortalProofTab target={portalTarget} />,
+    },
+
     {
       key: 'sources',
       label: <TabLabel tone={determinationTone(result.determination?.code)} text="Sources" />,
