@@ -183,6 +183,10 @@ ROSTER = [
     ("Aetna", "Medicare Advantage", "GA-Atlanta", "60054", "needs_enrollment"),
     ("Alliant Health Plans", "Commercial", "GA-Atlanta", "58234", "needs_enrollment"),
     ("Ambetter (Centene)", "ACA", "GA-Atlanta", "68069", "needs_enrollment"),
+    # Wellcare GA — added for the Ins Test 3 sheet row (Manayan, Kennesaw GA). Same label, line and
+    # Stedi id (68069, Centene) as the AZ/IL/TX/NJ Wellcare rows, so nothing here is a new guess; GA
+    # was simply the one market missing when Test 3 arrived.
+    ("Wellcare (Centene)", "Medicare Advantage", "GA-Atlanta", "68069", "needs_enrollment"),
     # Stedi 00601 = "Anthem Blue Cross Blue Shield of Georgia" (GA's Blue IS Elevance),
     # eligibilityCheck=SUPPORTED. Validated live 2026-07-18 against this client's member NHM6323757AB
     # (active). Directory already routes to the Anthem authorized-FHIR endpoint via SOURCE_OVERRIDES.
