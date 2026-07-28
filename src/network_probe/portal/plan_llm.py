@@ -64,11 +64,55 @@ class _Choice(BaseModel):
     reason: str = Field(description="One short sentence naming what in the plan string decided it.")
 
 
+#: An API key that has found its way into an exception message. Logged output from this module is
+#: read off demo machines and pasted into chats, so diagnosability must not leak a credential.
+_API_KEY_SHAPE = re.compile(r"sk-ant-[A-Za-z0-9_\-]+")
+
+
 def scrub_descriptor(text: str | None) -> str:
     """Strip member identifiers from a plan string, keeping the plan descriptors."""
     if not text:
         return ""
     return _MEMBER_NUMERIC.sub(_REDACTED, _MEMBER_ALPHA.sub(_REDACTED, text))
+
+
+def _scrub_error(exc: Exception) -> str:
+    return _API_KEY_SHAPE.sub(_REDACTED, str(exc))
+
+
+def _settings_api_key() -> str | None:
+    try:
+        from network_probe.core.config import get_settings
+
+        return get_settings().anthropic_api_key
+    except Exception:  # noqa: BLE001 — no settings is not an error here, just no key
+        return None
+
+
+def _build_client():
+    """An Anthropic client, or None with a log line that says which problem it is.
+
+    The key is resolved HERE rather than left to the SDK. `anthropic.Anthropic()` reads only
+    `os.environ`, so a key in `.env` — where every other secret in this project lives, and where
+    `Settings` reads it from — was invisible to it. The client then constructed successfully and
+    raised a bare `TypeError` at request time, which landed in the request handler and reported
+    itself as a malformed call. Tier 3 failed 100% of the time and said the wrong thing about why.
+    """
+    import os
+
+    key = os.environ.get("ANTHROPIC_API_KEY") or _settings_api_key()
+    if not key:
+        log.info(
+            "tier-3 plan disambiguation unavailable: no ANTHROPIC_API_KEY in the environment or .env"
+        )
+        return None
+    try:
+        import anthropic
+
+        return anthropic.Anthropic(api_key=key)
+    except Exception as exc:  # noqa: BLE001 — package missing/broken: fall back to UNKNOWN
+        log.info("tier-3 plan disambiguation unavailable (%s: %s)", type(exc).__name__, _scrub_error(exc))
+        return None
 
 
 def disambiguate_plan(wanted: str | None, options: list[str], *, client=None) -> PlanMatch | None:
@@ -83,12 +127,8 @@ def disambiguate_plan(wanted: str | None, options: list[str], *, client=None) ->
     labels = "\n".join(f"{i}. {scrub_descriptor(o)}" for i, o in enumerate(options))
 
     if client is None:
-        try:
-            import anthropic
-
-            client = anthropic.Anthropic()
-        except Exception as exc:  # noqa: BLE001 — no key, no package: fall back to UNKNOWN
-            log.info("tier-3 plan disambiguation unavailable (%s)", type(exc).__name__)
+        client = _build_client()
+        if client is None:
             return None
 
     try:
@@ -101,7 +141,9 @@ def disambiguate_plan(wanted: str | None, options: list[str], *, client=None) ->
             output_format=_Choice,
         )
     except Exception as exc:  # noqa: BLE001 — a model outage must never fail a capture
-        log.warning("tier-3 plan disambiguation failed: %s", type(exc).__name__)
+        # The message, not just the type: every distinct failure printed the same shape before, and
+        # that is what left a 100%-failing tier 3 sitting unexplained.
+        log.warning("tier-3 plan disambiguation failed: %s: %s", type(exc).__name__, _scrub_error(exc))
         return None
 
     # A safety decline returns HTTP 200 with stop_reason "refusal" and no usable content.

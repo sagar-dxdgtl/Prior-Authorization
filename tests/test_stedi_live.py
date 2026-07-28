@@ -59,20 +59,40 @@ def _call(payer: str, subscriber: dict) -> dict:
     return r.json()
 
 
-def test_live_error_path_parses_and_redacts():
-    """A synthetic member returns a real AAA error; our parser must yield an honest UNKNOWN with the
-    error CODE only (never the verbose payer text or the submitted member id)."""
+def test_live_unknown_member_is_honest_and_leaks_nothing():
+    """A synthetic member against a real payer: the verdict must stay UNKNOWN and nothing
+    identifying may survive parsing.
+
+    This used to assert an AAA error code, and it broke because Aetna stopped sending one for this
+    input — it now returns `errors: []` and a definite `planStatus: Inactive`. That assertion never
+    belonged in a live test: AAA parsing is deterministic and is already covered offline in
+    `test_parse_271.py`, so pinning it here only bought a dependency on one payer's current
+    behaviour. What a live call uniquely proves is the redaction contract, so that is what is left.
+
+    The payer echoes the submitted member id back, plus a placeholder subscriber of its own
+    ("HUMAN RESOURCES HELP DESK", a PO box in Honolulu). Both are checked: an identifier we sent and
+    a name/address we did not ask for must be equally absent from anything we keep.
+    """
     _require_key()
     data = _call(
         "60054", {"firstName": "Jane", "lastName": "Doe", "dateOfBirth": "19900101", "memberId": "NOSUCHMEMBER0"}
     )
     res = parse_271_benefits(data)
+    # Never a confident answer about a member the payer could not identify.
     assert res.network_status == NetworkStatus.UNKNOWN
-    assert res.coverage_active is None
-    assert res.source_audit.get("error_codes"), "expected a captured AAA error code"
+    assert res.coverage_active is not True
+
     blob = json.dumps(res.to_dict()) + json.dumps(res.source_audit)
     assert "possibleResolutions" not in blob, "verbose payer text must not be stored/returned"
     assert "NOSUCHMEMBER0" not in blob, "submitted member id must not leak into parsed output"
+    echoed = data.get("subscriber") or {}
+    for field in ("memberId", "firstName", "lastName"):
+        value = str(echoed.get(field) or "").strip()
+        if value:
+            assert value not in blob, f"payer-echoed subscriber {field} must not survive parsing"
+    for line in (echoed.get("address") or {}).values():
+        if str(line or "").strip():
+            assert str(line) not in blob, "payer-echoed subscriber address must not survive parsing"
 
 
 @pytest.mark.skipif(

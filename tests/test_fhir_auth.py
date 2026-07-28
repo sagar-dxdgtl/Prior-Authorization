@@ -209,9 +209,22 @@ def test_anthem_live_practitioner_lookup():
     )
     # A provider known to be present in the Elevance directory (verified via discovery probe).
     live_npi = os.environ.get("ANTHEM_LIVE_NPI", "1023054806")  # 'John D Smith, MD' (GA Medicaid networks)
-    try:
-        v = a.check_network(ProviderQuery(payer="anthem", plan_hint="", npi=live_npi, provider_last_name="Smith"))
-    except httpx.HTTPError as exc:
-        pytest.skip(f"live Anthem FHIR unreachable: {exc}")
-    assert v.status == NetworkStatus.IN_NETWORK, v.notes
-    assert v.matched_provider["networks"], "expected at least one network for a listed provider"
+
+    def _check(plan):
+        try:
+            return a.check_network(
+                ProviderQuery(payer="anthem", plan_hint=plan, npi=live_npi, provider_last_name="Smith")
+            )
+        except httpx.HTTPError as exc:
+            pytest.skip(f"live Anthem FHIR unreachable: {exc}")
+
+    # Asserted IN_NETWORK on an EMPTY plan until 2026-07-28 — the behaviour deliberately removed.
+    # A directory hit with no plan to pin means "contracted with this payer somewhere", and this
+    # NPI carries four distinct Georgia networks, so which one the member holds still decides it.
+    unpinned = _check("")
+    assert unpinned.status == NetworkStatus.UNKNOWN, unpinned.notes
+    networks = unpinned.matched_provider["networks"]
+    assert networks, "expected at least one network for a listed provider"
+
+    pinned = _check(networks[0])
+    assert pinned.status == NetworkStatus.IN_NETWORK, pinned.notes

@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     # Tier-3 plan disambiguation (portal/plan_llm.py). Off by default: it is the only path
     # that calls a model, and it may only ever pin a plan for SEARCHING — never license an OON.
     plan_llm_enabled: bool = False
+    # Read here rather than left to the SDK's own env lookup: `anthropic.Anthropic()` consults only
+    # os.environ, so a key living in .env (where every other secret here lives) was never seen and
+    # tier 3 failed 100% of the time with an unresolved-auth TypeError at request time.
+    anthropic_api_key: str | None = None
     residential_proxy_enabled: bool = False
     residential_proxy_host: str | None = None
     residential_proxy_port: int | None = None

@@ -415,12 +415,32 @@ def test_unknown_npi_is_unknown_live():
 
 @pytest.mark.live
 def test_uhc_optum_public_fhir_live():
-    """UnitedHealthcare via its public Optum FHIR endpoint (no login). Org-resolved networks."""
+    """UnitedHealthcare via its public Optum FHIR endpoint (no login). Org-resolved networks.
+
+    This asserted IN_NETWORK on an EMPTY plan until 2026-07-28, which is the behaviour that was
+    deliberately removed: a payer's directory spans lines of business and states, so a hit with no
+    plan to pin says only "contracted with this payer somewhere". This provider is live proof —
+    one NPI, four networks across TX, CO and WY. Reading that as in-network for a member whose plan
+    was never named is how three Test 3 rows nearly printed IN off the wrong state's network.
+    """
     a = FhirPdexAdapter(payer_name="uhc", client=CachedClient(cache_dir=None, delay_seconds=0.3))
-    try:
-        v = a.check_network(ProviderQuery(payer="uhc", plan_hint="", npi="1972603934", provider_last_name="Fradkin"))
-    except httpx.HTTPError as exc:
-        pytest.skip(f"live UHC FHIR unreachable: {exc}")
-    assert v.status == NetworkStatus.IN_NETWORK, v.notes
-    assert v.matched_provider["networks"], "expected resolved network names"
+
+    def _check(plan):
+        try:
+            return a.check_network(
+                ProviderQuery(payer="uhc", plan_hint=plan, npi="1972603934", provider_last_name="Fradkin")
+            )
+        except httpx.HTTPError as exc:
+            pytest.skip(f"live UHC FHIR unreachable: {exc}")
+
+    unpinned = _check("")
+    assert unpinned.status == NetworkStatus.UNKNOWN, unpinned.notes
+    networks = unpinned.matched_provider["networks"]
+    assert networks, "expected resolved network names"
+    assert len(networks) > 1, "this NPI is the multi-network case — pick another if that changes"
+
+    # …and the same lookup DOES settle once the member's network is named.
+    pinned = _check(networks[0])
+    assert pinned.status == NetworkStatus.IN_NETWORK, pinned.notes
+    assert pinned.confidence == "high"
 
