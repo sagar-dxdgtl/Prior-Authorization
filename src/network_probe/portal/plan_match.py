@@ -39,6 +39,15 @@ _CONTRACT = re.compile(r"\b([HRSE]\d{4})(\d{3})?(\d{3})?\b", re.I)
 # Market/plan codes payers print in plan names: "FL-0026", "FL-35", "IL-0001".
 _MARKET = re.compile(r"\b([A-Z]{2}-\d{1,4})\b", re.I)
 
+# ACA / marketplace HIOS Standard Component ID: 5-digit issuer + 2-char state + 7 digits, optionally
+# with a "-01" variant suffix (e.g. 12345FL0010001-01). Added because the Medicare-shaped identifiers
+# above are the WRONG shape for the exchange lines: measured on 2026-07-28, 0 of Oscar's 90 Florida
+# plan labels carried anything the contract/market patterns recognise, so `confirms_network` was
+# unreachable for every ACA row and both IN and OON were impossible regardless of driver quality.
+# The variant suffix is captured separately so a 271 naming the variant still matches a portal that
+# prints only the base component id.
+_HIOS = re.compile(r"\b(\d{5}[A-Z]{2}\d{7})(-\d{2})?\b", re.I)
+
 # Words that appear in nearly every plan name for a line of business and therefore distinguish
 # nothing. This list is the direct fix for the CareFlex mis-pin: without it, three shared words
 # ("AARP", "MEDICARE", "ADVANTAGE") looked like a strong match to every AARP product in the market.
@@ -80,7 +89,13 @@ def identifiers(text: str | None) -> set[str]:
     """Contract / PBP / market identifiers in a plan string. These are what actually identify a plan.
 
     A concatenated contract+PBP yields all three granularities (H2406018000 -> H2406, H2406018,
-    H2406018000) so a 271's full id still matches a portal that prints only the contract.
+    H2406018000) so a 271's full id still matches a portal that prints only the contract. A HIOS id
+    likewise yields the base component id alongside any variant.
+
+    Coverage is deliberately per-line, because the lines genuinely identify plans differently:
+    Medicare by contract/PBP, ACA by HIOS component id, commercial by market code. Managed Medicaid
+    has NO such identifier at all — that is a real gap, not an oversight, and a Medicaid driver
+    therefore cannot reach `confirms_network` through this function.
     """
     found: set[str] = set()
     for m in _CONTRACT.finditer(text or ""):
@@ -92,6 +107,11 @@ def identifiers(text: str | None) -> set[str]:
                 found.add(contract + pbp + segment)
     for m in _MARKET.finditer(text or ""):
         found.add(m.group(1).upper())
+    for m in _HIOS.finditer(text or ""):
+        base, variant = m.group(1).upper(), m.group(2)
+        found.add(base)
+        if variant:
+            found.add(base + variant)
     return found
 
 

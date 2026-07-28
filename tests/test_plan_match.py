@@ -96,3 +96,47 @@ def test_empty_and_missing_inputs_are_safe():
     assert match_plan("H2406", []) is None
     assert needs_disambiguation(None, UHC_FL_OPTIONS) is False
     assert needs_disambiguation("x", ["only one option"]) is False
+
+
+# --- ACA / HIOS ------------------------------------------------------------------------------------
+# Added 2026-07-28 after measuring that 0 of Oscar's 90 Florida plan labels carried any identifier the
+# Medicare-shaped patterns recognise. `confirms_network` was therefore unreachable for every ACA row,
+# which made both IN and OON impossible for that whole line regardless of driver quality.
+
+OSCAR_FL_OPTIONS = [
+    "Bronze Simple 99999FL0020002",
+    "Silver Simple CSR 150 12345FL0010001",
+    "Gold Classic 12345FL0030003",
+]
+
+
+def test_hios_component_id_pins_an_aca_plan():
+    m = match_plan("Oscar Silver Simple 12345FL0010001-01", OSCAR_FL_OPTIONS)
+    assert m is not None
+    assert m.index == 1
+    assert m.confirms_network is True, "a HIOS id must license an OON like a contract number does"
+
+
+def test_hios_variant_matches_a_portal_printing_only_the_base():
+    """A 271 naming the -01 variant must still match a label carrying only the component id."""
+    assert "12345FL0010001" in identifiers("12345FL0010001-01")
+    m = match_plan("12345FL0010001-01", ["Silver Simple 12345FL0010001"])
+    assert m is not None and m.confirms_network
+
+
+def test_hios_does_not_match_a_different_issuer_or_product():
+    assert match_plan("12345FL0010001", ["Bronze 99999FL0020002"]) is None
+
+
+def test_long_digit_runs_are_not_mistaken_for_hios_ids():
+    """Phone numbers, NPIs and member ids must never read as plan identifiers."""
+    for noise in ("5551234567", "1234567890", "member 101601541800", "NPI 1902811656"):
+        assert identifiers(noise) == set(), f"{noise!r} must yield no plan identifier"
+
+
+def test_medicaid_has_no_identifier_and_that_is_documented_behaviour():
+    """Managed Medicaid networks carry no CMS identifier at all, so confirms_network is unreachable
+    for that line through this function. Asserted so the gap stays visible rather than surprising a
+    future Medicaid driver author."""
+    assert identifiers("TX - Texas STAR") == set()
+    assert identifiers("Molina Healthcare Texas STAR / Managed Medicaid") == set()
