@@ -20,6 +20,7 @@ a failed/unreachable lookup returns ``enrolled = None`` (undetermined) — never
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date, datetime
 from urllib.parse import urlencode
 
 from network_probe.core._http import CachedClient
@@ -37,6 +38,47 @@ _PECOS_FLAGS = {"PARTB", "DME", "HHA", "PMD", "HOSPICE"}
 # Per-state Medicaid enrollment endpoints (extend from the screening project's medicaid_sources.csv).
 # NY: Socrata "Medicaid Enrolled Provider Listing".
 _NY_SOCRATA = "https://health.data.ny.gov/resource/keti-qx5t.json"
+
+# --- Medicare ASSIGNMENT (a different axis than enrollment — see assignment_status) --------------
+# CMS "Doctors and Clinicians" National Downloadable File — the data behind medicare.gov Care
+# Compare. `ind_assgn` is the individual's participation status and is the field Care Compare
+# renders as "Charges the Medicare-approved amount".
+_DAC_DATASET = "mj5m-pzi6"
+_DAC_QUERY = "https://data.cms.gov/provider-data/api/1/datastore/query/{ds}/0"
+# Opt-out affidavits get their own monthly file; resolve the current one the same way as PECOS.
+_OPTOUT_META = (
+    "https://data.cms.gov/jsonapi/node/dataset"
+    "?filter[field_dataset_type.name]=Opt Out Affidavits"
+    "&sort=-field_dataset_version"
+    "&fields[node--dataset]=title,field_dataset_version&page[limit]=1"
+)
+_OPTOUT_DATA = "https://data.cms.gov/data-api/v1/dataset/{ds}/data-viewer"
+
+#: assignment_status() outcomes.
+ACCEPTS = "accepts"  # ind_assgn = Y — charges the Medicare-approved amount
+MAY_EXCEED = "may-exceed"  # ind_assgn = M — non-participating, may balance-bill to the limiting charge
+OPTED_OUT = "opted-out"  # private contract in force — Medicare pays nothing
+UNKNOWN_ASSIGNMENT = "unknown"
+
+
+@dataclass
+class AssignmentResult:
+    status: str  # ACCEPTS | MAY_EXCEED | OPTED_OUT | UNKNOWN_ASSIGNMENT
+    detail: str
+    #: False when the opt-out file could not be reached. Opt-out is the only decisive NEGATIVE here,
+    #: so a caller must be able to discount an ACCEPTS that was never checked against it.
+    optout_checked: bool = True
+    flags: dict = field(default_factory=dict)
+    source_date: str | None = None
+
+    def to_dict(self) -> dict:
+        return {
+            "status": self.status,
+            "detail": self.detail,
+            "optout_checked": self.optout_checked,
+            "flags": self.flags,
+            "source_date": self.source_date,
+        }
 
 
 @dataclass
@@ -105,6 +147,158 @@ def pecos_enrollment(npi, client: CachedClient | None = None) -> EnrollmentResul
     enrolled = any(str(v).strip().upper() == "Y" for v in flags.values())
     tail = "Medicare-enrolled (PECOS)." if enrolled else "listed in PECOS but no active order/refer flags."
     return EnrollmentResult(enrolled, "medicare-pecos", f"NPI {n}: {tail}", flags=flags, source_date=src_date)
+
+
+def _as_date(v) -> date | None:
+    """Parse a CMS date string (MM/DD/YYYY, or ISO when a caller passes one). None if unreadable."""
+    s = str(v or "").strip()
+    for fmt in ("%m/%d/%Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _coerce_today(v) -> date:
+    if isinstance(v, date):
+        return v
+    return _as_date(v) or date.today()
+
+
+def _optout_row(n: str, client: CachedClient) -> dict | None:
+    """This NPI's row in the current Opt Out Affidavits file, keyed by lower-cased header, or None.
+
+    Lets transport errors propagate: the caller must be able to tell "checked, not opted out" from
+    "never checked", because only the former licenses an in-network answer.
+    """
+    meta = client.get_json(_OPTOUT_META, headers={"accept": "application/vnd.api+json"})
+    ds = ((meta.get("data") or [{}])[0] or {}).get("id")
+    if not ds:
+        raise RuntimeError("could not resolve the opt-out dataset id")
+    url = _OPTOUT_DATA.format(ds=ds) + "?" + urlencode({"keyword": n, "size": 20, "offset": 0})
+    data = client.get_json(url, headers={"accept": "application/json", "user-agent": "network-probe/1.0"})
+    headers = (data.get("meta") or {}).get("headers") or []
+    idx = {h.strip().lower(): i for i, h in enumerate(headers)}
+    npi_i = idx.get("npi")
+    if npi_i is None:
+        return None
+    # the data-viewer is a keyword search, so it also returns rows for OTHER people whose record
+    # happens to contain the digits — only an NPI-exact row is this provider.
+    for r in data.get("data") or []:
+        if len(r) > npi_i and _norm_npi(r[npi_i]) == n:
+            return {h: (r[i] if i < len(r) else None) for h, i in idx.items()}
+    return None
+
+
+def _optout_in_force(row: dict, today: date) -> bool:
+    """Is the affidavit CURRENT? The file retains historical opt-outs, so bare presence is not the
+    question — a provider whose opt-out ended years ago bills Medicare again today, and reading
+    presence alone would manufacture a false OON. Unreadable dates count as in force: withholding
+    an in-network answer is the safe direction, asserting one over a private contract is not."""
+    eff = _as_date(row.get("optout effective date"))
+    end = _as_date(row.get("optout end date"))
+    if eff is None or end is None:
+        return True
+    return eff <= today <= end
+
+
+def _dac_rows(n: str, client: CachedClient) -> list[dict]:
+    """Rows for this NPI in the Care Compare National Downloadable File (one per practice location)."""
+    url = _DAC_QUERY.format(ds=_DAC_DATASET) + "?" + urlencode(
+        {
+            "conditions[0][property]": "npi",
+            "conditions[0][value]": n,
+            "conditions[0][operator]": "=",
+            "limit": 50,
+        }
+    )
+    data = client.get_json(url, headers={"accept": "application/json"})
+    return [r for r in (data.get("results") or []) if _norm_npi(r.get("npi")) == n]
+
+
+def assignment_status(npi, client: CachedClient | None = None, today=None) -> AssignmentResult:
+    """Does this provider accept Medicare assignment — and is there a private contract in the way?
+
+    This is the fact a no-network (Original Medicare / Medigap) member actually needs, and it is
+    strictly stronger than PECOS enrollment. Two CMS sources, checked in this order:
+
+      1. **Opt Out Affidavits** — decisive and checked first. A provider with a current affidavit
+         treats Medicare patients under a private contract; Medicare pays nothing, so neither does
+         a supplement. This outranks the assignment flag, which can still read "Y" for them.
+      2. **National Downloadable File** (`ind_assgn`) — the Care Compare backing data.
+         `Y` → charges the Medicare-approved amount. `M` → non-participating: may balance-bill up
+         to the 115% limiting charge, which only Medigap Plan F/G cover.
+
+    Never returns a negative it cannot back up: the flag has **no "N" value** (verified live: Y and
+    M only), so a provider missing from the file is UNKNOWN, not "does not accept assignment".
+    """
+    n = _norm_npi(npi)
+    if len(n) != 10:
+        return AssignmentResult(UNKNOWN_ASSIGNMENT, "no valid NPI to check", optout_checked=False)
+    client = client or CachedClient()
+
+    optout_checked, optout_note = True, ""
+    try:
+        row = _optout_row(n, client)
+    except Exception as exc:  # noqa: BLE001 — unreachable ≠ not opted out; record it and carry on
+        optout_checked, optout_note = False, f" (the CMS opt-out file was unreachable: {type(exc).__name__})"
+    else:
+        if row is not None and _optout_in_force(row, _coerce_today(today)):
+            eff = row.get("optout effective date") or "?"
+            end = row.get("optout end date") or "?"
+            return AssignmentResult(
+                OPTED_OUT,
+                f"NPI {n} has a Medicare opt-out affidavit in force ({eff} – {end}): this provider "
+                f"treats Medicare patients under a private contract, so Medicare pays nothing and "
+                f"a Medicare Supplement pays nothing either.",
+                flags={"optout_effective": eff, "optout_end": end},
+            )
+
+    try:
+        rows = _dac_rows(n, client)
+    except Exception as exc:  # noqa: BLE001
+        return AssignmentResult(
+            UNKNOWN_ASSIGNMENT,
+            f"Medicare assignment lookup failed ({type(exc).__name__}){optout_note}",
+            optout_checked=optout_checked,
+        )
+    if not rows:
+        return AssignmentResult(
+            UNKNOWN_ASSIGNMENT,
+            f"NPI {n} is not listed in the CMS National Downloadable File, which covers clinicians "
+            f"billing the Physician Fee Schedule. The file carries no 'does not accept' value, so "
+            f"absence says nothing about assignment either way.{optout_note}",
+            optout_checked=optout_checked,
+        )
+
+    vals = {str(r.get("ind_assgn") or "").strip().upper() for r in rows}
+    flags = {"ind_assgn": sorted(v for v in vals if v), "rows": len(rows)}
+    # One NPI has a row per practice location. If ANY of them says the clinician may exceed the
+    # approved amount, the member can be balance-billed there — so M outranks Y, never the reverse.
+    if "M" in vals:
+        return AssignmentResult(
+            MAY_EXCEED,
+            f"NPI {n} is a NON-PARTICIPATING Medicare provider (ind_assgn=M): may bill up to the "
+            f"115% limiting charge, and those Part B excess charges are covered only by Medigap "
+            f"Plan F or G.{optout_note}",
+            optout_checked=optout_checked,
+            flags=flags,
+        )
+    if "Y" in vals:
+        return AssignmentResult(
+            ACCEPTS,
+            f"NPI {n} accepts Medicare assignment (ind_assgn=Y) — charges the Medicare-approved "
+            f"amount, which is what medicare.gov Care Compare shows.{optout_note}",
+            optout_checked=optout_checked,
+            flags=flags,
+        )
+    return AssignmentResult(
+        UNKNOWN_ASSIGNMENT,
+        f"NPI {n} is listed but carries no readable assignment flag.{optout_note}",
+        optout_checked=optout_checked,
+        flags=flags,
+    )
 
 
 def _medicaid_ny(n: str, client: CachedClient) -> EnrollmentResult:

@@ -105,3 +105,41 @@ def test_commercial_has_a_network():
 def test_advantage_wins_over_a_bare_supplemental_word():
     """'Supplemental benefits' is standard Medicare Advantage marketing — not Medigap."""
     assert has_provider_network("UHC Medicare Advantage with supplemental dental", None) is True
+
+
+# ---- the MEMBER'S plan outranks the payer row's coarse tag --------------------------------------
+#
+# Every test above passes benefit_type=None, and that is exactly why this defect survived: the LIVE
+# path never passes None. `check_network` resolves the catalogue row and hands over its benefit_type,
+# and the `humana-co-denver` row is tagged **"Medicare Advantage"** — a payer-level label, not this
+# member's coverage. The Advantage marker was matched against plan and benefit_type combined, so the
+# tag turned every Humana CO member into someone with a network and the whole no-network branch was
+# skipped for the one row (Roulhac) it was built for. It only ever fired in tests.
+#
+# A benefit_type is one coarse label for a payer row that may sell several products. A plan string
+# naming Medigap or Original Medicare is the member's actual coverage. The plan wins.
+
+def test_a_medigap_plan_beats_a_payer_row_tagged_medicare_advantage():
+    """The live Roulhac call. This is the regression that made P3 inert."""
+    assert has_provider_network("Humana Medicare Supplement Plan G", "Medicare Advantage") is False
+
+
+def test_original_medicare_beats_a_payer_row_tagged_medicare_advantage():
+    assert has_provider_network("Original Medicare", "Medicare Advantage") is False
+
+
+def test_an_advantage_plan_still_has_a_network_under_the_same_tag():
+    """Guard the other direction: the tag agreeing with the plan must not change anything."""
+    assert has_provider_network("Humana Gold Plus H1036-123", "Medicare Advantage") is True
+
+
+def test_the_benefit_type_still_decides_when_the_plan_says_nothing():
+    """With no signal in the plan, the payer row is all we have — keep using it."""
+    assert has_provider_network("Humana Medicare CO", "Medicare FFS") is False
+    assert has_provider_network("Humana Medicare CO", "Medicare Advantage") is True
+    assert has_provider_network(None, "Medicare Advantage") is True
+
+
+def test_advantage_still_wins_within_the_plan_string_itself():
+    """The MA-first rule was right about its real target: marketing copy inside ONE plan name."""
+    assert has_provider_network("Humana Medicare Advantage supplement plan", "Medicare") is True

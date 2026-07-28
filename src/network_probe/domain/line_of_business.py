@@ -85,20 +85,44 @@ def is_commercial(plan: str | None, benefit_type: str | None) -> bool:
     return line_of_business(plan, benefit_type) == "commercial"
 
 
+def _network_signal(text: str | None) -> bool | None:
+    """True (has a network) / False (none) / None (this string says nothing).
+
+    Medicare Advantage is tested FIRST **within one string**, which is the case that rule was
+    written for: "supplemental benefits" is standard MA marketing copy and an H/R/S contract number
+    is decisive MA, so neither must be allowed to read as Medigap.
+    """
+    t = text or ""
+    if not t.strip():
+        return None
+    if _ADVANTAGE.search(t):
+        return True
+    if _MEDIGAP.search(t) or _ORIGINAL_MEDICARE.search(t):
+        return False
+    return None
+
+
 def has_provider_network(plan: str | None, benefit_type: str | None) -> bool:
     """Does this coverage have a provider network at all?
 
     False for **Original Medicare (FFS)** and **Medicare Supplement / Medigap**: neither has a
-    network, so a Medicare-participating provider is in-network by definition and a network
+    network, so a provider who accepts Medicare assignment is in-network by definition and a network
     directory has no opinion to give. Asking one anyway can only yield UNKNOWN or a false OON.
 
-    Medicare Advantage is checked FIRST and always wins: an MA plan does have a network, and
-    "supplemental benefits" is standard MA marketing language that must not read as Medigap.
+    The two arguments are NOT equal evidence, and reading them as one blob was a live-only defect.
+    `benefit_type` is a coarse label on a payer *row* — `humana-co-denver` carries "Medicare
+    Advantage" because that is what Humana mostly sells in Denver, not because this member bought
+    it. `plan` is the member's actual coverage. So the plan is consulted alone first and settles it
+    outright; the payer tag is a fallback for when the plan says nothing. Reading them together let
+    the tag's "Advantage" override an explicit "Medicare Supplement" plan, which silently disabled
+    this whole branch for the Medigap row it exists to serve.
+
+    Defaults to True: only coverage positively identified as network-less takes the other path.
     """
-    blob = f"{plan or ''} {benefit_type or ''}"
-    if _ADVANTAGE.search(blob):
-        return True
-    return not (_MEDIGAP.search(blob) or _ORIGINAL_MEDICARE.search(blob))
+    signal = _network_signal(plan)
+    if signal is None:
+        signal = _network_signal(benefit_type)
+    return True if signal is None else signal
 
 
 # --- plan TYPE (a different axis than line of business) ------------------------------------------

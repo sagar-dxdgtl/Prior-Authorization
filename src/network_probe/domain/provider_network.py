@@ -66,15 +66,31 @@ def enrollment_negative(q, lob, pecos_fn=None, medicaid_fn=None):
     )
 
 
-def no_network_verdict(q, pecos_fn=None) -> NetworkVerdict:
+def no_network_verdict(q, pecos_fn=None, assignment_fn=None) -> NetworkVerdict:
     """Settle coverage that has NO provider network — Original Medicare (FFS) and Medicare
     Supplement / Medigap.
 
-    There is nothing to be in or out of: a provider who accepts Medicare assignment is in-network by
-    definition, and one not enrolled in Medicare cannot bill it at all. So Medicare participation
-    (PECOS) IS the answer here, and a network directory — which has no opinion to give — must never
-    be consulted. This ALWAYS returns a verdict rather than None: returning None would fall through
-    to the directory leg, which is precisely the false-OON path this branch exists to close.
+    There is nothing to be in or out of, so Medicare participation IS the answer and a network
+    directory — which has no opinion to give — must never be consulted. This ALWAYS returns a
+    verdict rather than None: returning None would fall through to the directory leg, which is
+    precisely the false-OON path this branch exists to close.
+
+    "Participation" is graded, because enrollment alone does not tell the member what they owe:
+
+      * **opted out** — a private contract. Medicare pays nothing, so the supplement pays nothing
+        either. Decisive OON, and it outranks everything below: an opted-out provider can still
+        carry an `ind_assgn = Y` in the Care Compare file.
+      * **not enrolled** (absent from PECOS) — cannot bill Medicare at all. Decisive OON.
+      * **accepts assignment** (`ind_assgn = Y`) — charges the Medicare-approved amount. This is
+        the fact the docstring always claimed and the code never checked; it is also exactly what
+        the saved medicare.gov Care Compare proof shows.
+      * **non-participating** (`ind_assgn = M`) — in-network, but may balance-bill up to the 115%
+        limiting charge, which only Medigap Plan F/G cover. Surfaced in the notes: a verdict that
+        hides it is the one that produces a surprise bill.
+
+    Confidence is only "high" where the evidence earns it — an ACCEPTS whose opt-out check never
+    completed drops to medium rather than being read as "not opted out". Where the two CMS files
+    contradict each other, this returns REVIEW instead of picking a winner.
     """
     if not q.npi:
         return NetworkVerdict(
@@ -89,50 +105,118 @@ def no_network_verdict(q, pecos_fn=None) -> NetworkVerdict:
             ),
         )
 
-    from network_probe.domain.enrollment import live_enabled, pecos_enrollment
+    from network_probe.domain.enrollment import (
+        ACCEPTS,
+        MAY_EXCEED,
+        OPTED_OUT,
+        assignment_status,
+        live_enabled,
+        pecos_enrollment,
+    )
 
     if pecos_fn is None and live_enabled():
         pecos_fn = pecos_enrollment
+    if assignment_fn is None and live_enabled():
+        assignment_fn = assignment_status
     res = pecos_fn(q.npi) if pecos_fn is not None else None
+    try:
+        asg = assignment_fn(q.npi) if assignment_fn is not None else None
+    except Exception:  # noqa: BLE001 — the assignment source is additive; never let it block a verdict
+        asg = None
+
+    enrolled = res.enrolled if res is not None else None
+    astatus = getattr(asg, "status", None)
+    program = res.program if res is not None else "medicare"
+    who = {"npi": q.npi, "tin": q.tin}
+
+    trail = []
+    if res is not None:
+        outcome = {True: "corroborates", False: "contradicts"}.get(enrolled, "inconclusive")
+        trail.append({"source": "Enrollment", "result": outcome, "detail": res.detail})
+    if asg is not None:
+        outcome = {ACCEPTS: "corroborates", OPTED_OUT: "contradicts"}.get(astatus, "inconclusive")
+        trail.append({"source": "Medicare assignment", "result": outcome, "detail": asg.detail})
 
     base = (
         f"{q.plan_hint or 'This coverage'} has no provider network — it pays alongside Original "
-        f"Medicare — so a Medicare-participating provider is in-network by definition and the payer's "
-        f"network directory has no opinion to give."
+        f"Medicare — so a provider who accepts Medicare assignment is in-network by definition and "
+        f"the payer's network directory has no opinion to give."
     )
-    if res is not None and res.enrolled is True:
+
+    def _v(status, confidence, notes, extra=None):
         return NetworkVerdict(
-            status=NetworkStatus.IN_NETWORK,
-            matched_provider={"npi": q.npi, "tin": q.tin, "enrollment_program": res.program, "enrolled": True},
-            plan_or_network_checked=f"{q.payer} — {res.program} participation (no provider network)",
+            status=status,
+            matched_provider={**who, **(extra or {})},
+            plan_or_network_checked=f"{q.payer} — Medicare assignment/participation (no provider network)",
             source_url="enrollment",
-            confidence="high",
-            notes=f"{base} {res.detail}",
-            corroboration=[{"source": "Enrollment", "result": "corroborates", "detail": res.detail}],
+            confidence=confidence,
+            notes=notes,
+            corroboration=trail or None,
         )
-    if res is not None and res.enrolled is False:
-        return NetworkVerdict(
-            status=NetworkStatus.OUT_OF_NETWORK,
-            matched_provider={"npi": q.npi, "tin": q.tin, "enrollment_program": res.program, "enrolled": False},
-            plan_or_network_checked=f"{q.payer} — {res.program} participation (no provider network)",
-            source_url="enrollment",
-            confidence="high",
-            notes=f"{base} {res.detail} A provider not enrolled in Medicare cannot bill it at all.",
-            corroboration=[{"source": "Enrollment", "result": "contradicts", "detail": res.detail}],
+
+    # (1) A private contract is decisive and outranks everything below — including a stale "Y" on the
+    # assignment flag and a clean PECOS row. Medicare pays nothing, so the supplement pays nothing.
+    if astatus == OPTED_OUT:
+        return _v(
+            NetworkStatus.OUT_OF_NETWORK, "high",
+            f"{base} This provider has OPTED OUT of Medicare — care is billed under a private "
+            f"contract, so Medicare pays nothing and the supplement pays nothing on top of nothing. "
+            f"{asg.detail}",
+            {"opted_out": True},
         )
+
+    # (2) Two CMS files disagreeing is not something to resolve by picking a favourite. PECOS says
+    # this NPI cannot bill Medicare; the Care Compare file lists them doing exactly that.
+    if enrolled is False and astatus in (ACCEPTS, MAY_EXCEED):
+        return _v(
+            NetworkStatus.REVIEW, "conflict",
+            f"{base} Two CMS sources disagree and neither can be dismissed: {res.detail} "
+            f"But {asg.detail} Verify against medicare.gov Care Compare before billing.",
+        )
+
+    # (3) Not in PECOS at all — decisive, and nothing above contradicted it.
+    if enrolled is False:
+        return _v(
+            NetworkStatus.OUT_OF_NETWORK, "high",
+            f"{base} {res.detail} A provider not enrolled in Medicare cannot bill it at all.",
+            {"enrollment_program": program, "enrolled": False},
+        )
+
+    # (4) Positive paths, graded by how much the evidence actually proves.
+    if astatus == ACCEPTS:
+        # "high" needs BOTH: enrolment confirmed, and the opt-out file actually reached. An
+        # unreachable opt-out file is an unchecked negative, not a clear one.
+        confident = enrolled is True and getattr(asg, "optout_checked", False)
+        return _v(
+            NetworkStatus.IN_NETWORK, "high" if confident else "medium",
+            f"{base} {asg.detail}",
+            {"enrollment_program": program, "enrolled": enrolled, "assignment": ACCEPTS},
+        )
+    if astatus == MAY_EXCEED:
+        return _v(
+            NetworkStatus.IN_NETWORK, "medium",
+            f"{base} {asg.detail} Medicare still covers the service, so this is in-network — but "
+            f"the member is exposed to Part B excess charges unless their supplement is Plan F or G.",
+            {"enrollment_program": program, "enrolled": enrolled, "assignment": MAY_EXCEED},
+        )
+    if enrolled is True:
+        # Enrolment only. Necessary but not sufficient: it cannot tell a participating provider from
+        # a non-participating one, so this can never be "high" on its own.
+        return _v(
+            NetworkStatus.IN_NETWORK, "medium",
+            f"{base} {res.detail} Assignment status could not be confirmed"
+            + (f" ({asg.detail})" if asg is not None else "")
+            + ", so the member's exposure to Part B excess charges is unverified.",
+            {"enrollment_program": program, "enrolled": True},
+        )
+
+    # (5) Nothing decided — and deliberately NOT handed to a network directory.
     detail = res.detail if res is not None else "no Medicare enrollment lookup was available"
-    return NetworkVerdict(
-        status=NetworkStatus.UNKNOWN,
-        matched_provider={"npi": q.npi, "tin": q.tin},
-        plan_or_network_checked=f"{q.payer} — Medicare participation (no provider network)",
-        source_url="enrollment",
-        confidence="low",
-        notes=(
-            f"{base} Medicare participation could not be confirmed ({detail}), so this is UNKNOWN — "
-            f"deliberately NOT referred to the payer's network directory, which could only answer "
-            f"about a network this member does not have."
-        ),
-        corroboration=[{"source": "Enrollment", "result": "inconclusive", "detail": detail}],
+    return _v(
+        NetworkStatus.UNKNOWN, "low",
+        f"{base} Medicare participation could not be confirmed ({detail}), so this is UNKNOWN — "
+        f"deliberately NOT referred to the payer's network directory, which could only answer "
+        f"about a network this member does not have.",
     )
 
 
@@ -300,13 +384,14 @@ def resolve_provider_network(
     crosswalk=None,
     store=None,
     pecos_fn=None,
+    assignment_fn=None,
 ) -> NetworkVerdict | None:
     """Resolve provider-INN from credentialing + TiC, gated by line of business. See module docstring."""
     # Checked FIRST, and ahead of the billing-TIN gate: coverage with no provider network at all
     # (Original Medicare FFS / Medicare Supplement-Medigap) is answered by Medicare participation,
     # not by any network source, and needs only an NPI.
     if not has_provider_network(q.plan_hint, benefit_type):
-        return no_network_verdict(q, pecos_fn=pecos_fn)
+        return no_network_verdict(q, pecos_fn=pecos_fn, assignment_fn=assignment_fn)
 
     if not (q.npi and q.tin):
         return None
