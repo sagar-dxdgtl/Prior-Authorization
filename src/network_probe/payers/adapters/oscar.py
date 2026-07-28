@@ -157,51 +157,74 @@ class OscarAdapter(PayerAdapter):
                     )
         return out
 
-    def resolve_network(self, plan_hint: str, state: str) -> dict | None:
-        """Map a free-text plan_hint to exactly one network for `state`/year.
+    def _resolve_candidates(self, plan_hint: str, state: str) -> tuple[dict | None, list[dict]]:
+        """Score `plan_hint` against every network label and plan name for `state`/year.
 
-        Returns {network_id, network_name, matched_plan, policy_id, score, source_url}
-        or None when no candidate clears PLAN_MATCH_MIN_RECALL.
+        Returns (best, tied) where `tied` holds the top-scoring candidates when they span
+        MORE THAN ONE network, and is empty otherwise. A non-empty `tied` means the hint
+        does not pin a network: Oscar reuses plan names across networks (18 of 72 FL names
+        are sold by 2+), so the top score can be a perfect 2.0 in each of them. The caller
+        must not convert absence from an arbitrarily-picked one into an OUT_OF_NETWORK.
         """
-        networks = self._fl_networks(state)
-        best = None  # (combined, cand_recall, payload)
+        scored: list[tuple[tuple[float, float], dict]] = []
 
-        for net in networks:
+        for net in self._fl_networks(state):
             # 1) the plan_hint might *be* a network/area name
             for label in (net["area"], net["name"]):
-                score, recall = _plan_match_score(plan_hint, label)
-                cand = {
-                    "network_id": net["id"],
-                    "network_name": net["area"],
-                    "matched_plan": None,
-                    "policy_id": None,
-                }
-                if best is None or (score, recall) > (best[0], best[1]):
-                    best = (score, recall, cand)
+                scored.append(
+                    (
+                        _plan_match_score(plan_hint, label),
+                        {
+                            "network_id": net["id"],
+                            "network_name": net["area"],
+                            "matched_plan": None,
+                            "policy_id": None,
+                        },
+                    )
+                )
 
             # 2) match against the actual plan names in this network
             data = self._network_plans(net["id"], state)
             for grp in data.get("plans", []):
                 for opt in grp.get("options", []):
                     policy_id, plan_name = opt[0], opt[1]
-                    score, recall = _plan_match_score(plan_hint, plan_name)
-                    cand = {
-                        "network_id": net["id"],
-                        "network_name": net["area"],
-                        "matched_plan": plan_name,
-                        "policy_id": policy_id,
-                    }
-                    if best is None or (score, recall) > (best[0], best[1]):
-                        best = (score, recall, cand)
+                    scored.append(
+                        (
+                            _plan_match_score(plan_hint, plan_name),
+                            {
+                                "network_id": net["id"],
+                                "network_name": net["area"],
+                                "matched_plan": plan_name,
+                                "policy_id": policy_id,
+                            },
+                        )
+                    )
 
-        if not best or best[1] < PLAN_MATCH_MIN_RECALL:
-            return None
-        result = dict(best[2])
-        result["score"] = round(best[0], 3)
-        result["source_url"] = (
-            f"{BASE}/api/get-network-plans?networkId={result['network_id']}&planYear={self.year}&state={state}"
+        if not scored:
+            return None, []
+        top = max(key for key, _ in scored)
+        if top[1] < PLAN_MATCH_MIN_RECALL:
+            return None, []
+
+        tied = [cand for key, cand in scored if key == top]
+        best = dict(tied[0])
+        best["score"] = round(top[0], 3)
+        best["source_url"] = (
+            f"{BASE}/api/get-network-plans?networkId={best['network_id']}&planYear={self.year}&state={state}"
         )
-        return result
+        # ties WITHIN one network are harmless — we only need the network, not the plan.
+        spans = {c["network_id"] for c in tied}
+        return best, (tied if len(spans) > 1 else [])
+
+    def resolve_network(self, plan_hint: str, state: str) -> dict | None:
+        """Map a free-text plan_hint to exactly one network for `state`/year.
+
+        Returns {network_id, network_name, matched_plan, policy_id, score, source_url},
+        or None when no candidate clears PLAN_MATCH_MIN_RECALL *or* when the best score is
+        shared by more than one network (ambiguous — see `_resolve_candidates`).
+        """
+        best, tied = self._resolve_candidates(plan_hint, state)
+        return None if tied else best
 
     # ---- participation parsing ---------------------------------------------
 
@@ -284,7 +307,24 @@ class OscarAdapter(PayerAdapter):
         urls: list[str] = []
 
         # 1) resolve plan_hint -> network
-        resolved = self.resolve_network(q.plan_hint, state)
+        resolved, tied = self._resolve_candidates(q.plan_hint, state)
+        if tied:
+            spans = sorted({f"{c['network_id']} ({c['network_name']})" for c in tied})
+            where = ", ".join(spans)
+            return NetworkVerdict(
+                status=NetworkStatus.UNKNOWN,
+                matched_provider=None,
+                plan_or_network_checked=f"{q.plan_hint} ({state}) — ambiguous across {len(spans)} networks",
+                source_url=f"{BASE}/api/get-network-plans?...&state={state}",
+                confidence="low",
+                notes=(
+                    f"Plan hint {q.plan_hint!r} matches {self.year} plans in {len(spans)} different "
+                    f"Oscar networks equally well: {where}. Oscar sells the same plan name through "
+                    f"more than one network, so the member's network cannot be pinned from the name "
+                    f"alone — and absence from an arbitrarily chosen one would prove nothing. "
+                    f"Returning UNKNOWN rather than guessing a network."
+                ),
+            )
         if not resolved:
             return NetworkVerdict(
                 status=NetworkStatus.UNKNOWN,
@@ -326,19 +366,30 @@ class OscarAdapter(PayerAdapter):
 
         # 3) match by NPI (exact); fall back to strict first+last name
         match = None
+        rejected: list[str] = []
         if q.npi:
             match = next((h for h in hits if (h.get("npi") or "") == q.npi), None)
         if match is None and q.provider_first_name:
             fn, ln = q.provider_first_name.strip().lower(), q.provider_last_name.strip().lower()
-            match = next(
-                (
-                    h
-                    for h in hits
-                    if (h.get("last_name") or "").strip().lower() == ln
-                    and (h.get("first_name") or "").strip().lower() == fn
-                ),
-                None,
-            )
+            for h in hits:
+                if (h.get("last_name") or "").strip().lower() != ln:
+                    continue
+                if (h.get("first_name") or "").strip().lower() != fn:
+                    continue
+                # A row carrying a DIFFERENT NPI is positively a different person, however
+                # well the name reads. NPI outranks name; inheriting a namesake's
+                # participation record is how a confident wrong verdict gets made.
+                h_npi = (h.get("npi") or "").strip()
+                if q.npi and h_npi and h_npi != q.npi:
+                    rejected.append(f"{h.get('display_name')} (NPI {h_npi})")
+                    continue
+                match = h
+                break
+        namesake_note = (
+            f" Rejected {len(rejected)} same-name row(s) carrying a different NPI: {'; '.join(rejected)}."
+            if rejected
+            else ""
+        )
 
         # 4a) matched -> authoritative participation from the profile
         if match:
@@ -370,6 +421,7 @@ class OscarAdapter(PayerAdapter):
                     f"Searched network {nid} for last name {q.provider_last_name!r}: {len(hits)} provider(s) "
                     f"returned (below the {AUTOCOMPLETE_CAP}-result cap), none matching the target "
                     f"{'NPI ' + q.npi if q.npi else 'name'}. Provider is not in this network's directory."
+                    + namesake_note
                 ),
             )
         return NetworkVerdict(
@@ -382,5 +434,6 @@ class OscarAdapter(PayerAdapter):
                 f"Search for last name {q.provider_last_name!r} hit the {AUTOCOMPLETE_CAP}-result cap and the "
                 f"target was not among them. Cannot rule out that the provider is hidden behind the "
                 f"cap — returning UNKNOWN rather than a possibly-wrong OON. Narrow by first name."
+                + namesake_note
             ),
         )

@@ -35,6 +35,9 @@ KYLE_NPI = "1679766943"  # ground-truth OON provider (absent from net 066)
 JESSICA_NPI = "1568741320"  # positive control (in net 066)
 JESSICA_EID = "8oHqRKWUYDqgNR"
 PLAN_HINT = "BASE SILVER CSR 150 / SILVERSIMPLEPCPSAVER"
+# Sold verbatim by BOTH net 066 and net 070, so it cannot pin one network.
+AMBIGUOUS_PLAN_HINT = "Silver Classic Standard"
+NAMESAKE_NPI = "1999999999"  # a different Jessica Herron than the directory's
 TODAY = date(2026, 6, 22)
 YEAR = 2026
 
@@ -130,6 +133,61 @@ def test_missing_last_name_is_unknown_not_oon():
     a = _offline_adapter()
     q = ProviderQuery(payer="oscar", plan_hint=PLAN_HINT, npi=KYLE_NPI, state="FL")
     assert a.check_network(q).status == NetworkStatus.UNKNOWN
+
+
+# ---- P1: a verdict must never rest on an unpinned network or a namesake -------
+#
+# Both of these produced a *confident* wrong answer before 2026-07-28. They are the
+# adapter-side instance of the defect class removed from the portal drivers: a
+# partial match read as certainty. See HANDOFF-2026-07-28.md §1 P1.
+
+
+def test_plan_sold_by_two_networks_does_not_pin_a_network():
+    """18 of 72 FL plan names are sold by 2+ networks; a tie must not silently pick one."""
+    a = _offline_adapter()
+    # "Silver Classic Standard" exists verbatim in both net 066 and net 070, so it
+    # scores identically in each. Neither is *the* member's network.
+    assert a.resolve_network(AMBIGUOUS_PLAN_HINT, "FL") is None
+
+
+def test_ambiguous_plan_is_unknown_not_oon():
+    """No confirmed plan -> UNKNOWN. Absence in an arbitrarily chosen network proves nothing."""
+    a = _offline_adapter()
+    q = ProviderQuery(
+        payer="oscar",
+        plan_hint=AMBIGUOUS_PLAN_HINT,
+        npi=KYLE_NPI,
+        provider_last_name="Herron",
+        state="FL",
+        zip_code="33409",
+    )
+    verdict = a.check_network(q)
+    assert verdict.status == NetworkStatus.UNKNOWN
+    # the note must name the guard that fired and the networks it could not choose between
+    assert "066" in verdict.notes and "070" in verdict.notes
+
+
+def test_namesake_with_conflicting_npi_is_not_matched_as_ours():
+    """A directory row whose NPI positively differs from ours is a different person.
+
+    The fixture's "Jessica L Herron" carries NPI 1568741320. Querying a *different*
+    Jessica Herron must not inherit her in-network record.
+    """
+    a = _offline_adapter()
+    q = ProviderQuery(
+        payer="oscar",
+        plan_hint=PLAN_HINT,
+        npi=NAMESAKE_NPI,
+        provider_last_name="Herron",
+        provider_first_name="Jessica",
+        state="FL",
+        zip_code="33409",
+    )
+    verdict = a.check_network(q)
+    assert verdict.status != NetworkStatus.IN_NETWORK
+    assert verdict.matched_provider is None
+    # the rejected namesake must be visible in the audit note
+    assert JESSICA_NPI in verdict.notes
 
 
 # ---- live end-to-end (the real validation; run with `pytest -m live`) --------
