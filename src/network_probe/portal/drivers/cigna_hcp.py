@@ -290,6 +290,9 @@ class CignaHcpDriver(PortalDriver):
 
         route = self._route(page)
         trail.append(f"results route: /{route}")
+        if route != _MEDICAL_ROUTE and self._force_medical(page):
+            route = self._route(page)
+            trail.append(f"forced medical route: /{route}")
         if self._app_error(page):
             edge = self._edge_refused(refused)
             if edge:
@@ -300,9 +303,19 @@ class CignaHcpDriver(PortalDriver):
                           screenshot=shot(f"app-error-results-{route}"))
 
         banner = self._plan_banner(page)
-        plan_confirmed = bool(plan_label) and bool(banner)
+        codes = self._plan_codes(page)
+        # Confirmation needs the pinned label AND independent corroboration that THIS page is scoped to
+        # it. Two forms count, and a bare "some banner exists" does not: a banner naming a different
+        # plan would otherwise confirm, which is the defect this replaced.
+        plan_confirmed = bool(plan_label) and (
+            (bool(banner) and self._same_plan(banner, plan_label)) or bool(codes)
+        )
         if banner:
             trail.append(f"plan banner on results: {banner}")
+        if codes:
+            trail.append(f"plan codes in request: {codes}")
+        if banner and not self._same_plan(banner, plan_label) and not codes:
+            trail.append(f"BANNER MISMATCH: page says {banner!r}, we pinned {plan_label!r}")
 
         names = self._result_names(page)
         count = self._result_count(page, names)
@@ -342,7 +355,10 @@ class CignaHcpDriver(PortalDriver):
                 PortalStatus.UNKNOWN,
                 f"the Cigna directory returned no results for {kind} {term!r} near {q.zip_code} in "
                 f"{banner or plan_label} — an empty result set does not distinguish out-of-network "
-                f"from a search that simply found nothing.",
+                f"from a search that simply found nothing."
+                + (f" The portal itself reports {self._nearest_hint(page)}, so this is an absence "
+                   f"within the search radius, not an absence from the network." if
+                   self._nearest_hint(page) else ""),
                 result_count=0, screenshot=shot("no-results"),
             )
 
@@ -616,9 +632,77 @@ class CignaHcpDriver(PortalDriver):
 
     # --- reading the results page ----------------------------------------------------------------
 
+    def _force_medical(self, page: Page, timeout_ms: int = 45_000) -> bool:
+        """Re-ask the same question of the MEDICAL directory. Returns whether the route changed.
+
+        Cigna answers a name search from whichever provider group its index matched, and signals the
+        choice in the URL's `providerGroupCode`. Verified live 2026-07-28 for Randall Orem / 34986: the
+        search landed on `/cbh-providers` with `providerGroupCode=B` (behavioral) even though the SAME
+        URL still carried the pinned medical plan as `medicalProductCode=OAP&medicalEcnCode=OA001`. So
+        the plan was right and only the group was wrong, and the medical answer was one navigation away.
+
+        `P` is the medical group code, established by trying the alternatives against the live app:
+        `providerGroupCode=P` renders a real medical result set, `M` renders the app's own
+        "Maintenance Notice" error page. Every other parameter — location, term, plan codes — is carried
+        over untouched, so this re-asks the identical question rather than a broader one.
+
+        Without this the driver could only ever return UNKNOWN for a provider absent from Cigna's
+        behavioral index, which is most physicians.
+        """
+        url = page.url
+        if "/directory/" not in url or "providerGroupCode" not in url:
+            return False
+        before = self._route(page)
+        target = re.sub(r"/directory/[a-z0-9\-]+", f"/directory/{_MEDICAL_ROUTE}", url)
+        target = re.sub(r"providerGroupCode=[A-Z]", "providerGroupCode=P", target)
+        target = re.sub(r"providerGroupCodes=[A-Z]", "providerGroupCodes=P", target)
+        if target == url:
+            return False
+        try:
+            page.goto(target, wait_until="domcontentloaded", timeout=timeout_ms)
+        except (PlaywrightTimeout, PlaywrightError):
+            return False
+        self._settle(page)
+        # An app error here means the medical group rejected the request; the caller keeps the original
+        # non-medical reading and its UNKNOWN rather than inventing a verdict from an error page.
+        return not self._app_error(page) and self._route(page) != before
+
     def _route(self, page: Page) -> str:
         m = re.search(r"/directory/([a-z0-9\-]+)", page.url)
         return m.group(1) if m else "unknown"
+
+    def _plan_codes(self, page: Page) -> str | None:
+        """Cigna's own medical plan identifiers, read back off the request URL.
+
+        The results URL carries `medicalProductCode` and `medicalEcnCode` (e.g. OAP / OA001) — the
+        payer's identifiers for the network it is answering from. That is corroboration a rendered
+        banner cannot beat, and it survives the forced-medical re-navigation, which drops the banner
+        (verified live: the /doctors page rendered no "Medical Plan:" line, and without this the driver
+        reported "the plan network could not be confirmed" about a plan it had just successfully pinned).
+        """
+        m = re.search(r"medicalProductCode=([A-Za-z0-9]+)", page.url or "")
+        e = re.search(r"medicalEcnCode=([A-Za-z0-9]+)", page.url or "")
+        if not m:
+            return None
+        return f"{m.group(1)}/{e.group(1)}" if e else m.group(1)
+
+    def _same_plan(self, banner: str | None, label: str | None) -> bool:
+        """Does the page's plan banner actually name the plan we pinned? Distinctive-token overlap, so
+        "Medical Plan: Open Access Plus, OA plus..." corroborates "Open Access Plus, OA plus...".
+        Without this, `bool(banner)` accepted ANY banner — including one naming a different network."""
+        if not banner or not label:
+            return False
+        stop = {"plan", "medical", "dental", "behavioral", "pharmacy", "change", "network", "and"}
+        bt = {t for t in re.split(r"[^a-z0-9]+", banner.lower()) if len(t) >= 3 and t not in stop}
+        lt = {t for t in re.split(r"[^a-z0-9]+", label.lower()) if len(t) >= 3 and t not in stop}
+        return bool(bt & lt)
+
+    def _nearest_hint(self, page: Page) -> str | None:
+        """Cigna's "The nearest location is 37.6mi away in Palm Beach Gardens, FL" line. Verified live
+        for Orem / 34986: a match for the searched name exists outside the radius, which means an empty
+        local result set is a radius artefact and must not read as absence from the network."""
+        m = re.search(r"nearest location is\s+([\d.]+\s*mi[^.]{0,60})", self._page_text(page), re.I)
+        return f"the nearest match is {m.group(1).strip()}" if m else None
 
     def _plan_banner(self, page: Page) -> str | None:
         """The results page states the pinned network in a "Medical Plan: <name>" line next to a
