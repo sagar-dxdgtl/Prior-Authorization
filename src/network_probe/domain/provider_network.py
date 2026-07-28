@@ -136,7 +136,7 @@ def no_network_verdict(q, pecos_fn=None) -> NetworkVerdict:
     )
 
 
-def group_contracted(payer, tin, credentialing=None, crosswalk=None, store=None) -> bool | None:
+def group_contracted(payer, tin, credentialing=None, crosswalk=None, store=None, lob=None) -> bool | None:
     """Is the clinic's billing TIN contracted with this payer under ANY NPI? True on positive evidence
     (an in-network credentialing row at that TIN, a TiC MRF hit for that TIN, or a persisted
     provider-network fact); None when there's no positive evidence (absence isn't proof). This splits
@@ -151,6 +151,14 @@ def group_contracted(payer, tin, credentialing=None, crosswalk=None, store=None)
         credentialing = default_credentialing()
     if credentialing is not None and credentialing.group_contracted(payer, tin) is True:
         return True
+    # Everything below this line is TiC-derived, and Transparency-in-Coverage is COMMERCIAL-ONLY:
+    # Medicare Advantage, Medicaid and Dual are federally exempt (§2). A TiC fact therefore says
+    # nothing about an exempt member and must not split physician-OON from payer-OON for one.
+    # Caught live: three commercial-MRF facts at TIN 463812940 made two AARP Medicare Advantage
+    # members read PHYSICIAN_OUT_OF_NETWORK where the staff answer key says OON w/ Benefits.
+    # `lob=None` means the caller could not determine a line — behaviour is then unchanged.
+    if lob in _EXEMPT:
+        return None
     if crosswalk is None:
         from network_probe.domain.tin_crosswalk import default_crosswalk
 

@@ -88,7 +88,16 @@ def check_eligibility(
         from network_probe.domain.provider_network import group_contracted
 
         try:
-            gc = group_contracted(q.payer, q.tin)
+            # Pass the LINE OF BUSINESS: TiC-derived evidence is commercial-only, so it must not
+            # split physician-OON from payer-OON for a Medicare/Medicaid/Dual member. Caught live —
+            # commercial-MRF facts made two AARP Medicare Advantage members read PHYSICIAN_OUT_OF_
+            # NETWORK where the staff answer key says OON w/ Benefits.
+            from network_probe.domain.benefit_type import benefit_type_for
+            from network_probe.domain.line_of_business import line_of_business
+
+            _plan = result.selected_plan or result.plan_name or q.plan_hint
+            _bt = benefit_type_for(q.payer, _plan, catalogue=cat)
+            gc = group_contracted(q.payer, q.tin, lob=line_of_business(_plan, _bt))
         except Exception:
             gc = None
     # The member's plan selects which of the payer key's benefit_type rows applies; the
