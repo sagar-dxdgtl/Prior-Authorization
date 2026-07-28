@@ -19,8 +19,8 @@ every tenant, like `payers`. Idempotent + additive, matching 0025.
 NOTE on the RLS predicate: this uses NULLIF(current_setting(...), '') so an empty-string GUC is
 treated as "no tenant" rather than raising on the ::uuid cast. Existing tables predate that guard.
 
-Revision ID: 0028_portal_captures
-Revises: 0027_blue_shield_california_az
+Revision ID: 0034_portal_captures
+Revises: 0033_portal_facts_resync
 Create Date: 2026-07-28
 """
 
@@ -28,8 +28,8 @@ from collections.abc import Sequence
 
 from alembic import op
 
-revision: str = "0028_portal_captures"
-down_revision: str | None = "0027_blue_shield_california_az"
+revision: str = "0034_portal_captures"
+down_revision: str | None = "0033_portal_facts_resync"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

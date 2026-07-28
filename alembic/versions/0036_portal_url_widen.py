@@ -20,8 +20,8 @@ a representation — widening is a catalogue change, not a table rewrite.
 
 Idempotent + additive, matching 0025/0028.
 
-Revision ID: 0030_portal_url_widen
-Revises: 0029_wellcare_ga_atlanta
+Revision ID: 0036_portal_url_widen
+Revises: 0035_wellcare_ga_atlanta
 Create Date: 2026-07-28
 """
 
@@ -29,8 +29,8 @@ from collections.abc import Sequence
 
 from alembic import op
 
-revision: str = "0030_portal_url_widen"
-down_revision: str | None = "0029_wellcare_ga_atlanta"
+revision: str = "0036_portal_url_widen"
+down_revision: str | None = "0035_wellcare_ga_atlanta"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -9,14 +9,15 @@ id but is not yet a public-FHIR/adapter-supported payer.
 
 Idempotent insert (guard SELECT + INSERT VALUES), same shape as 0027.
 
-NOTE on numbering: this branch is based on `main`, whose head is 0027, so this is 0029 after this
-branch's own 0028_portal_captures. The demo branch (`demo-portal-verified-network`) independently has
-0028_rls_empty_guc_fix … 0033_portal_facts_resync applied to both the dev and test databases, so
-`alembic upgrade` cannot walk the chain from either side until the two are re-chained at rebase. The
-seed below was therefore applied directly as well; re-running this migration is a no-op by design.
+NOTE on numbering (resolved 2026-07-28): this was 0029 while the branch chained straight off main's
+0027, which collided head-on with the demo branch's own 0029_provider_portal_facts — three of our
+migrations shared a number with a *different* migration. That is now re-chained: the demo branch's
+0028…0033 are carried here verbatim and this branch's three follow as 0034–0036, so the chain is
+linear and `alembic upgrade head` walks it from zero. Both databases sit at 0033 and the DDL below
+was also applied directly, so re-running this migration is a no-op by design.
 
-Revision ID: 0029_wellcare_ga_atlanta
-Revises: 0028_portal_captures
+Revision ID: 0035_wellcare_ga_atlanta
+Revises: 0034_portal_captures
 Create Date: 2026-07-28
 """
 
@@ -28,8 +29,8 @@ from sqlalchemy import text
 from alembic import op
 from network_probe.payers.roster_seed import payer_rows
 
-revision: str = "0029_wellcare_ga_atlanta"
-down_revision: str | None = "0028_portal_captures"
+revision: str = "0035_wellcare_ga_atlanta"
+down_revision: str | None = "0034_portal_captures"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
