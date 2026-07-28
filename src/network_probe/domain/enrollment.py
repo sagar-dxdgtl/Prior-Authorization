@@ -254,9 +254,10 @@ def assignment_status(npi, client: CachedClient | None = None, today=None) -> As
             end = row.get("optout end date") or "?"
             return AssignmentResult(
                 OPTED_OUT,
+                # Deliberately line-agnostic: this source is consulted for Medigap AND for Medicare
+                # Advantage, so what a *supplement* would pay belongs to the caller, not here.
                 f"NPI {n} has a Medicare opt-out affidavit in force ({eff} – {end}): this provider "
-                f"treats Medicare patients under a private contract, so Medicare pays nothing and "
-                f"a Medicare Supplement pays nothing either.",
+                f"treats Medicare patients under a private contract, so Medicare pays nothing.",
                 flags={"optout_effective": eff, "optout_end": end},
             )
 

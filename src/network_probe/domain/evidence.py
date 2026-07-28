@@ -119,7 +119,9 @@ def _tic_source(q, result, benefit_type, crosswalk) -> dict:
     }
 
 
-def _enrollment_source(q, result, benefit_type, run_enrollment: bool) -> dict:
+def _enrollment_source(
+    q, result, benefit_type, run_enrollment: bool, pecos_fn=None, medicaid_fn=None, assignment_fn=None
+) -> dict:
     plan = q.plan_hint or result.plan_name
     lob = line_of_business(plan, benefit_type)
     base = {"source": "Program enrollment (PECOS/Medicaid)", "answers": "program eligibility"}
@@ -128,18 +130,37 @@ def _enrollment_source(q, result, benefit_type, run_enrollment: bool) -> dict:
                 "detail": "Commercial/federal line — Medicare/Medicaid enrollment is not the gate here."}
     from network_probe.domain.enrollment import live_enabled
 
-    if not run_enrollment or not live_enabled():
+    injected = any(f is not None for f in (pecos_fn, medicaid_fn, assignment_fn))
+    if not run_enrollment or not (injected or live_enabled()):
         return {**base, "status": "NOT_RUN", "tone": "neutral", "detail": "Enrollment lookup not run."}
     if lob in ("medicare", "dual"):
         from network_probe.domain.enrollment import pecos_enrollment
 
-        r = pecos_enrollment(q.npi)
+        r = (pecos_fn or pecos_enrollment)(q.npi)
         base["source"] = "Medicare enrollment (PECOS)"
     else:
         from network_probe.domain.enrollment import medicaid_enrollment
 
-        r = medicaid_enrollment(q.npi, q.state)
+        r = (medicaid_fn or medicaid_enrollment)(q.npi, q.state)
         base["source"] = f"Medicaid enrollment ({(q.state or '?').upper()})"
+
+    # An opted-out provider IS Medicare-enrolled, so PECOS alone would print a green "ENROLLED"
+    # beside the OUT_OF_NETWORK that `enrollment_negative` now returns for exactly that provider.
+    # Both statements are true and together they are unreadable, so the affidavit takes the row.
+    # Only checked where it is decisive (Medicare/dual) and where enrolment did not already settle it.
+    if lob in ("medicare", "dual") and r.enrolled is not False:
+        from network_probe.domain.enrollment import OPTED_OUT, assignment_status
+
+        try:
+            asg = (assignment_fn or assignment_status)(q.npi)
+        except Exception:  # noqa: BLE001 — an unreachable source must not alter the row
+            asg = None
+        if asg is not None and asg.status == OPTED_OUT:
+            return {
+                **base, "source": "Medicare opt-out affidavit", "status": "OPTED_OUT", "tone": "danger",
+                "detail": asg.detail + " — a Medicare Advantage plan cannot pay an opted-out provider → OON",
+            }
+
     status = {True: "ENROLLED", False: "NOT_ENROLLED", None: "UNDETERMINED"}[r.enrolled]
     tone = {"ENROLLED": "success", "NOT_ENROLLED": "danger", "UNDETERMINED": "neutral"}[status]
     tail = " (necessary, not sufficient — enrolled ≠ in-network)" if r.enrolled is True else (

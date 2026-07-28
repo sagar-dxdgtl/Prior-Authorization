@@ -34,36 +34,84 @@ from network_probe.domain.tic_network import (
 _EXEMPT = {"medicare", "medicaid", "dual", "federal"}
 
 
-def enrollment_negative(q, lob, pecos_fn=None, medicaid_fn=None):
-    """Decisive negative for Medicare/Medicaid lines: if the provider is CONFIRMED not enrolled in the
-    program (a *successful* PECOS/state-Medicaid lookup that found no match), return an OON verdict —
-    you cannot be in-network for a program you can't bill. Returns None on enrolled/undetermined/
-    commercial, or on a failed lookup (never a false OON). `enrolled is True` only clears the gate."""
+def enrollment_negative(q, lob, pecos_fn=None, medicaid_fn=None, assignment_fn=None):
+    """Decisive negatives drawn from the PROGRAMME rather than from the plan, for Medicare/Medicaid
+    lines. Two of them:
+
+      * **Not enrolled** — a *successful* PECOS / state-Medicaid lookup that found no match. You
+        cannot be in-network for a programme you cannot bill.
+      * **Opted out of Medicare** — a current opt-out affidavit. The provider treats Medicare
+        patients under a private contract, and an MA organisation may not pay them for anything but
+        emergency or urgently needed care, so they cannot be in an MA plan's network however a
+        credentialing row or payer directory reads. Those sources are the ones most likely to be
+        stale here, because the affidavit is filed with CMS and not with the plan.
+
+    Returns None on enrolled/undetermined/commercial, or on a failed lookup — never a false OON.
+    `enrolled is True` and `accepts assignment` each only CLEAR the gate; the plan network still
+    decides the positive case."""
     if not q.npi:
         return None
-    from network_probe.domain.enrollment import live_enabled, medicaid_enrollment, pecos_enrollment
-
-    if pecos_fn is None and medicaid_fn is None and not live_enabled():
-        return None  # test env, no injected lookup -> skip live enrollment (preserves prior behavior)
-    pecos_fn = pecos_fn or pecos_enrollment
-    medicaid_fn = medicaid_fn or medicaid_enrollment
-    if lob in ("medicare", "dual"):
-        res = pecos_fn(q.npi)  # dual is Medicare + Medicaid; PECOS covers the Medicare prerequisite
-    elif lob == "medicaid":
-        res = medicaid_fn(q.npi, q.state)
-    else:
-        return None
-    if res is None or res.enrolled is not False:
-        return None
-    return NetworkVerdict(
-        status=NetworkStatus.OUT_OF_NETWORK,
-        matched_provider={"npi": q.npi, "enrollment_program": res.program, "enrolled": False},
-        plan_or_network_checked=f"{q.payer} — {res.program} enrollment",
-        source_url="enrollment",
-        confidence="high",
-        notes=f"{res.detail} A provider not enrolled in the program cannot be in-network for it.",
-        corroboration=[{"source": "Enrollment", "result": "contradicts", "detail": res.detail}],
+    from network_probe.domain.enrollment import (
+        OPTED_OUT,
+        assignment_status,
+        live_enabled,
+        medicaid_enrollment,
+        pecos_enrollment,
     )
+
+    # Each source defaults to its live implementation only outside the test env, so a caller can
+    # inject one without silently dragging the others onto the network.
+    if live_enabled():
+        pecos_fn = pecos_fn or pecos_enrollment
+        medicaid_fn = medicaid_fn or medicaid_enrollment
+        assignment_fn = assignment_fn or assignment_status
+    if pecos_fn is None and medicaid_fn is None and assignment_fn is None:
+        return None  # test env, no injected lookup -> skip live enrollment (preserves prior behavior)
+
+    def _oon(detail, extra, checked, source, tail):
+        return NetworkVerdict(
+            status=NetworkStatus.OUT_OF_NETWORK,
+            matched_provider={"npi": q.npi, **extra},
+            plan_or_network_checked=f"{q.payer} — {checked}",
+            source_url="enrollment",
+            confidence="high",
+            notes=f"{detail} {tail}",
+            corroboration=[{"source": source, "result": "contradicts", "detail": detail}],
+        )
+
+    _NOT_ENROLLED = "A provider not enrolled in the program cannot be in-network for it."
+
+    if lob in ("medicare", "dual"):
+        # dual is Medicare + Medicaid; PECOS covers the Medicare prerequisite.
+        res = pecos_fn(q.npi) if pecos_fn is not None else None
+        if res is not None and res.enrolled is False:
+            # Already decisive — don't spend a second request to reach the same verdict.
+            return _oon(
+                res.detail, {"enrollment_program": res.program, "enrolled": False},
+                f"{res.program} enrollment", "Enrollment", _NOT_ENROLLED,
+            )
+        try:
+            asg = assignment_fn(q.npi) if assignment_fn is not None else None
+        except Exception:  # noqa: BLE001 — an unreachable source is not an opt-out
+            asg = None
+        if asg is not None and asg.status == OPTED_OUT:
+            return _oon(
+                asg.detail, {"opted_out": True},
+                "Medicare opt-out affidavit", "Medicare assignment",
+                "A provider who has opted out of Medicare treats Medicare patients under a private "
+                "contract, so a Medicare Advantage plan cannot pay them outside emergency or "
+                "urgently needed care — they cannot be in its network.",
+            )
+        return None
+
+    if lob == "medicaid":
+        res = medicaid_fn(q.npi, q.state) if medicaid_fn is not None else None
+        if res is not None and res.enrolled is False:
+            return _oon(
+                res.detail, {"enrollment_program": res.program, "enrolled": False},
+                f"{res.program} enrollment", "Enrollment", _NOT_ENROLLED,
+            )
+    return None
 
 
 def no_network_verdict(q, pecos_fn=None, assignment_fn=None) -> NetworkVerdict:
@@ -405,20 +453,39 @@ def resolve_provider_network(
 
     # TiC-exempt lines (Medicare/Medicaid/Dual/federal): credentialing first, TiC never consulted.
     if lob in _EXEMPT:
+        # The programme-level negative is computed FIRST, even when credentialing has an answer.
+        # A Medicare opt-out affidavit is filed with CMS and never with the plan, so a credentialing
+        # matrix — the clinic's own admin record — is the source most likely to be stale about it.
+        # Running this only when `cred is None` skipped the check on exactly the rows it matters on.
+        ev = enrollment_negative(q, lob, pecos_fn=pecos_fn, assignment_fn=assignment_fn)
         if cred is not None:
+            # CMS does not silently overturn contract evidence — a disagreement is surfaced, not
+            # resolved. Flipping a credentialed IN to OON off a monthly file that may be weeks stale
+            # would be over-claiming in the other direction; REVIEW is actionable and honest.
+            if ev is not None and cred.in_network:
+                return NetworkVerdict(
+                    status=NetworkStatus.REVIEW,
+                    matched_provider={"npi": q.npi, "tin": q.tin, "credentialing": True, "plan": cred.plan},
+                    plan_or_network_checked=f"{q.payer} credentialing vs {ev.plan_or_network_checked}",
+                    source_url="credentialing-matrix+enrollment",
+                    confidence="conflict",
+                    notes=(
+                        f"Clinic credentialing has NPI {q.npi} in-network for {q.payer} "
+                        f"({cred.source}), but CMS contradicts it: {ev.notes} Credentialing cannot "
+                        f"see a CMS opt-out — verify before billing."
+                    ),
+                    corroboration=(ev.corroboration or []),
+                )
             na = _sig(
                 "n/a",
                 "Transparency-in-Coverage MRFs do not cover this line — Medicare Advantage, Medicaid and "
                 "Dual are federally exempt; provider network taken from clinic credentialing.",
             )
             return _cred_verdict(q, cred, na)
-        # No credentialing record — try the enrollment negative filter: a provider NOT enrolled in
-        # Medicare (PECOS) / the state's Medicaid cannot be in-network for this line → decisive OON.
-        # (Enrolled/undetermined → None, fall through to the directory leg — enrolled ≠ INN.)
-        ev = enrollment_negative(q, lob)
-        if ev is not None:
-            return ev
-        return None
+        # No credentialing record — the negative filter stands on its own: a provider NOT enrolled in
+        # Medicare (PECOS) / the state's Medicaid, or one who has opted out of Medicare, cannot be
+        # in-network for this line → decisive OON. (Otherwise None: enrolled ≠ INN, so fall through.)
+        return ev
 
     # Commercial (or unknown): TiC is the live signal.
     tic_status, known = tic_network_status(q.payer, q.npi, q.tin, crosswalk=crosswalk, store=store)
