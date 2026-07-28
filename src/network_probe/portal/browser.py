@@ -28,12 +28,30 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
 from network_probe.portal.models import Reachability
 
-# A real desktop Chrome UA. This is not evasion — Playwright drives genuine Chromium; the default UA
-# merely advertises "HeadlessChrome", which some CDNs 403 on sight even for legitimate clients.
-_UA = (
+# A real desktop Chrome UA, with the version taken from the browser we ACTUALLY launched.
+#
+# This is not evasion — Playwright drives genuine Chromium, and the only thing being changed is the
+# default UA's "HeadlessChrome" token, which some CDNs 403 on sight even for legitimate clients.
+# What matters is that the version must not be invented. A hardcoded "Chrome/131" against a real
+# Chromium 149 is a false claim, and it is exactly the inconsistency Aetna's Akamai edge rejects: a
+# request whose User-Agent names a browser its client hints contradict gets denied, while a real
+# visible browser passes. my.wellcare.com separately warns the user that Chrome 131 has a known
+# vulnerability. Deriving the version from `browser.version` keeps UA and client hints telling the
+# same true story, and means this can never drift again when Playwright updates.
+_UA_TEMPLATE = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+    "(KHTML, like Gecko) Chrome/{major}.0.0.0 Safari/537.36"
 )
+
+
+def user_agent(browser=None) -> str:
+    """The UA to present: real Chromium major version where we can read it, else the template's."""
+    major = "149"
+    try:
+        major = (browser.version or "").split(".")[0] or major
+    except Exception:  # noqa: BLE001 — a UA is never worth failing a capture over
+        pass
+    return _UA_TEMPLATE.format(major=major)
 
 NAV_TIMEOUT_MS = 45_000  # hard per-navigation budget; a portal slower than this is not demo-viable
 
@@ -112,7 +130,7 @@ def browser_session(headed: bool | None = None, proxy: str | None = None) -> Ite
 def portal_page(browser, portal_key: str | None = None, reuse_session: bool = True) -> Iterator[Page]:
     """A fresh context + page, optionally restoring a previously saved (human-satisfied) session."""
     ctx_args: dict = {
-        "user_agent": _UA,
+        "user_agent": user_agent(browser),
         "viewport": {"width": 1440, "height": 900},
         "locale": "en-US",
         "timezone_id": "America/New_York",
