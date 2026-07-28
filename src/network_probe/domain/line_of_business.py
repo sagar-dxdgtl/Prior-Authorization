@@ -20,7 +20,12 @@ import re
 
 # non-commercial line markers, most specific first (dual is a subset of both Medicare and Medicaid)
 _DUAL = re.compile(r"\bdual\b|d-?snp|\bfide\b", re.I)
-_MEDICAID = re.compile(r"medicaid|ahcccs|medi-?cal|\bchip\b", re.I)
+# NOTE the Medi-Cal forms. `medi-?cal` case-insensitively IS the word "Medical", so it matched
+# every plan named "...Medical..." and — Medicaid being tested before Medicare — turned
+# "Aetna Medicare Prime Extra Medical" into a Medicaid plan. California's programme is only
+# ever written hyphenated ("Medi-Cal") or camel-cased ("MediCal"), so match exactly those:
+# the hyphen case-insensitively, the camelCase form case-SENSITIVELY via (?-i:...).
+_MEDICAID = re.compile(r"medicaid|ahcccs|medi-cal|(?-i:MediCal)|\bchip\b", re.I)
 _MEDICARE = re.compile(
     r"medicare|advantage|\bmapd\b|\bma-?pd\b|\bpdp\b|\bpart [abcd]\b|\bh\d{4}\b|\br\d{4}\b|\bs\d{4}\b",
     re.I,
