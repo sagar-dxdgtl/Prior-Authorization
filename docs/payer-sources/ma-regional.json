@@ -8,7 +8,7 @@
     "directory_url": "https://www.hioscar.com/care-options",
     "directory_access": "public",
     "stedi_hint": "TAZWT (primary payer ID: OSCAR)",
-    "notes": "Patient Access API powered by 1upHealth (see https://www.hioscar.com/cms_patient_access_developer_page). No specific Plan-Net FHIR base URL is published; developer page refers to 1upHealth docs. TiC URL is a landing page (state-specific PDFs) not a CMS-schema JSON index. Existing Stedi eligibility adapter in repo uses TAZWT. Oscar also supports PDEX IG STU 2.0.0 per CMS compliance docs."
+    "notes": "Patient Access API powered by 1upHealth (see https://www.hioscar.com/cms_patient_access_developer_page). No specific Plan-Net FHIR base URL is published; developer page refers to 1upHealth docs. TiC: the landing page is JS-rendered, so a non-JS fetch sees only the shell — the earlier \"landing page (state-specific PDFs), not a CMS-schema JSON index\" note was wrong. It links 49 monthly CMS-schema indexes, e.g. https://hioscar-cms-tic-us-east-1.s3.amazonaws.com/oscar/20260701_oscar_index.json (~970KB). Oscar's OWN medical in-network files are .../oscar/negotiated_rates/<YYYYMMDD>/oscar/<YYYYMMDD>-oscar-<NNN>-in-network.json where <NNN> is the networkId, one file per network (29 for 2026, 31-40MB each); the rest of the index is Optum behavioural carve-outs and Davis Vision. Verified 2026-07-28: networkIds come straight from the JSON API https://www.hioscar.com/search/api/v2/networks (no browser needed — it is only the HTML /search/networks/ page that requires one). Existing Stedi eligibility adapter in repo uses TAZWT. Oscar also supports PDEX IG STU 2.0.0 per CMS compliance docs."
   },
   {
     "payer": "devoted_health",
