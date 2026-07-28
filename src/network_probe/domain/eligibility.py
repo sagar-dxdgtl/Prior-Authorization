@@ -91,7 +91,14 @@ def check_eligibility(
             gc = group_contracted(q.payer, q.tin)
         except Exception:
             gc = None
-    benefit_type = getattr(payer, "benefit_type", None) if payer else None
+    # The member's plan selects which of the payer key's benefit_type rows applies; the
+    # catalogue's first row is only a fallback. See domain/benefit_type.py.
+    from network_probe.domain.benefit_type import benefit_type_for
+
+    _plan_for_line = result.selected_plan or result.plan_name or q.plan_hint
+    benefit_type = benefit_type_for(q.payer, _plan_for_line, catalogue=cat)
+    if benefit_type is None and payer:
+        benefit_type = getattr(payer, "benefit_type", None)
     # Plan-type out-of-network TIER (Medicare/Dual only): resolve the member's plan to its structural
     # OON capability — the live CMS PBP plan when available, else the token written in the plan string.
     # This only FILLS a silent 271's OON tier; a definite 271 always wins (see final_determination).

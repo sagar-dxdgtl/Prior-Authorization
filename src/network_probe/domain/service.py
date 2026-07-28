@@ -190,7 +190,14 @@ def check_network(
         from network_probe.domain.provider_network import resolve_provider_network
 
         row = _catalogue_row(q.payer, catalogue)
-        benefit_type = getattr(row, "benefit_type", None) if row is not None else None
+        # A payer key can carry four benefit_type rows (ACA/Commercial/Medicaid/MA). The
+        # MEMBER'S PLAN decides which line applies — picking the catalogue's first row
+        # silently marked TiC exempt for a commercial member. See domain/benefit_type.py.
+        from network_probe.domain.benefit_type import benefit_type_for
+
+        benefit_type = benefit_type_for(q.payer, q.plan_hint, catalogue=catalogue)
+        if benefit_type is None and row is not None:
+            benefit_type = getattr(row, "benefit_type", None)
         pn = resolve_provider_network(q, benefit_type=benefit_type)
         if pn is not None:
             return pn
