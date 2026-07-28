@@ -34,7 +34,19 @@ TARGETS: tuple[PortalTarget, ...] = (
         key="uhc-findcare",
         portal_name="UHC Find Care (guest)",
         entry_url="https://findcare.guest.uhc.com/guest-plan-selection/browse",
-        payer_keys=("unitedhealthcare-ga", "unitedhealthcare-fl", "unitedhealthcare-fl-south-florida"),
+        payer_keys=(
+            "unitedhealthcare-az",
+            "unitedhealthcare-co-denver",
+            "unitedhealthcare-fl-south-florida",
+            "unitedhealthcare-fl-tampa",
+            "unitedhealthcare-ga-atlanta",
+            "unitedhealthcare-il",
+            "unitedhealthcare-nj-uvc",
+            "unitedhealthcare-nj-vascular-health",
+            "unitedhealthcare-ny",
+            "unitedhealthcare-tx-dallas",
+            "unitedhealthcare-tx-houston",
+        ),
         sheet_rows=(
             "UHC Medicare Advantage GA",
             "UHC Commerical NHP Access HMO",
@@ -78,7 +90,18 @@ TARGETS: tuple[PortalTarget, ...] = (
         key="cigna-hcp",
         portal_name="Cigna Health Care Provider Directory",
         entry_url="https://hcpdirectory.cigna.com/",
-        payer_keys=("cigna-healthcare-fl",),
+        payer_keys=(
+            "cigna-healthcare-az",
+            "cigna-healthcare-co-denver",
+            "cigna-healthcare-fl-south-florida",
+            "cigna-healthcare-fl-tampa",
+            "cigna-healthcare-ga-atlanta",
+            "cigna-healthcare-il",
+            "cigna-healthcare-nj-uvc",
+            "cigna-healthcare-ny",
+            "cigna-healthcare-tx-dallas",
+            "cigna-healthcare-tx-houston",
+        ),
         sheet_rows=("Cigna Commercial",),
         fhir_fallback="Cigna PDEX Plan-Net (pre-wired in fhir_pdex)",
         notes="2026-06-28 sweep: loaded, SPA, no WAF block. Commercial line → also TiC-eligible.",
@@ -88,7 +111,14 @@ TARGETS: tuple[PortalTarget, ...] = (
         key="oscar-care-options",
         portal_name="Oscar Care Options",
         entry_url="https://www.hioscar.com/care-options",
-        payer_keys=("oscar-ga",),
+        payer_keys=(
+            "oscar-az",
+            "oscar-fl-south-florida",
+            "oscar-fl-tampa",
+            "oscar-ga-atlanta",
+            "oscar-nj-vascular-health",
+            "oscar-tx-houston",
+        ),
         sheet_rows=("Oscar Health",),
         fhir_fallback="Oscar private JSON directory API (already an adapter)",
         notes=(
@@ -101,7 +131,15 @@ TARGETS: tuple[PortalTarget, ...] = (
         key="wellcare-hub",
         portal_name="Wellcare Find a Provider",
         entry_url="https://www.wellcarefindaprovider.com/",
-        payer_keys=("wellcare-ga",),
+        payer_keys=(
+            "wellcare-allwell-centene-tx-houston",
+            "wellcare-centene-az",
+            "wellcare-centene-fidelis-nj-vascular-health",
+            "wellcare-centene-ga-atlanta",
+            "wellcare-centene-il",
+            "wellcare-centene-tx-dallas",
+            "wellcare-centene-tx-houston",
+        ),
         sheet_rows=("Wellcare",),
         platform="Centene public hub",
         notes=(
@@ -115,7 +153,17 @@ TARGETS: tuple[PortalTarget, ...] = (
         key="humana-finder",
         portal_name="Humana Provider Finder",
         entry_url="https://finder.humana.com/",
-        payer_keys=("humana-fl", "humana-fl-tampa"),
+        payer_keys=(
+            "humana-az",
+            "humana-co-denver",
+            "humana-fl",
+            "humana-ga-atlanta",
+            "humana-il",
+            "humana-nj-vascular-health",
+            "humana-ny",
+            "humana-tx-dallas",
+            "humana-tx-houston",
+        ),
         sheet_rows=("Humana Medicare FL",),
         fhir_fallback="Humana PDEX Plan-Net, no auth (verified live)",
         notes=(
@@ -130,7 +178,10 @@ TARGETS: tuple[PortalTarget, ...] = (
         # The path in the 2026-06-28 sweep 404s. This is the live guest-search entry (zip + plan type),
         # confirmed 2026-07-28; www.bcbsil.com/find-care also serves and links to it.
         entry_url="https://www.bcbsil.com/find-care/find-a-doctor-or-hospital",
-        payer_keys=("bcbs-il", "bcbs-empire-anthem-elevance-il"),
+        payer_keys=(
+            "bcbs-anthem-il",
+            "bcbs-empire-anthem-elevance-hcsc-il",
+        ),
         sheet_rows=("BCBS Illinois",),
         fhir_fallback="HCSC PDEX Plan-Net (static client_id header, already wired)",
         notes=(
@@ -142,10 +193,15 @@ TARGETS: tuple[PortalTarget, ...] = (
     PortalTarget(
         key="molina-provider-search",
         portal_name="Molina Provider Search (TX Medicaid)",
-        # providersearch.molinahealthcare.com now redirects to a generic error page — that host is dead,
-        # not blocked. This is Molina's current TX member directory hub, confirmed 2026-07-28.
-        entry_url="https://www.molinahealthcare.com/members/tx/en-US/mem/provider-directories.aspx",
-        payer_keys=("molina-healthcare-tx",),
+        # The live tool is Zelis "Sapphire", found 2026-07-28 by driving candidates in a real browser.
+        # providersearch.molinahealthcare.com is DEAD (retired host -> generic error page, NOT WAF-blocked)
+        # and the molinahealthcare.com member hub serves 313 chars titled "Error Page". Imperva fronts the
+        # Sapphire host but never challenged across 5 runs — fronted, not gated.
+        entry_url="https://molina.sapphirecareselect.com/",
+        payer_keys=(
+            "molina-healthcare-tx-dallas",
+            "molina-healthcare-tx-houston",
+        ),
         sheet_rows=("Molina Medicaid TX",),
         fhir_fallback="Molina PDEX Plan-Net (public)",
         notes=(
@@ -153,7 +209,8 @@ TARGETS: tuple[PortalTarget, ...] = (
             "separate host that was never probed. Managed Medicaid → TiC-exempt, so portal/FHIR are the only "
             "network sources for this row; TX Medicaid enrollment is the decisive negative filter."
         ),
-        search_hints=("input[type=search]", "input[name*='search']"),
+        # This SPA's box is a data-cy autosuggest; generic input[type=search] never matches it.
+        search_hints=("input[data-cy='autosuggest.input']",),
     ),
 )
 
