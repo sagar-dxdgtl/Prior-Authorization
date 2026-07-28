@@ -19,6 +19,7 @@ a failed/unreachable lookup returns ``enrolled = None`` (undetermined) — never
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from urllib.parse import urlencode
@@ -35,9 +36,13 @@ _PECOS_META = (
 _PECOS_DATA = "https://data.cms.gov/data-api/v1/dataset/{ds}/data-viewer"
 _PECOS_FLAGS = {"PARTB", "DME", "HHA", "PMD", "HOSPICE"}
 
-# Per-state Medicaid enrollment endpoints (extend from the screening project's medicaid_sources.csv).
+# Per-state Medicaid enrollment endpoints (ported from the screening project's medicaid_sources.csv).
 # NY: Socrata "Medicaid Enrolled Provider Listing".
 _NY_SOCRATA = "https://health.data.ny.gov/resource/keti-qx5t.json"
+# IL: HFS individual-provider directory (the state agency's own list), JSON POST search.
+_IL_HFS = "https://ext2.hfs.illinois.gov/hfsindprovdirectory/Main/ProviderDataSource/"
+# ME: the MaineCare provider directory, an anonymous-read FHIR R4 server.
+_ME_FHIR = "https://maineproviderdirectory.verityanalytics.org/fhir"
 
 # --- Medicare ASSIGNMENT (a different axis than enrollment — see assignment_status) --------------
 # CMS "Doctors and Clinicians" National Downloadable File — the data behind medicare.gov Care
@@ -313,20 +318,110 @@ def _medicaid_ny(n: str, client: CachedClient) -> EnrollmentResult:
     return EnrollmentResult(False, "medicaid-NY", f"NPI {n} not in NY Medicaid Enrolled Provider Listing.")
 
 
-# state -> live-API lookup fn (extend per-state; states without a fn return undetermined)
-_MEDICAID_STATE_APIS = {"NY": _medicaid_ny}
+def _medicaid_il(n: str, client: CachedClient) -> EnrollmentResult:
+    """Illinois HFS — the state Medicaid agency's own individual-provider directory (JSON)."""
+    body = json.dumps(
+        {
+            "requiresCounts": True,
+            "search": [{"fields": ["NPI", "TheName"], "operator": "contains", "key": n, "ignoreCase": True}],
+            "skip": 0,
+            "take": 50,
+        }
+    )
+    data = client.post_json(
+        _IL_HFS, content=body, headers={"content-type": "application/json; charset=UTF-8", "accept": "application/json"}
+    )
+    # HFS matches with `contains`, so confirm the NPI ourselves rather than trusting the row count.
+    match = [r for r in (data.get("result") or []) if _norm_npi(r.get("NPI")) == n]
+    if match:
+        name = str(match[0].get("TheName") or "").strip()
+        return EnrollmentResult(
+            True, "medicaid-IL",
+            f"NPI {n} is in the Illinois HFS enrolled-provider directory" + (f" ({name})." if name else "."),
+        )
+    return EnrollmentResult(
+        False, "medicaid-IL", f"NPI {n} is not in the Illinois HFS enrolled-provider directory."
+    )
+
+
+def _npi_from_fhir(resource: dict) -> str:
+    """The us-npi identifier off a FHIR Practitioner/Organization. Practitioners also carry state
+    licence numbers, so the identifier SYSTEM has to be checked — not just any identifier value."""
+    for ident in resource.get("identifier") or []:
+        system = str(ident.get("system") or "").lower()
+        if system.endswith("us-npi") or "us-npi" in system:
+            return _norm_npi(ident.get("value"))
+    return ""
+
+
+def _medicaid_me(n: str, client: CachedClient) -> EnrollmentResult:
+    """Maine — the MaineCare provider directory, an anonymous-read FHIR R4 server. Presence IS
+    enrollment here (the directory holds only active MaineCare providers)."""
+    for kind in ("Practitioner", "Organization"):  # type-1 then type-2 (organisational) NPIs
+        url = f"{_ME_FHIR}/{kind}?" + urlencode({"identifier": n, "_count": 500})
+        data = client.get_json(url, headers={"accept": "application/fhir+json"})
+        # A FHIR server reports errors as a 200 OperationOutcome; reading that as "no match" would
+        # turn every server-side error into a confident OON.
+        if str(data.get("resourceType") or "") == "OperationOutcome":
+            return EnrollmentResult(
+                None, "medicaid-ME", f"the MaineCare FHIR directory returned an OperationOutcome for NPI {n}."
+            )
+        for entry in data.get("entry") or []:
+            resource = entry.get("resource") or {}
+            if _npi_from_fhir(resource) == n:
+                return EnrollmentResult(True, "medicaid-ME", f"NPI {n} is in the MaineCare provider directory.")
+    return EnrollmentResult(False, "medicaid-ME", f"NPI {n} is not in the MaineCare provider directory.")
+
+
+# state -> live-API lookup fn. A state earns a place here only when its source is BOTH
+# identifier-grade (the NPI comes back in the response, so the match can be confirmed client-side)
+# and authoritative for the state (its own enrolled-provider file, not one MCO's network). Anything
+# less cannot carry the decisive negative that `enrollment_negative` builds on top of it.
+_MEDICAID_STATE_APIS = {"NY": _medicaid_ny, "IL": _medicaid_il, "ME": _medicaid_me}
+
+# States whose source was evaluated and deliberately NOT wired, with the reason. Recorded so the
+# next person does not re-derive it, and so an unwired state gives a real answer instead of a shrug.
+# (Ported from the screening project's medicaid_sources.csv + its per-state scrapers.)
+_MEDICAID_UNWIRED = {
+    "KS": "the KMAP directory answers, but its rows come back with NPI: null — the match cannot be confirmed",
+    "TX": "the TMHP Online Provider Lookup returns HTML with the NPI encoded — the match cannot be confirmed",
+    "MD": "eMedicaid is NPI-exact but HTML-scraped and needs TLS verification disabled",
+    "WI": "the only source is a Centene MCO network directory, not the state's enrolled-provider file",
+    "IA": "the only sources are MCO network directories (Centene/Molina), not the state's enrolled-provider file",
+    "KY": "the Molina Sapphire API cannot search by NPI — it needs the provider's name, which we do not carry",
+    "CT": "the HealthX API cannot search by NPI — it needs the provider's name, which we do not carry",
+    "LA": "the myplan.healthy.la.gov API cannot search by NPI — it needs the provider's name",
+    "UT": "the portal is name-only, returns no NPI, and serves a broken certificate chain",
+    "NC": "the directory API requires a reCAPTCHA v2 token",
+    "HI": "the directory is behind a Cloudflare challenge",
+    "GA": "the portal needs a browser postback (DNN VIEWSTATE) per row",
+    "AZ": "the CNSI portal is name-only and returns no NPI",
+    "NM": "the Salesforce Aura portal returns no NPI and needs a separate address lookup",
+    "MA": "the portal requires a city/ZIP and a CSRF token, and is an HTML grid",
+    "AR": "the portal requires city, state and ZIP alongside the NPI",
+    "TN": "the portal requires a real browser",
+    "NE": "the source is a 6,000-page PDF that has to be bulk-imported, not queried",
+    "SC": "the source is a bulk CSV export that has to be imported, not queried",
+    "SD": "the source is a PowerBI export that has to be imported, not queried",
+}
 
 
 def medicaid_enrollment(npi, state, client: CachedClient | None = None) -> EnrollmentResult:
-    """Is this NPI enrolled in the given state's Medicaid? Per-state; only implemented states can
-    return True/False — others return None (undetermined), so we never assert OON we can't back up."""
+    """Is this NPI enrolled in the given state's Medicaid? Per-state; only wired states can return
+    True/False — every other state returns None (undetermined), so we never assert an OON we cannot
+    back up. Unwired states report WHY they are unwired rather than a bare "not supported"."""
     n = _norm_npi(npi)
     st = (state or "").strip().upper()
     if len(n) != 10 or not st:
         return EnrollmentResult(None, f"medicaid-{st or '?'}", "no valid NPI/state to check")
     fn = _MEDICAID_STATE_APIS.get(st)
     if fn is None:
-        return EnrollmentResult(None, f"medicaid-{st}", f"no Medicaid enrollment source wired for {st} yet")
+        why = _MEDICAID_UNWIRED.get(st)
+        return EnrollmentResult(
+            None, f"medicaid-{st}",
+            f"{st} Medicaid enrollment is not wired: {why}." if why
+            else f"no Medicaid enrollment source wired for {st} yet",
+        )
     client = client or CachedClient()
     try:
         return fn(n, client)
