@@ -347,6 +347,35 @@ class UhcFindCareDriver(PortalDriver):
             pass  # a failed location narrows nothing; the search still runs
 
 
+
+    def identify(self, pool, q: PortalQuery):
+        """(ours, namesake_seen) — which listing is OUR provider, and whether a same-surname
+        stranger was present.
+
+        The old test was `surname in normalized(text)`, a substring match that ignored the first
+        name, so any Bui matched any other Bui. Live, with the plan correctly pinned, that read
+        "Tony BUI, Pain Management" as Stephanie Bui and "Benjamin L NAAR" as David Naar — two
+        confident IN_NETWORKs against staff determinations of OON. Same defect class as the Oscar
+        adapter's P1 namesake fix.
+
+        `namesake_seen` matters as much as the match: a listing that shares the surname but not the
+        first name means the result set is not evidence our provider is ABSENT — the portal may
+        carry them under a form we did not match — so the caller must not read it as OON.
+        """
+        last = _norm(q.provider_last_name)
+        first = _norm(q.provider_first_name)
+        if not last:
+            return None, False
+        namesake = False
+        for text in pool:
+            n = _norm(text)
+            if last not in n:
+                continue
+            if first and first in n:
+                return text.strip().splitlines()[0][:120], False
+            namesake = True  # right surname, first name absent or different -> not provably ours
+        return None, namesake
+
     def presence_verdict(self, *, plan_confirmed: bool, kind: str, term: str, matched, npi,
                          zip_code, plan):
         """Presence in the directory -> (status, note). Decisive ONLY when the plan is pinned.
@@ -406,12 +435,12 @@ class UhcFindCareDriver(PortalDriver):
 
         if q.npi and q.npi in page_text:
             return True, count, self._matched_name(pool, q) or f"NPI {q.npi} present on page"
-        want = _norm(q.provider_last_name)
-        if want:
-            for text in pool:
-                if want in _norm(text):
-                    return True, count, text.strip().splitlines()[0][:120]
-        return False, count, None
+        ours, namesake = self.identify(pool, q)
+        if ours:
+            return True, count, ours
+        # A same-surname stranger means this result set cannot show our provider is ABSENT, so
+        # report zero results rather than a countable set the caller could read as an OON.
+        return False, (0 if namesake else count), None
 
     def _suggestions(self, page: Page) -> list[str]:
         """The typeahead's provider suggestions. Read via UHC's own suggestion testid first, because
