@@ -188,3 +188,35 @@ def needs_disambiguation(wanted: str | None, options: list[str]) -> bool:
     if not wanted or len(options) < 2:
         return False
     return match_plan(wanted, options) is None
+
+
+def match_plan_with_fallback(
+    wanted: str | None, options: list[str], *, client=None, enabled: bool | None = None
+) -> PlanMatch | None:
+    """`match_plan` with tier 3 (model disambiguation) underneath it.
+
+    The deterministic tiers always run first and always win — an identifier match is free, decisive,
+    and the only thing that can license an OUT_OF_NETWORK, so tier 3 is never consulted when tier 1
+    or 2 answered. Tier 3 only ever converts an UNKNOWN into a searchable plan; it cannot promote a
+    verdict, because the PlanMatch it returns is confidence "medium" and so fails `confirms_network`.
+
+    Off unless explicitly enabled (Settings.plan_llm_enabled), and a disabled call is byte-for-byte
+    the old behaviour. See portal/plan_llm.py for the PHI and safety boundaries.
+    """
+    m = match_plan(wanted, options)
+    if m is not None:
+        return m
+    if not needs_disambiguation(wanted, options):
+        return None
+    if enabled is None:
+        try:
+            from network_probe.core.config import get_settings
+
+            enabled = bool(get_settings().plan_llm_enabled)
+        except Exception:  # noqa: BLE001 — unconfigured means off, not broken
+            enabled = False
+    if not enabled:
+        return None
+    from network_probe.portal.plan_llm import disambiguate_plan
+
+    return disambiguate_plan(wanted, options, client=client)

@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     # Centene's PDEX endpoint is fronted by a CloudFront WAF that blocks non-US / datacenter IPs.
     # Applied ONLY to non-PHI provider-directory traffic; the Stedi 270/271 (member PHI) path never
     # routes through it. In production use an allowlisted egress IP instead of a proxy.
+    # Tier-3 plan disambiguation (portal/plan_llm.py). Off by default: it is the only path
+    # that calls a model, and it may only ever pin a plan for SEARCHING — never license an OON.
+    plan_llm_enabled: bool = False
     residential_proxy_enabled: bool = False
     residential_proxy_host: str | None = None
     residential_proxy_port: int | None = None

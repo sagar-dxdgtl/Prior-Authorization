@@ -80,7 +80,7 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
 from network_probe.portal.drivers.base import PortalDriver
 from network_probe.portal.models import PortalCapture, PortalQuery, PortalStatus
-from network_probe.portal.plan_match import match_plan
+from network_probe.portal.plan_match import match_plan_with_fallback as match_plan
 
 ENTRY = "https://molina.sapphirecareselect.com/"
 

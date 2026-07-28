@@ -886,7 +886,7 @@ class WellcareHubDriver(PortalDriver):
             return None, False, [], "the product step listed no products"
         offered = [_first_line(t) or "" for t in texts]
 
-        match = plan_match.match_plan(q.plan, texts)
+        match = plan_match.match_plan_with_fallback(q.plan, texts)
         if match is not None:
             if not self._click_label(page, match.index):
                 return None, False, offered, f"{match.basis}; but the product radio would not click"
