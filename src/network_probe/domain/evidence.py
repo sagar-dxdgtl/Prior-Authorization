@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from network_probe.domain.line_of_business import is_commercial, line_of_business
 from network_probe.domain.models import NetworkStatus
-from network_probe.domain.tic_network import tic_network_status
+from network_probe.domain.tic_network import tic_network_status, tic_tin_in_roster
 
 
 def _tone(status: str) -> str:
@@ -95,30 +95,18 @@ def _tic_source(q, result, benefit_type, crosswalk) -> dict:
             "detail": f"Billing TIN {q.tin} found in the payer's live in-network MRF.",
         }
     # The specific NPI isn't in-network in the MRF. Is the billing TIN present under OTHER NPIs
-    # (group contracted, physician-specific gap → Physician OON)? Check the TiC crosswalk + persisted
-    # facts (not credentialing — this row is specifically the TiC/MRF signal).
-    group = False
-    try:
-        cw = crosswalk
-        if cw is None:
-            from network_probe.domain.tin_crosswalk import default_crosswalk
-
-            cw = default_crosswalk()
-        group = bool(cw and cw.has_tin(q.payer, q.tin))
-        if not group:
-            from network_probe.domain.network_facts import default_provider_network_store
-
-            group = default_provider_network_store().group_contracted(q.payer, q.tin) is True
-    except Exception:
-        group = False
-    if group:
+    # (group contracted, physician-specific gap → Physician OON)? This row is specifically the
+    # TiC/MRF signal, so it reads the MRF stores only — never credentialing.
+    group, others = tic_tin_in_roster(q.payer, q.tin, npi=q.npi, crosswalk=crosswalk)
+    if group and others:
         return {
             "source": "TiC MRF",
             "answers": "provider network",
             "status": "GROUP_ONLY",
             "tone": "warning",
-            "detail": (f"Billing TIN {q.tin} IS in-network in the payer's MRF (under other NPIs), but this "
-                       f"physician's NPI {q.npi} is not listed — a physician-specific out-of-network gap."),
+            "detail": (f"Billing TIN {q.tin} IS in-network in the payer's MRF (under {len(others)} other "
+                       f"NPI(s)), but this physician's NPI {q.npi} is not listed — a physician-specific "
+                       f"out-of-network gap."),
         }
     return {
         "source": "TiC MRF",
