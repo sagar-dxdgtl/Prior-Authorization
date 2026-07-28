@@ -366,15 +366,24 @@ class UhcFindCareDriver(PortalDriver):
         first = _norm(q.provider_first_name)
         if not last:
             return None, False
-        namesake = False
+        ambiguous = False
         for text in pool:
             n = _norm(text)
             if last not in n:
                 continue
             if first and first in n:
                 return text.strip().splitlines()[0][:120], False
-            namesake = True  # right surname, first name absent or different -> not provably ours
-        return None, namesake
+            # Same surname, not ours. Whether that BLOCKS an absence finding depends on how much
+            # the listing printed. UHC renders "FirstName [M] LASTNAME" + specialty, so whatever
+            # sits before the surname is the given-name region:
+            #   * non-empty -> a fully named stranger ("Benjamin L NAAR" is plainly not David
+            #     Naar). It does not hide our provider, so the set still establishes absence.
+            #   * empty -> only a surname or an initial was printed; it might be ours, so the
+            #     caller must not read the set as an absence.
+            #   * we supplied no first name at all -> we cannot tell either way.
+            if not first or not n.split(last, 1)[0].strip():
+                ambiguous = True
+        return None, ambiguous
 
     def presence_verdict(self, *, plan_confirmed: bool, kind: str, term: str, matched, npi,
                          zip_code, plan):

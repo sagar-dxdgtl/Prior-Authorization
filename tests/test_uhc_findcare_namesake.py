@@ -29,14 +29,16 @@ def test_a_same_surname_stranger_is_not_our_provider():
     """THE live failure: Stephanie Bui is not Tony Bui."""
     ours, amb = UhcFindCareDriver().identify(["Tony BUIPain Management"], _q("Stephanie", "Bui"))
     assert ours is None
-    assert amb is True  # a namesake was seen — absence here is not evidence of out-of-network
+    # Tony is a FULLY NAMED stranger, so he does not hide Stephanie — the set still proves absence.
+    # (Contrast the initial-only case below, which does block an absence finding.)
+    assert amb is False
 
 
 def test_the_second_live_failure_too():
     ours, amb = UhcFindCareDriver().identify(
         ["Benjamin L NAARChiropractic Medicine"], _q("David", "Naar"))
     assert ours is None
-    assert amb is True
+    assert amb is False  # named stranger, not ambiguity
 
 
 def test_our_provider_is_matched_when_both_names_are_present():
@@ -69,3 +71,39 @@ def test_with_no_first_name_supplied_a_surname_match_stays_ambiguous():
     ours, amb = UhcFindCareDriver().identify(["Tony BUIPain Management"], _q(None, "Bui"))
     assert ours is None
     assert amb is True
+
+
+# ---- refinement: a DIFFERENT person is not the same as an AMBIGUOUS listing ----------------
+#
+# The first namesake fix suppressed the result count whenever any same-surname listing appeared.
+# That over-corrected: Test 2 row 3 searched "Naar" in AARP Medicare Advantage FL-0015 and got back
+# every Naar in the network — "Benjamin L NAAR, Chiropractic Medicine" and a dialysis centre. David
+# Naar is genuinely not among them, so that set DOES establish absence, and returning UNKNOWN threw
+# away a real finding. Staff say OON.
+#
+# The distinction is whether the listing carries a usable first name:
+#   * a DIFFERENT first name present -> a different person; it does not hide ours
+#   * no first name, or an initial   -> genuinely ambiguous; it might be ours
+
+
+def test_a_fully_named_different_person_does_not_block_an_absence_finding():
+    """Row 3 live: 'Benjamin L NAAR' is plainly not David Naar, so the set still proves absence."""
+    ours, amb = UhcFindCareDriver().identify(
+        ["Benjamin L NAARChiropractic Medicine", "Fmc Of NaranjaDialysis Center"],
+        _q("David", "Naar"))
+    assert ours is None
+    assert amb is False  # a named stranger is not ambiguity
+
+
+def test_an_initial_only_listing_is_still_ambiguous():
+    """'NAAR, D.' could be David — the portal just did not print enough to tell."""
+    ours, amb = UhcFindCareDriver().identify(["NAARChiropractic Medicine"], _q("David", "Naar"))
+    assert ours is None
+    assert amb is True
+
+
+def test_row_2_bui_namesakes_are_named_strangers_not_ambiguity():
+    ours, amb = UhcFindCareDriver().identify(
+        ["Tony BUIPain Management", "Christopher BUIPhysical Therapy"], _q("Stephanie", "Bui"))
+    assert ours is None
+    assert amb is False
