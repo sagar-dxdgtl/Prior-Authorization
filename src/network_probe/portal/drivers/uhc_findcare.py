@@ -53,9 +53,24 @@ _TYPEAHEAD_POLL_MS = 300
 _SEARCH_INPUT_MAX_MS = 30_000  # plan selection re-renders the shell; waiting costs nothing if it is quick
 
 # Dismissable overlays that sit on top of the first step.
+# Dismissable overlays sitting on top of the first step. UHC REDEPLOYS THIS SHELL — treat the list as
+# a growing set of handles, not a fixed description of the page.
+#
+# 2026-07-31: UHC shipped a "new guest experience" mid-session. A modal headed "Welcome to the new
+# guest experience!" with a Get started button appeared over the coverage-type cards, carrying none of
+# the testids below. The cards were still there and still correct; they were simply covered. All three
+# UHC rows of Ins Test 3 then died at "coverage type 'Medicare' NOT clickable" after ~198s of retries,
+# and a query that had returned OUT_OF_NETWORK three times that same afternoon began failing with no
+# code change in between. Hence the name-based entries: a vendor testid is not durable across a
+# redeploy, but the button a human is asked to press is.
 _OVERLAYS = (
     "[data-testid='guest-start-modal-abyss-modal-base-close-button']",
     "[data-testid='guest-coachmark-container-abyss-coachmark-close-button']",
+    # Scoped to a dialog so a "Get started" elsewhere on the site is never clicked.
+    "[role=dialog] button:has-text('Get started')",
+    # Generic fallbacks for the next rename: any close control inside a modal or coachmark.
+    "[data-testid*='modal'] [data-testid*='close']",
+    "[data-testid*='coachmark'] [data-testid*='close']",
 )
 
 # Coverage type -> the card to click, keyed by the line of business we infer from the plan string.
@@ -248,13 +263,16 @@ class UhcFindCareDriver(PortalDriver):
         return "commercial"
 
     def _dismiss_overlays(self, page: Page) -> None:
+        """Try every handle. One that matches nothing — or an element that detaches while we look at
+        it — must never stop the rest: the overlay we could not dismiss is rarely the blocking one,
+        and giving up early is how a covered page turns into "coverage type NOT clickable"."""
         for sel in _OVERLAYS:
             try:
                 b = page.locator(sel).first
                 if b.is_visible():
                     b.click()
                     page.wait_for_timeout(1_000)
-            except (PlaywrightTimeout, PlaywrightError):
+            except Exception:  # noqa: BLE001 — best-effort by design; see the docstring
                 continue
 
     def _click_any(self, page: Page, testid_sel: str, label: str, timeout_ms: int = 8_000) -> bool:
