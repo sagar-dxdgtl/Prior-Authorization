@@ -115,11 +115,23 @@ def identifiers(text: str | None) -> set[str]:
     return found
 
 
+def _exact_key(text: str | None) -> str:
+    """Normalised form for deciding "this string IS that label".
+
+    Case and whitespace only. A 271 writes "Statewide / National PPO" where the payer publishes
+    "Statewide/National PPO", and spacing around a slash must not decide the question. Punctuation is
+    deliberately NOT stripped: "Statewide/National PPO/EPO", "Statewide/National PPO + Prosano" and
+    "Statewide PPO" are three different AZ Blue networks, and flattening their punctuation would
+    collapse distinctions the payer draws on purpose.
+    """
+    return re.sub(r"\s+", "", (text or "")).upper()
+
+
 def distinctive_tokens(text: str | None) -> set[str]:
     """Words that actually distinguish one plan from another in the same market and line."""
     return {
         t for t in _TOKEN_RE.split((text or "").upper())
-        if len(t) >= 4 and t not in _NON_DISTINCTIVE and not t.isdigit()
+        if len(t) >= _MIN_TOKEN_LEN and t not in _NON_DISTINCTIVE and not t.isdigit()
     }
 
 
@@ -156,6 +168,34 @@ def match_plan(wanted: str | None, options: list[str]) -> PlanMatch | None:
             index=i, label=options[i], confidence="high", identifiers=shared,
             basis=f"plan identifier match on {best}{note}",
         )
+
+    # --- Tier 1.5: the plan string IS one of the labels. An exact match is not a tie.
+    #
+    # Tier 2 refuses a tie rather than guess, which is right, but it was applying that refusal to
+    # strings that needed no guessing at all. Measured 2026-07-31 against AZ Blue's 14 published
+    # networks, feeding each label back in as the plan string resolved only 6 of 14: "Alliance HMO"
+    # lost to a tie because ALLIANCE recurs in "Alliance PPO/EPO" and HMO in "Statewide HMO". When one
+    # option IS the string, there is nothing to choose between.
+    #
+    # Confidence stays "medium" — identifier-only is the bar for `confirms_network`, stated in five
+    # drivers, and an exact name is still a name: two markets of one payer can print the same network
+    # name. This pins the search; it does not license an out-of-network reading.
+    want_exact = _exact_key(wanted)
+    if want_exact:
+        exact = [i for i, label in enumerate(options) if _exact_key(label) == want_exact]
+        if len(exact) == 1:
+            i = exact[0]
+            return PlanMatch(
+                index=i, label=options[i], confidence="medium",
+                tokens=want_tokens & distinctive_tokens(options[i]),
+                basis=(
+                    f"the plan string names this network exactly ({options[i]!r}). Exact, so not the "
+                    f"ambiguity the tie rule guards against — but a name is not an identifier, so it "
+                    f"pins the search and does NOT license an out-of-network reading."
+                ),
+            )
+        if len(exact) > 1:
+            return None  # the portal lists the label twice; picking one would be the guess we refuse
 
     # --- Tier 2: distinctive-token overlap. Weak, floored, and must have a unique winner.
     scored = sorted(
