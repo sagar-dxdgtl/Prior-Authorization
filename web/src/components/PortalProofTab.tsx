@@ -94,7 +94,7 @@ export default function PortalProofTab({ target }: { target: PortalTarget | null
     let url: string | null = null;
     let cancelled = false;
     (async () => {
-      const r = await apiFetch(`/api/portal/screenshot/${encodeURIComponent(name)}`);
+      const r = await apiFetch(`/portal/screenshot/${encodeURIComponent(name)}`);
       if (!r.ok || cancelled) return;
       url = URL.createObjectURL(await r.blob());
       setShotUrl(url);
@@ -113,7 +113,7 @@ export default function PortalProofTab({ target }: { target: PortalTarget | null
     setState(null);
     setElapsed(0);
     try {
-      const res = await apiFetch('/api/portal/capture', {
+      const res = await apiFetch('/portal/capture', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...target, zip: target.zip ?? null }),
@@ -127,7 +127,7 @@ export default function PortalProofTab({ target }: { target: PortalTarget | null
       setState({ job_id, status: 'queued' } as CaptureStatus);
       timer.current = window.setInterval(() => setElapsed((s) => s + 1), 1000);
       poller.current = window.setInterval(async () => {
-        const r = await apiFetch(`/api/portal/capture/${job_id}`);
+        const r = await apiFetch(`/portal/capture/${job_id}`);
         if (!r.ok) return;
         const body: CaptureStatus = await r.json();
         setState(body);
@@ -148,6 +148,12 @@ export default function PortalProofTab({ target }: { target: PortalTarget | null
     );
   }
 
+  // Mirrors the guard in portal/capture.py: ZIP *or* city *or* state is enough, because HealthSparq
+  // searches on any of the three. Keep the two in step — a UI that allows less than the server does
+  // hides usable checks, and one that allows more just re-creates the two-minute dead walk.
+  const location = [target.zip, target.city, target.state].filter(Boolean).join(', ');
+  const hasLocation = Boolean(target.zip || target.city || target.state);
+
   const running = state?.status === 'queued' || state?.status === 'running';
   const { prose, steps } = splitNote(state?.note ?? null);
 
@@ -161,13 +167,28 @@ export default function PortalProofTab({ target }: { target: PortalTarget | null
 
       {!state && !failed && (
         <>
-          <Button type="primary" onClick={start} loading={starting} disabled={!target.npi}>
+          <Button
+            type="primary"
+            onClick={start}
+            loading={starting}
+            disabled={!target.npi || !hasLocation}
+          >
             Check the payer's portal
           </Button>
           <div style={styles.meta}>
             {target.payer_key} · NPI {target.npi}
             {target.plan ? ` · pinning “${target.plan}”` : ' · no plan given, so the walk can only return UNKNOWN'}
+            {location ? ` · searching near ${location}` : ''}
           </div>
+          {/* Every portal gates provider search behind a committed location. Starting without one
+              spends up to two minutes and screenshots a portal that was never able to search —
+              which reads like a real absence. Say what is missing instead. */}
+          {!hasLocation && (
+            <div style={styles.meta}>
+              Add the clinic ZIP above to run a portal check — these directories cannot search
+              without a location.
+            </div>
+          )}
         </>
       )}
 
@@ -184,8 +205,10 @@ export default function PortalProofTab({ target }: { target: PortalTarget | null
           <div style={styles.panelBody}>
             A real browser is walking {target.payer_key}'s directory for{' '}
             {target.provider_last_name ?? `NPI ${target.npi}`}
-            {target.plan ? ` in “${target.plan}”` : ''}. These walks take about 40–90 seconds; Cigna's
-            can run past three minutes. The result is recorded either way.
+            {target.plan ? ` in “${target.plan}”` : ''}
+            {location ? ` near ${location}` : ''}. Most walks take 50–120 seconds — UHC's five-step
+            guest flow is at the long end and Cigna's can run past three minutes. The result is
+            recorded either way.
           </div>
         </div>
       )}

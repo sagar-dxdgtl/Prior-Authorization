@@ -199,13 +199,15 @@ export default function Eligibility() {
             <div style={styles.formCol}>
               <div style={styles.sectionLabel}>Location</div>
               <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 12 }}>
-                Plan is read from the payer's 271 — no need to enter it.
+                Plan is read from the payer's 271 — no need to enter it. Give the ZIP of the clinic
+                where care is delivered: every payer portal gates its provider search behind a
+                location, so a portal check cannot run without it.
               </Text>
               <div style={{ display: 'flex', gap: 12 }}>
-                <Form.Item name="state" label="State (optional)" style={{ flex: 1 }}>
+                <Form.Item name="state" label="State" style={{ flex: 1 }}>
                   <Input placeholder="TX" maxLength={2} />
                 </Form.Item>
-                <Form.Item name="zip" label="ZIP (optional)" style={{ flex: 1 }}>
+                <Form.Item name="zip" label="Clinic ZIP" style={{ flex: 1 }}>
                   <Input placeholder="78701" maxLength={10} />
                 </Form.Item>
               </div>
