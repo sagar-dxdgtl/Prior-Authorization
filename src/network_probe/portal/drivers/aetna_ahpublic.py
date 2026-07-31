@@ -100,6 +100,7 @@ VERIFIED LIVE 2026-07-28 (headed unless noted):
 from __future__ import annotations
 
 import re
+import time
 
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Page
@@ -139,6 +140,12 @@ _ANY_LOCATION = re.compile(r"\(any location\)", re.I)
 # (2026-07-28): `div.col-xs-12.col-md-4.dataGridContentCol.providerFacilityInfotd`, one per practice
 # location. The generic candidates behind it are only there so a class rename degrades to UNKNOWN
 # instead of to a wrong verdict.
+# Aetna paints a spinner captioned "Loading..." over the results region while its plan-scoped
+# search is in flight; reading through it is how a rendered-but-not-yet-painted page looked absent.
+_LOADING_RE = re.compile(r"\bloading\b", re.I)
+_RESULTS_MAX_S = 25.0   # ceiling only; a rendered page returns as soon as the spinner clears
+_RESULTS_POLL_MS = 700
+
 _RESULT_CARDS = (
     ".providerFacilityInfotd",
     "[class*='providerFacilityInfo']",
@@ -669,7 +676,7 @@ class AetnaFindCareDriver(PortalDriver):
         trail_box.append("opened plan-scoped results")
 
         text = self._page_text(page)
-        cards, count = self._cards(page)
+        cards, count = self._await_results(page)
         # Only trust the "refused" signal when the page also has nothing to show: a stale/duplicate XHR
         # failure alongside a fully rendered result set must not turn a real answer into a BLOCKED.
         if (refused or _PORTAL_ERROR in text.lower()) and not cards:
@@ -780,6 +787,43 @@ class AetnaFindCareDriver(PortalDriver):
                 city = lines[i + 1] if i + 1 < len(lines) else ""
                 return f"{ln}, {city}".strip(", ")
         return "an address the card did not print in a readable form"
+
+    def _await_results(self, page: Page) -> tuple[list[str], int]:
+        """Wait for the results grid to render before reading it.
+
+        Aetna paints a "Loading…" spinner over the results region while the plan-scoped
+        `publicdse_providersearch` call is in flight. Read inside that window and the page has no
+        readable cards AND no printed count — which is indistinguishable from a genuine absence or a
+        renamed layout, so the driver reported UNKNOWN and filed a screenshot of a spinner. Observed
+        2026-07-31 on NPI 1780175349, the same row that had returned IN_NETWORK with 13 cards earlier
+        the same day.
+
+        Polls rather than sleeps: returns the moment cards appear, and stops early once the spinner
+        has gone (a genuinely empty result set must not cost the full ceiling). Timing out returns
+        exactly what the old code would have read, so this can only add patience, never change a
+        reading the portal had already finished.
+        """
+        deadline = time.monotonic() + _RESULTS_MAX_S
+        cards, count = self._cards(page)
+        while not cards and time.monotonic() < deadline:
+            if not self._loading(page):
+                # Rendered, and still no cards: a real empty set. Give one more read in case the
+                # grid painted between the spinner clearing and this check.
+                cards, count = self._cards(page)
+                break
+            try:
+                page.wait_for_timeout(_RESULTS_POLL_MS)
+            except PlaywrightError:
+                break
+            cards, count = self._cards(page)
+        return cards, count
+
+    def _loading(self, page: Page) -> bool:
+        """Is the results region still painting? Aetna's spinner prints the word next to it."""
+        try:
+            return bool(_LOADING_RE.search(self._page_text(page)))
+        except Exception:  # noqa: BLE001 — a page we cannot read is not evidence of anything
+            return False
 
     def _cards(self, page: Page) -> tuple[list[str], int]:
         for sel in _RESULT_CARDS:
