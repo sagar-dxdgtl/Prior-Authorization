@@ -71,6 +71,7 @@ TRAPS, each observed live:
 from __future__ import annotations
 
 import re
+import time
 from dataclasses import dataclass, field
 from urllib.parse import quote
 
@@ -121,6 +122,12 @@ _NEGATION_RE = re.compile(
     re.I,
 )
 _NEGATION_WINDOW = 48  # chars before the phrase that a negation can live in
+
+# The profile page behind a result card, which lists EVERY Plan/Program the provider is in. The
+# portal names the handle itself; this is not a guessed substring.
+_PROFILE_NETWORK = "[data-cy='profile-networks-accepted.network']"
+_PROFILE_MAX_S = 40.0    # the profile is its own SPA route and hydrates on its own schedule (trap 1)
+_PROFILE_POLL_MS = 1_500
 
 
 def _norm(s: str | None) -> str:
@@ -322,14 +329,20 @@ class MolinaProviderSearchDriver(PortalDriver):
                         matched_name=ours.headline, screenshot=shot(f"negated-{kind}"),
                     )
                 attested = plan_attested(ours.text, header_plan)
+                # SHOOT FIRST: the profile read navigates off the results page this verdict was
+                # read from, and the screenshot has to show the card and its In-"X" attestation.
+                shot_name = shot(f"match-{kind}")
+                nets = self._networks_accepted(page)
                 return result(
                     PortalStatus.IN_NETWORK,
                     f"Molina's Zelis directory returned NPI {q.npi} for {kind} {term!r} in "
                     f"{header_plan!r} near {header_loc or q.zip_code or 'the clinic'} — listed as "
                     f"{ours.headline!r}. Identity is the card's own 'NPI: {ours.npi}' line, not the "
-                    f"search term. " + self._attestation(page, ours, header_plan, attested),
+                    f"search term. " + self._attestation(page, ours, header_plan, attested)
+                    + (f" Their profile names all {len(nets)} Plan/Program(s) they participate in: "
+                       f"{', '.join(nets)}." if nets else ""),
                     result_count=rs.total if rs.total is not None else len(rs.providers),
-                    matched_name=ours.headline, screenshot=shot(f"match-{kind}"),
+                    matched_name=ours.headline, screenshot=shot_name, networks_accepted=nets,
                 )
 
             if not rs.providers:
@@ -900,6 +913,42 @@ class MolinaProviderSearchDriver(PortalDriver):
         """The visible-text phrase of an interactive challenge, if one is being shown. Never solved."""
         text = self._body(page).lower()
         return next((p for p in _CHALLENGE_PHRASES if p in text), None)
+
+    def _networks_accepted(self, page: Page) -> tuple[str, ...]:
+        """EVERY Plan/Program this provider is in, from the profile page behind the result card.
+
+        The card states only the ONE network the walk pinned (`In "TX - Texas STAR" Plan/Program`).
+        The profile lists them all, under a handle the portal itself names `profile-networks-accepted`
+        — read live 2026-07-31 for Clinton Twaddell (NPI 1437131901):
+
+            Molina Medicare Complete Care (HMO D-SNP) / …Plus (HMO D-SNP) / Texas STAR / Texas STAR+PLUS
+
+        Four, where HANDOFF row 8 had recorded two. That matters here more than anywhere: managed
+        Medicaid is TiC-exempt, so this portal and the PDEX FHIR directory are the ONLY network
+        sources for the row — there is no MRF to cross-check against.
+
+        Best-effort and silent: it runs after the verdict is settled, and the profile is a separate
+        SPA route (trap 1 — it hydrates on its own schedule, so poll rather than sleep). An empty
+        result means "not asked, or the portal did not say", NEVER "in no networks".
+        """
+        try:
+            link = page.locator("[data-cy*='result'] a")
+            if not link.count():
+                return ()
+            link.first.click()
+            deadline = time.monotonic() + _PROFILE_MAX_S
+            rows = page.locator(_PROFILE_NETWORK)
+            while time.monotonic() < deadline and not rows.count():
+                self._settle(page, _PROFILE_POLL_MS)
+                rows = page.locator(_PROFILE_NETWORK)
+            out: list[str] = []
+            for i in range(min(rows.count(), 40)):
+                text = (rows.nth(i).inner_text() or "").replace("\xa0", " ").strip()
+                if text and len(text) <= 140 and text not in out:
+                    out.append(text)
+            return tuple(out)
+        except Exception:  # noqa: BLE001 — evidence only; never fail a settled capture
+            return ()
 
     def _wait_shell(self, page: Page, timeout_ms: int = 75_000) -> bool:
         """Poll for the guest modal or the header network select. See trap 1 — a fixed settle is wrong."""
