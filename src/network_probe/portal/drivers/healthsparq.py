@@ -387,14 +387,22 @@ class HealthSparqDriver(PortalDriver):
                 # The typeahead is this platform's in-network NAME INDEX; present-but-not-ours is the
                 # same evidence the Test 2 manual checks read. Card counts are NOT used to prove
                 # absence (trap 6).
+                #
+                # SHOOT FIRST: the second pass navigates away from the page this verdict was read on.
+                shot_name = shot(f"absent-{kind}")
+                nets = self._networks_via_unpinned(page, q, site, trail)
                 return result(
                     PortalStatus.OUT_OF_NETWORK,
                     f"{self.portal_name} answered {suggestions} in-network name suggestion(s) and "
                     f"{count} result(s) for {kind} {term!r} in {network_desc} within 30 miles of "
                     f"{where}, and none is {who} (NPI {q.npi}) — out-of-network for this plan. Network "
                     f"pinned on screen as {pinned!r}. NB this portal indexes no NPI, so the match is "
-                    f"by name.",
-                    result_count=count, screenshot=shot(f"absent-{kind}"),
+                    f"by name."
+                    + (f" The payer's un-pinned directory names the {len(nets)} network(s) it DOES "
+                       f"have them in: {', '.join(nets)} — which does not include {label or 'this network'}, "
+                       f"so the absence is corroborated by a second, independent read."
+                       if nets else ""),
+                    result_count=count, screenshot=shot_name, networks_accepted=nets,
                 )
             if suggestions:
                 return result(
@@ -684,6 +692,78 @@ class HealthSparqDriver(PortalDriver):
         "Find a plan", "Medical Networks", "Medicare Networks", "Dental Networks", "Vision Networks",
         "Plans accepted", "Accepting new patients",
     })
+
+    def _networks_via_unpinned(self, page: Page, q: PortalQuery, site: HealthSparqSite,
+                               trail: list[str]) -> tuple[str, ...]:
+        """After a decisive OON, go back and ask which networks this provider IS in.
+
+        The list lives on the provider's result CARD, and a pinned search that proves absence by
+        definition renders no card — so the two things we want come from opposite searches. The
+        un-pinned directory (`productCode=all`) lists almost anyone the payer has on file, which is
+        exactly why it can never license a verdict (trap 2) and exactly why it can answer this.
+
+        Measured live 2026-07-31 on Hedson Desir (NPI 1346866332): the pinned Statewide / National PPO
+        walk returned OUT_OF_NETWORK in 66.7s with no card; the un-pinned walk found him and named
+        `ACA Health Choice`, his only one. That turns a bare "out-of-network" into "out-of-network
+        here, and in 1 of this payer's 24 networks" — and it corroborates the OON by a second,
+        independent route, since the network we searched is absent from the list he came back with.
+
+        Costs a second visit, so it is only worth spending on an OON. Best-effort throughout: the
+        verdict is already settled and nothing here may take it away.
+        """
+        if not site.generic_brand_code:
+            return ()  # this tenant publishes no "Do Not Know My Network" entry
+        try:
+            # A FRESH CONTEXT, not a reload. Once this Ember app has loaded a pinned network it keeps
+            # showing it, and measured 2026-07-31 that survives everything short of a new context:
+            #     pinned load                      -> chip 'Statewide/National PPO...'
+            #     about:blank -> generic launch    -> chip 'Statewide/National PPO...'   (still pinned,
+            #                                         though the URL hash carried no productCode)
+            #     cookies + localStorage + sessionStorage cleared, reload
+            #                                      -> chip 'Statewide/National PPO...'
+            #     FRESH context -> generic launch  -> chip 'Choose a network'            <- the only one
+            # So the pin lives somewhere clear_cookies() does not reach (IndexedDB or a service
+            # worker). Re-using the walk's page just re-searches the network we already know he is
+            # absent from, which is how the first build of this silently returned nothing.
+            browser = page.context.browser
+            if browser is None:
+                return ()
+            with pb.portal_page(browser, portal_key=self.key, reuse_session=False) as fresh:
+                return self._read_networks_on(fresh, q, site, trail)
+        except Exception:  # noqa: BLE001 — the OON stands regardless of what happens here
+            return ()
+
+    def _read_networks_on(self, page: Page, q: PortalQuery, site: HealthSparqSite,
+                          trail: list[str]) -> tuple[str, ...]:
+        """Drive the un-pinned directory on an already-prepared page and read the plans dialog."""
+        try:
+            page.goto(self._generic_launch(site), wait_until="domcontentloaded", timeout=45_000)
+            self._settle(page, 12_000)
+            if self._refusal(page):
+                return ()
+            self._dismiss_overlays(page)
+            where = self._location_term(q)
+            if not where or not self._set_location(page, where):
+                return ()
+            self._dismiss_overlays(page)
+            if not self._open_name_search(page):
+                return ()
+            # Record the chip: it is the proof this pass is reading the UN-PINNED directory rather
+            # than still sitting in the pinned one. Its silence is how the first build hid its bug.
+            trail.append(
+                "second pass: un-pinned directory, to read the networks they ARE in "
+                f"(chip now reads {self._pinned_network(page)!r})"
+            )
+            for term, _kind in self._search_terms(q):
+                found, _count, _matched, _suggestions = self._run_search(page, term, q)
+                if found:
+                    nets = self._plans_accepted(page)
+                    if nets:
+                        trail.append(f"networks named: {len(nets)}")
+                    return nets
+            return ()
+        except Exception:  # noqa: BLE001
+            return ()
 
     def _plans_accepted(self, page: Page) -> tuple[str, ...]:
         """EVERY network this provider is in, read from the card's "N in network" link.

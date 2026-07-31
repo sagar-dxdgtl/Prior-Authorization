@@ -132,3 +132,107 @@ def test_never_raises_into_the_walk():
             raise RuntimeError("portal moved")
 
     assert HealthSparqDriver()._plans_accepted(Boom(MAYDELL_14)) == ()
+
+
+# --- the second pass: an OON verdict still gets the provider's network list --------------------
+
+class _Site:
+    def __init__(self, generic="BCBSAZBLUE"):
+        self.generic_brand_code = generic
+        self.host = "azblue.healthsparq.com"
+        self.insurer_code = "BCBSAZ_I"
+        self.state = "AZ"
+
+
+def _driver_with(monkeypatch, *, nets=("ACA Health Choice",), located=True, searched=True,
+                 nav_raises=False):
+    """A driver whose page-driving helpers are stubbed, so only the second pass's own logic runs."""
+    d = HealthSparqDriver()
+    monkeypatch.setattr(d, "_generic_launch", lambda site: "https://example.invalid/unpinned")
+    monkeypatch.setattr(d, "_refusal", lambda page: None)
+    monkeypatch.setattr(d, "_dismiss_overlays", lambda page: None)
+    monkeypatch.setattr(d, "_settle", lambda page, pause_ms=0: None)
+    monkeypatch.setattr(d, "_location_term", lambda q: "85382")
+    monkeypatch.setattr(d, "_set_location", lambda page, where: located)
+    monkeypatch.setattr(d, "_open_name_search", lambda page: searched)
+    monkeypatch.setattr(d, "_search_terms", lambda q: [("DESIR", "surname")])
+    monkeypatch.setattr(d, "_run_search", lambda page, term, q: (True, 1, "Hedson R. Desir, MD", 1))
+    monkeypatch.setattr(d, "_plans_accepted", lambda page: tuple(nets))
+    monkeypatch.setattr(d, "_pinned_network", lambda page: "Choose a network")
+
+    class P:
+        url = "https://example.invalid/unpinned"
+
+        def goto(self, *a, **k):
+            if nav_raises:
+                raise RuntimeError("nav died")
+
+    return d, P()
+
+
+class _Q:
+    npi = "1346866332"
+    provider_first_name = "HEDSON"
+    provider_last_name = "DESIR"
+    zip_code = "85382"
+    city = None
+    state = "AZ"
+    plan = "Statewide / National PPO"
+
+
+def test_second_pass_returns_the_networks_from_the_unpinned_directory(monkeypatch):
+    d, page = _driver_with(monkeypatch)
+    assert d._read_networks_on(page, _Q(), _Site(), []) == ("ACA Health Choice",)
+
+
+def test_second_pass_is_skipped_when_there_is_no_unpinned_directory(monkeypatch):
+    """Not every HealthSparq tenant publishes a 'Do Not Know My Network' entry."""
+    d, page = _driver_with(monkeypatch)
+    assert d._networks_via_unpinned(page, _Q(), _Site(generic=None), []) == ()
+
+
+def test_second_pass_never_costs_the_verdict(monkeypatch):
+    """It runs AFTER a decisive OON. Navigation dying, the location refusing, or the search never
+    opening must all yield () rather than propagate — the OON is already established."""
+    for kw in ({"nav_raises": True}, {"located": False}, {"searched": False}):
+        d, page = _driver_with(monkeypatch, **kw)
+        assert d._read_networks_on(page, _Q(), _Site(), []) == (), kw
+
+
+def test_second_pass_records_its_steps_in_the_trail(monkeypatch):
+    """The trail is the audit record; a second visit to the payer must be visible in it."""
+    d, page = _driver_with(monkeypatch)
+    trail = []
+    d._read_networks_on(page, _Q(), _Site(), trail)
+    assert any("un-pinned" in s for s in trail), trail
+
+
+def test_second_pass_uses_a_FRESH_context_not_the_walk_s_page(monkeypatch):
+    """The pin survives a reload and a cookie/storage wipe — measured 2026-07-31 — and only a new
+    context comes back un-pinned. Re-using the walk's page silently re-searches the very network we
+    already proved they are absent from, which returns nothing and costs a minute."""
+    d, page = _driver_with(monkeypatch)
+    seen = {}
+
+    class _Ctx:
+        def __enter__(self_inner):
+            return page
+
+        def __exit__(self_inner, *a):
+            return False
+
+    def fake_portal_page(browser, portal_key=None, reuse_session=True):
+        seen["reuse_session"] = reuse_session
+        return _Ctx()
+
+    monkeypatch.setattr("network_probe.portal.browser.portal_page", fake_portal_page)
+
+    class _Browser:
+        pass
+
+    class _PageCtx:
+        browser = _Browser()
+
+    page.context = _PageCtx()
+    d._networks_via_unpinned(page, _Q(), _Site(), [])
+    assert seen.get("reuse_session") is False, "second pass must not inherit the pinned session"
