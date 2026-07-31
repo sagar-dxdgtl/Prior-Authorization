@@ -62,6 +62,9 @@ class CaptureJob:
             "screenshot": cap.screenshot if cap else None,
             "result_count": getattr(cap, "result_count", None) if cap else None,
             "matched_name": getattr(cap, "matched_name", None) if cap else None,
+            # Every network the portal named, not only the one searched. [] means it was not asked
+            # or did not say — never "in no networks".
+            "networks_accepted": list(getattr(cap, "networks_accepted", ()) or ()) if cap else [],
             "plan_pinned": getattr(cap, "plan_pinned", None) if cap else None,
             "duration_ms": getattr(cap, "duration_ms", None) if cap else None,
         }

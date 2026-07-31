@@ -224,6 +224,10 @@ class PortalCapture(Base):
     # note makes the whole audit row vanish silently (Oscar, 2026-07-31, at VARCHAR(2000); the column
     # had already outgrown VARCHAR(400) once before that). See migration 0039.
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Every network the portal says this provider participates in, when it names them — the
+    #: provider-first read. NULL means "not asked, or the portal does not say", NEVER "no networks":
+    #: only a non-empty list licenses reading absence from it as evidence. See migration 0040.
+    networks_accepted: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
 
 

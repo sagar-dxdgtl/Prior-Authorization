@@ -124,3 +124,50 @@ def test_long_portal_url_and_walk_trail_survive_the_roundtrip(store):
     assert rows[0].portal_url == url  # not truncated
     assert rows[0].portal_url.endswith("medicalEcnCode=OA001")  # the proof survived
     assert rows[0].walk_trail == trail
+
+
+def test_networks_accepted_roundtrips_and_is_queryable():
+    """The provider-first network list must SURVIVE the capture, not live only inside the note prose.
+
+    Storing it is what makes one walk reusable: AZ Blue names all 14 of Maydell's networks, and the
+    payer publishes 24, so the stored list answers both directions without walking again.
+    """
+    store = PortalCaptureStore()
+    npi = f"9{uuid.uuid4().int % 10**9:09d}"
+    nets = ("Statewide PPO", "Alliance HMO", "Indemnity")
+    rid = store.record(PortalCapture(
+        payer_key="bcbs-empire-anthem-elevance-az", npi=npi, status=PortalStatus.IN_NETWORK,
+        portal_name="AZ Blue / HealthSparq", portal_url="https://azblue.healthsparq.com/x",
+        driver="azblue-healthsparq", note="stub", networks_accepted=nets,
+    ))
+    assert rid is not None
+
+    from sqlalchemy import text
+    with store.engine.connect() as c:
+        got = c.execute(text("SELECT networks_accepted FROM portal_captures WHERE id = :i"),
+                        {"i": rid}).scalar_one()
+        assert got == list(nets)
+        # The point of JSONB: ask "who is in this network?" without re-walking the portal.
+        # CAST(), not ::jsonb — SQLAlchemy's text() reads the second ':' as a bind parameter.
+        hit = c.execute(text(
+            "SELECT npi FROM portal_captures "
+            "WHERE networks_accepted @> CAST(:n AS jsonb) AND npi = :npi"),
+            {"n": '["Alliance HMO"]', "npi": npi}).scalar_one_or_none()
+        assert hit == npi
+
+
+def test_networks_accepted_defaults_to_null_not_an_empty_list():
+    """NULL means 'not asked'. An empty list would assert the provider is in NO networks, which is a
+    different and false claim — and every capture written before 2026-07-31 was never asked."""
+    store = PortalCaptureStore()
+    npi = f"9{uuid.uuid4().int % 10**9:09d}"
+    rid = store.record(PortalCapture(
+        payer_key="cigna-healthcare-il", npi=npi, status=PortalStatus.UNKNOWN,
+        portal_name="Cigna", portal_url="https://hcpdirectory.cigna.com/", driver="cigna-hcp",
+        note="portal did not name networks",
+    ))
+    from sqlalchemy import text
+    with store.engine.connect() as c:
+        got = c.execute(text("SELECT networks_accepted FROM portal_captures WHERE id = :i"),
+                        {"i": rid}).scalar_one()
+    assert got is None

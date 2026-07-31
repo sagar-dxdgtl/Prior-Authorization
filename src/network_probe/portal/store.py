@@ -71,6 +71,10 @@ class PortalCaptureStore:
             duration_ms=cap.duration_ms,
             walk_trail=walk_trail,
             note=cap.note,
+            # NULL, not [], when the portal was not asked or does not name networks. An empty list
+            # would assert the provider is in NO networks — a different and false claim, and the one
+            # every capture written before 2026-07-31 would have made.
+            networks_accepted=list(cap.networks_accepted) or None,
             captured_at=cap.captured_at,
         )
         try:

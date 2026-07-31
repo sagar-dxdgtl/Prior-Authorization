@@ -48,6 +48,9 @@ interface CaptureStatus {
   screenshot: string | null;
   result_count: number | null;
   matched_name: string | null;
+  /** Every network the portal named for this provider, not only the one searched. Empty means the
+   *  portal was not asked or does not say — never "in no networks". */
+  networks_accepted: string[];
   duration_ms: number | null;
 }
 
@@ -246,6 +249,29 @@ export default function PortalProofTab({ target }: { target: PortalTarget | null
             </span>
           </div>
 
+          {/* The provider-first read. Worth its own block rather than a line of meta: for an OON it
+              is what turns "no" into "no, and here is what they ARE in", and for an IN it is the
+              answer for every other network this payer sells, from the one walk. */}
+          {state.networks_accepted?.length > 0 && (
+            <div style={styles.networksBox}>
+              <div style={styles.networksHead}>
+                {state.portal_name} lists this provider in {state.networks_accepted.length} network
+                {state.networks_accepted.length === 1 ? '' : 's'}
+              </div>
+              <div style={styles.networkChips}>
+                {state.networks_accepted.map((n) => (
+                  <span key={n} style={styles.networkChip}>
+                    {n}
+                  </span>
+                ))}
+              </div>
+              <div style={styles.networksFoot}>
+                Read from the payer's own directory in this walk — so it answers for every network
+                listed here, not only the one searched.
+              </div>
+            </div>
+          )}
+
           {state.reconciled && (
             <div style={state.reconciled.changed ? styles.reconChanged : styles.reconSame}>
               <div style={styles.reconHead}>
@@ -364,6 +390,25 @@ const styles: Record<string, React.CSSProperties> = {
   resultHead: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' },
   pill: { fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999 },
   resultMeta: { fontSize: 11, color: palette.slate400 },
+  networksBox: {
+    border: `1px solid ${palette.slate200}`,
+    borderRadius: 8,
+    padding: '12px 14px',
+    marginBottom: 14,
+    maxWidth: 760,
+    background: palette.slate100,
+  },
+  networksHead: { fontSize: 12, fontWeight: 600, color: palette.slate700, marginBottom: 8 },
+  networkChips: { display: 'flex', flexWrap: 'wrap', gap: 6 },
+  networkChip: {
+    fontSize: 11,
+    padding: '3px 8px',
+    borderRadius: 999,
+    background: '#fff',
+    border: `1px solid ${palette.slate200}`,
+    color: palette.slate700,
+  },
+  networksFoot: { fontSize: 11, color: palette.slate400, marginTop: 8, lineHeight: 1.5 },
   note: { color: palette.slate700, fontSize: 12, lineHeight: 1.65, maxWidth: 760, marginBottom: 12 },
   trail: {
     borderLeft: `2px solid ${palette.slate200}`,
