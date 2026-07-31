@@ -176,6 +176,9 @@ def screenshot(page: Page, out_dir: Path, name: str) -> str | None:
 _SETTLE_POLL_MS = 250
 _SETTLE_STABLE_POLLS = 2
 _SETTLE_MAX_S = 6.0
+#: How long to give networkidle before falling back to the DOM poll. Long enough that a genuinely
+#: quiet page answers, short enough that a portal streaming analytics forever is not waited out.
+_NETWORKIDLE_PROBE_MS = 1_500
 
 
 def settle(page: Page, pause_ms: int = 2_500) -> None:
@@ -191,30 +194,43 @@ def settle(page: Page, pause_ms: int = 2_500) -> None:
     settle on 3 of 10 steps, twice instantly — which is why the replacement must stay fast on pages
     that are genuinely quiet rather than swapping one fixed delay for another.
 
-    Polling the rendered DOM does both: it returns in ~500ms on a settled page and bounds the
-    pathological case at `_SETTLE_MAX_S` instead of the portal's full network timeout.
+    So this asks the cheap question first and only falls back:
+
+      1. Probe networkidle briefly. When the network really is quiet this returns at once and we are
+         done — the original semantics, minus the willingness to wait 15s to find out.
+      2. Only when it does NOT fire, poll the rendered DOM, bounded by `_SETTLE_MAX_S`.
+
+    Step 1 is not decoration. A DOM poll alone made AZ Blue's HealthSparq walk *slower* (71.7s ->
+    75.7s): its network was quiet on every step, but its results page keeps mutating, so the poll ran
+    to its full ceiling where networkidle had returned instantly. Network-quiet-but-animated is a real
+    page state and only the probe answers it cheaply.
 
     `pause_ms` stays a per-driver knob. Those pauses are hand-tuned against each SPA's own hydration
     (Cigna passes 3-8s at different steps) and are NOT part of what was measured here — do not
     "optimise" them without evidence for the specific step.
     """
-    last, stable = -1, 0
-    deadline = time.monotonic() + _SETTLE_MAX_S
-    while time.monotonic() < deadline:
-        try:
-            size = page.evaluate("document.body ? document.body.innerHTML.length : 0")
-        except (PlaywrightTimeout, PlaywrightError):
-            break  # mid-navigation the page cannot be measured; the pause below still applies
-        if size == last:
-            stable += 1
-            if stable >= _SETTLE_STABLE_POLLS:
+    try:
+        page.wait_for_load_state("networkidle", timeout=_NETWORKIDLE_PROBE_MS)
+    except (PlaywrightTimeout, PlaywrightError):
+        # Still busy. Do not wait out the portal's full network timeout — it may never come. Wait for
+        # the DOM to stop changing instead, which is the thing the caller actually needs.
+        last, stable = -1, 0
+        deadline = time.monotonic() + _SETTLE_MAX_S
+        while time.monotonic() < deadline:
+            try:
+                size = page.evaluate("document.body ? document.body.innerHTML.length : 0")
+            except (PlaywrightTimeout, PlaywrightError):
+                break  # mid-navigation the page cannot be measured; the pause below still applies
+            if size == last:
+                stable += 1
+                if stable >= _SETTLE_STABLE_POLLS:
+                    break
+            else:
+                last, stable = size, 0
+            try:
+                page.wait_for_timeout(_SETTLE_POLL_MS)
+            except PlaywrightError:
                 break
-        else:
-            last, stable = size, 0
-        try:
-            page.wait_for_timeout(_SETTLE_POLL_MS)
-        except PlaywrightError:
-            break
     try:
         page.wait_for_timeout(pause_ms)
     except PlaywrightError:

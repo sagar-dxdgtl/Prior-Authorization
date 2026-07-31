@@ -92,6 +92,7 @@ from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
+from network_probe.portal import browser as pb
 from network_probe.portal.drivers.base import PortalDriver
 from network_probe.portal.models import PortalCapture, PortalQuery, PortalStatus
 
@@ -756,13 +757,12 @@ class HealthSparqDriver(PortalDriver):
                 continue
 
     def _settle(self, page: Page, pause_ms: int = 3_000) -> None:
-        """Best-effort wait. Never raises: this platform streams analytics and may never reach
-        networkidle, and a settle that throws must not be mistaken for a step that failed."""
-        try:
-            page.wait_for_load_state("networkidle", timeout=12_000)
-        except (PlaywrightTimeout, PlaywrightError):
-            pass
-        try:
-            page.wait_for_timeout(pause_ms)
-        except PlaywrightError:
-            pass
+        """Best-effort wait for the next step. Never raises, and a settle timeout must not be
+        mistaken for a step that failed.
+
+        Was `networkidle` at 12s. Profiled live 2026-07-31: the network was still busy on
+        1 of 6 steps, costing ~8s of a 71.7s walk. On the rest it was already quiet, so
+        the DOM-quiescence poll in `browser.settle` returns just as fast there while bounding
+        the busy steps. The `pause_ms` values are a separate, unmeasured cost -- left alone.
+        """
+        pb.settle(page, pause_ms)

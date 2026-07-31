@@ -155,6 +155,7 @@ from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
+from network_probe.portal import browser as pb
 from network_probe.portal.drivers.base import PortalDriver
 from network_probe.portal.models import PortalCapture, PortalQuery, PortalStatus, Reachability
 from network_probe.portal.plan_match import match_plan_with_fallback as match_plan
@@ -1226,16 +1227,15 @@ class HumanaFinderDriver(PortalDriver):
                 continue
 
     def _settle(self, page: Page, pause_ms: int = 3_000) -> None:
-        """Best-effort wait for the next view. Never raises: this SPA streams analytics beacons
-        indefinitely and may never reach networkidle."""
-        try:
-            page.wait_for_load_state("networkidle", timeout=12_000)
-        except (PlaywrightTimeout, PlaywrightError):
-            pass
-        try:
-            page.wait_for_timeout(pause_ms)
-        except PlaywrightError:
-            pass
+        """Best-effort wait for the next step. Never raises, and a settle timeout must not be
+        mistaken for a step that failed.
+
+        Was `networkidle` at 12s. Profiled live 2026-07-31: the network was still busy on
+        2 of 8 steps, costing ~15s of a 96.9s walk. On the rest it was already quiet, so
+        the DOM-quiescence poll in `browser.settle` returns just as fast there while bounding
+        the busy steps. The `pause_ms` values are a separate, unmeasured cost -- left alone.
+        """
+        pb.settle(page, pause_ms)
 
     def _text_of(self, page: Page, selector: str) -> str:
         try:

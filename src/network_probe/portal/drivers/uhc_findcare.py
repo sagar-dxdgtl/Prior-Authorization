@@ -108,13 +108,15 @@ class UhcFindCareDriver(PortalDriver):
 
         try:
             page.goto(ENTRY, wait_until="domcontentloaded", timeout=45_000)
-            page.wait_for_load_state("networkidle", timeout=10_000)
         except PlaywrightTimeout:
             pass
         except PlaywrightError as e:
             return result(PortalStatus.BLOCKED, f"navigation failed: {type(e).__name__}: {e}",
                           screenshot=shot("nav-failed"))
-        page.wait_for_timeout(3_000)  # Abyss shell hydrates after networkidle
+        # The entry load paid the same never-firing networkidle as every step did — a 10s ceiling that
+        # the _settle profiling never counted because it only instrumented _settle. Same treatment,
+        # keeping the 3s the Abyss shell needs to hydrate after load.
+        self._settle(page, 3_000)
 
         plan_confirmed, trail = self._walk_to_plan(page, q)
         trail_box.extend(trail)

@@ -220,7 +220,10 @@ class PortalCapture(Base):
     reachability: Mapped[str | None] = mapped_column(String(20), nullable=True)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     walk_trail: Mapped[str | None] = mapped_column(Text, nullable=True)  # each step the driver reached
-    note: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    # TEXT, not a cap. A capped note does not truncate — `_record` is best-effort, so an over-long
+    # note makes the whole audit row vanish silently (Oscar, 2026-07-31, at VARCHAR(2000); the column
+    # had already outgrown VARCHAR(400) once before that). See migration 0039.
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
     captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
 
 
