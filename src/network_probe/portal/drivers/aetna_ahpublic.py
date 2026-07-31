@@ -217,6 +217,9 @@ class AetnaFindCareDriver(PortalDriver):
     requires_headed = True
     key = "aetna-ahpublic"
     portal_name = "Aetna Find Care (guest provider directory)"
+    # Guest search is gated on a home location entered as a ZIP; the driver already refuses without
+    # one (see `capture`). Declaring it lets run_capture refuse before a browser is ever launched.
+    location_fields = ("zip_code",)
 
     def capture(self, page: Page, q: PortalQuery, shot) -> PortalCapture:
         trail_box: list[str] = []

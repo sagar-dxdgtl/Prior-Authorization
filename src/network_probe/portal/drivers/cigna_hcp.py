@@ -166,6 +166,9 @@ def _tokens(s: str | None) -> set[str]:
 class CignaHcpDriver(PortalDriver):
     key = "cigna-hcp"
     portal_name = "Cigna Health Care Provider Directory"
+    # The category cards stay disabled until a location is committed from the ZIP; the driver already
+    # refuses without one. Declaring it moves that refusal ahead of the browser launch.
+    location_fields = ("zip_code",)
 
     def capture(self, page: Page, q: PortalQuery, shot) -> PortalCapture:
         trail: list[str] = []

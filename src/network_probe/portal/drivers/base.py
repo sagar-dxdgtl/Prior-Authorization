@@ -43,6 +43,18 @@ class PortalDriver(ABC):
     #: stale results counter). Those drivers must start from a clean context every capture.
     requires_fresh_context: bool = False
 
+    #: The PortalQuery fields this portal can actually scope a search with. `run_capture` refuses a
+    #: query carrying none of them BEFORE opening a browser, because every portal probed on 2026-07-28
+    #: gates provider search behind a committed location. The cost of not refusing is not just a wasted
+    #: walk: UHC Find Care never populates its plan list until a location is committed, so a
+    #: locationless run typed a surname into a plan-less portal for ~120s and screenshotted an empty
+    #: box — which reads exactly like "searched and absent".
+    #:
+    #: The default is permissive because HealthSparq genuinely searches on any of the three. Narrow it
+    #: to ("zip_code",) on a driver that only ever reads the ZIP, otherwise a state-only query sails
+    #: past the guard and re-creates the dead walk. Set () for a portal that searches nationwide.
+    location_fields: tuple[str, ...] = ("zip_code", "city", "state")
+
     @abstractmethod
     def capture(self, page: Page, q: PortalQuery, shot) -> PortalCapture:
         """Drive the portal for one provider and return what it said.

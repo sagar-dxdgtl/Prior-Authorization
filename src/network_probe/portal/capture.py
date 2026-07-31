@@ -87,6 +87,28 @@ def run_capture(q: PortalQuery, headed: bool | None = None, shot_dir: Path | Non
             ),
         )
 
+    # Every portal gates search behind a committed location, so a query carrying none cannot be
+    # answered by any of them — refuse it here rather than in each driver. Aetna, Cigna and HealthSparq
+    # already returned UNKNOWN for this, but only after navigating; UHC Find Care had no guard at all
+    # and burned ~120s before screenshotting a portal it had never been able to search. UNKNOWN (not
+    # BLOCKED) is the honest status: nothing obstructed us, the question was simply unanswerable as
+    # asked. No screenshot is filed — an image of an unsearched portal reads like a real absence.
+    wanted = driver.location_fields
+    if wanted and not any(getattr(q, f, None) for f in wanted):
+        target = target_for_payer(q.payer_key)
+        human = {"zip_code": "ZIP", "city": "city", "state": "state"}
+        missing = " or ".join(human.get(f, f) for f in wanted)
+        return PortalCapture(
+            payer_key=q.payer_key, npi=q.npi, plan=q.plan, tin=q.tin, status=PortalStatus.UNKNOWN,
+            portal_name=driver.portal_name,
+            portal_url=target.entry_url if target else "—", driver=driver.key,
+            note=(
+                f"{driver.portal_name} gates provider search behind a committed location, and this "
+                f"query carried no {missing} for NPI {q.npi}. No search was run, so there is no "
+                f"answer to report — supply the clinic {missing} and re-run."
+            ),
+        )
+
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     out = shot_dir or LIVE_SHOT_DIR
     started = time.monotonic()
