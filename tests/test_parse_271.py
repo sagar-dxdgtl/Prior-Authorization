@@ -113,3 +113,33 @@ def test_plan_candidates_from_plan_coverage():
 def test_no_usable_plan_leaves_selected_none():
     r = parse_271_benefits({"benefitsInformation": [{"code": "1", "planCoverage": "Network"}]})
     assert r.selected_plan is None and r.plan_candidates == []
+
+
+def test_employer_name_never_becomes_the_plan_name():
+    """D2 regression, reproduced from a real cached Cigna 271 on 2026-07-29.
+
+    That payer returned `planCoverage: "Network"` — junk, correctly dropped by _JUNK — leaving
+    selected_plan None. plan_name then fell through to planInformation.groupDescription and became
+    'DISNEY WORLDWIDE SERVICES, INC.', the member's EMPLOYER. That string was handed to
+    plan_string_from_271, typed into a payer's public search box and written to the capture's audit
+    note. An employer is not a plan; when the 271 names no plan, plan_name must be None.
+    """
+    data = {
+        "benefitsInformation": [{"code": "1", "planCoverage": "Network"}],
+        "planInformation": {"groupNumber": "3346355",
+                            "groupDescription": "DISNEY WORLDWIDE SERVICES, INC."},
+    }
+    r = parse_271_benefits(data)
+    assert r.selected_plan is None
+    assert r.plan_name is None, "the employer name must not be reported as the plan"
+    assert r.group == "3346355", "the group number itself is still carried, just not as the plan"
+
+
+def test_real_plan_name_from_plan_information_is_still_used():
+    """Only groupDescription is excluded — planInformation.planName remains a legitimate source."""
+    data = {
+        "benefitsInformation": [{"code": "1", "planCoverage": "Network"}],
+        "planInformation": {"planName": "Open Access Plus",
+                            "groupDescription": "DISNEY WORLDWIDE SERVICES, INC."},
+    }
+    assert parse_271_benefits(data).plan_name == "Open Access Plus"

@@ -101,3 +101,20 @@ class TestDecisiveness:
         assert plan_is_pinnable(_r271()) is False
         assert plan_is_pinnable(_r271(plan_name="Cigna Commercial")) is False
         assert plan_is_pinnable(_r271(plan_name="Cigna Open Access Plus OAP/OA001 H1234")) is True
+
+
+def test_employer_name_never_reaches_the_portal_search_box():
+    """D2, at the boundary that matters: nothing built from a 271 may carry the member's employer
+    into a payer's public search box or the capture's audit note. When the 271 names no plan, the
+    caller must get None and leave PortalQuery.plan unset — which makes the driver answer UNKNOWN
+    rather than search on garbage."""
+    from network_probe.stedi.parse_271 import parse_271_benefits
+
+    result = parse_271_benefits({
+        "benefitsInformation": [{"code": "1", "planCoverage": "Network"}],
+        "planInformation": {"groupNumber": "3346355",
+                            "groupDescription": "DISNEY WORLDWIDE SERVICES, INC."},
+    })
+    plan = plan_string_from_271(result)
+    assert plan is None, f"employer name leaked into the portal plan string: {plan!r}"
+    assert plan_is_pinnable(result) is False

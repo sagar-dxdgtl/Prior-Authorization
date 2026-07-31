@@ -186,7 +186,14 @@ def parse_271_benefits(data: dict) -> EligibilityResult:
     plan = data.get("planInformation") or {}
     return EligibilityResult(
         coverage_active=coverage_active,
-        plan_name=selected or plan.get("planName") or plan.get("groupDescription"),
+        # `groupDescription` is deliberately NOT a fallback here. It is the EMPLOYER (or the carrier's
+        # own legal entity) — never the plan. Reproduced live 2026-07-29 on a cached Cigna 271 whose only
+        # planCoverage was the junk value "Network": plan_name became "DISNEY WORLDWIDE SERVICES, INC.",
+        # which `plan_string_from_271` then handed to a payer's public search box and to the capture's
+        # audit note. When the 271 names no plan, None is the correct answer — it makes the driver
+        # return UNKNOWN instead of searching on an employer name. The group number is still carried
+        # below, as `group`, where it belongs.
+        plan_name=selected or plan.get("planName"),
         group=plan.get("groupNumber"),
         coverage_dates=data.get("planDateInformation") or {},
         network_status=status,
