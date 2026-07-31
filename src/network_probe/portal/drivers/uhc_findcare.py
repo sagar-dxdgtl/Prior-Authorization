@@ -20,6 +20,7 @@ from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
+from network_probe.portal import browser as pb
 from network_probe.portal.drivers.base import PortalDriver
 from network_probe.portal.models import PortalCapture, PortalQuery, PortalStatus
 
@@ -46,9 +47,6 @@ _LOCATION = "[data-testid='location-search-input']"
 # Waiting is condition-based, not clock-based: see `_settle` and `_await_suggestions` for the measured
 # reasons. Both caps exist only so a wedged portal cannot hang a walk forever — in a healthy run
 # neither is reached.
-_SETTLE_MAX_S = 6.0  # ceiling on waiting for the SPA to stop re-rendering after a click
-_SETTLE_POLL_MS = 250
-_SETTLE_STABLE_POLLS = 2  # consecutive unchanged samples that count as "rendered"
 _TYPEAHEAD_DEBOUNCE_MS = 1_200  # let the location autocomplete close before reading provider hits
 _TYPEAHEAD_MAX_S = 12.0  # a genuinely empty typeahead must be waited out, not assumed
 _TYPEAHEAD_POLL_MS = 300
@@ -284,37 +282,9 @@ class UhcFindCareDriver(PortalDriver):
         return False
 
     def _settle(self, page: Page, pause_ms: int = 2_500) -> None:
-        """Best-effort wait for the next step to render. Never raises.
-
-        This deliberately does NOT wait for networkidle. Instrumented across a full live walk on
-        2026-07-31, `wait_for_load_state("networkidle", timeout=10_000)` timed out 7 times out of 7 at
-        its full 10s — it never once settled, because Find Care streams analytics for as long as the
-        tab is open. So it detected nothing and simply added 70s to a 143s walk (62% of that walk was
-        spent inside this method). Polling the DOM for quiescence tests what we actually care about —
-        that the SPA has re-rendered after the click — and returns as soon as it is true, typically in
-        well under a second.
-        """
-        last, stable = -1, 0
-        deadline = time.monotonic() + _SETTLE_MAX_S
-        while time.monotonic() < deadline:
-            try:
-                size = page.evaluate("document.body ? document.body.innerHTML.length : 0")
-            except (PlaywrightTimeout, PlaywrightError):
-                break  # mid-navigation the page cannot be measured; the pause below still applies
-            if size == last:
-                stable += 1
-                if stable >= _SETTLE_STABLE_POLLS:
-                    break
-            else:
-                last, stable = size, 0
-            try:
-                page.wait_for_timeout(_SETTLE_POLL_MS)
-            except PlaywrightError:
-                break
-        try:
-            page.wait_for_timeout(pause_ms)
-        except PlaywrightError:
-            pass
+        """Best-effort wait for the next step to render. Never raises. See `browser.settle` for why
+        this is a DOM-quiescence poll and not networkidle (measured: 7/7 timeouts at 10s here)."""
+        pb.settle(page, pause_ms)
 
     def _commit_location(self, page: Page, zip_code: str) -> bool:
         """Enter the ZIP wherever the current step asks for it and commit the county suggestion."""

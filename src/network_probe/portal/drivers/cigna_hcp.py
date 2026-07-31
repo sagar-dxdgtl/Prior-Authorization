@@ -81,6 +81,7 @@ from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
+from network_probe.portal import browser as pb
 from network_probe.portal.drivers.base import PortalDriver
 from network_probe.portal.models import PortalCapture, PortalQuery, PortalStatus
 
@@ -820,16 +821,15 @@ class CignaHcpDriver(PortalDriver):
         return None
 
     def _settle(self, page: Page, pause_ms: int = 3_000) -> None:
-        """Best-effort wait for the next step. Never raises: this portal streams analytics and may
-        never reach networkidle, and a settle timeout must not be mistaken for a failed step."""
-        try:
-            page.wait_for_load_state("networkidle", timeout=15_000)
-        except (PlaywrightTimeout, PlaywrightError):
-            pass
-        try:
-            page.wait_for_timeout(pause_ms)
-        except PlaywrightError:
-            pass
+        """Best-effort wait for the next step. Never raises, and a settle timeout must not be mistaken
+        for a failed step.
+
+        Was `networkidle` at 15s. Profiled live on 2026-07-31 (Orem / NPI 1497741409 / 34986): it
+        timed out on 7 of 10 steps at the full 15s, and this method accounted for 151s of a 167s walk
+        — 90% of it. The 3 steps where it *did* settle returned in 0.0-0.8s, so the replacement has to
+        stay fast on quiet pages rather than trading one fixed delay for another; see `browser.settle`.
+        """
+        pb.settle(page, pause_ms)
 
     def _app_error(self, page: Page) -> bool:
         return _APP_ERROR in self._page_text(page).lower()

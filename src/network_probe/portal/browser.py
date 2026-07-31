@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import time
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -167,6 +168,57 @@ def screenshot(page: Page, out_dir: Path, name: str) -> str | None:
         except PlaywrightError:
             return None
     return path.name
+
+
+#: `settle` polls the rendered DOM this often, and treats this many unchanged samples as "rendered".
+#: The ceiling exists only so a portal that animates forever cannot hang a walk; a healthy step
+#: reaches quiescence in two polls.
+_SETTLE_POLL_MS = 250
+_SETTLE_STABLE_POLLS = 2
+_SETTLE_MAX_S = 6.0
+
+
+def settle(page: Page, pause_ms: int = 2_500) -> None:
+    """Wait for a step to finish rendering, then pause. Best-effort — never raises.
+
+    Deliberately NOT `wait_for_load_state("networkidle")`. Measured live on 2026-07-31:
+
+      * UHC Find Care  — networkidle timed out 7 times out of 7, at its full 10s. 89s of a 143s walk.
+      * Cigna HCP      — timed out 7 times out of 10, at its full 15s. 151s of a 167s walk (90%).
+
+    These directories stream analytics for as long as the tab is open, so on most steps networkidle
+    never fires and is simply a hidden 10-15s sleep. It is not useless everywhere — Cigna's *did*
+    settle on 3 of 10 steps, twice instantly — which is why the replacement must stay fast on pages
+    that are genuinely quiet rather than swapping one fixed delay for another.
+
+    Polling the rendered DOM does both: it returns in ~500ms on a settled page and bounds the
+    pathological case at `_SETTLE_MAX_S` instead of the portal's full network timeout.
+
+    `pause_ms` stays a per-driver knob. Those pauses are hand-tuned against each SPA's own hydration
+    (Cigna passes 3-8s at different steps) and are NOT part of what was measured here — do not
+    "optimise" them without evidence for the specific step.
+    """
+    last, stable = -1, 0
+    deadline = time.monotonic() + _SETTLE_MAX_S
+    while time.monotonic() < deadline:
+        try:
+            size = page.evaluate("document.body ? document.body.innerHTML.length : 0")
+        except (PlaywrightTimeout, PlaywrightError):
+            break  # mid-navigation the page cannot be measured; the pause below still applies
+        if size == last:
+            stable += 1
+            if stable >= _SETTLE_STABLE_POLLS:
+                break
+        else:
+            last, stable = size, 0
+        try:
+            page.wait_for_timeout(_SETTLE_POLL_MS)
+        except PlaywrightError:
+            break
+    try:
+        page.wait_for_timeout(pause_ms)
+    except PlaywrightError:
+        pass
 
 
 def find_search_control(page: Page, hints: tuple[str, ...], timeout_ms: int = 4_000) -> str | None:
