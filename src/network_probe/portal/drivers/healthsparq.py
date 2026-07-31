@@ -390,7 +390,7 @@ class HealthSparqDriver(PortalDriver):
                 #
                 # SHOOT FIRST: the second pass navigates away from the page this verdict was read on.
                 shot_name = shot(f"absent-{kind}")
-                nets = self._networks_via_unpinned(page, q, site, trail)
+                nets, printed_name = self._networks_via_unpinned(page, q, site, trail)
                 return result(
                     PortalStatus.OUT_OF_NETWORK,
                     f"{self.portal_name} answered {suggestions} in-network name suggestion(s) and "
@@ -402,7 +402,11 @@ class HealthSparqDriver(PortalDriver):
                        f"have them in: {', '.join(nets)} — which does not include {label or 'this network'}, "
                        f"so the absence is corroborated by a second, independent read."
                        if nets else ""),
+                    # The name comes from the un-pinned pass, since an absence has no card of its own.
+                    # It is identity — "this is who the payer has on file" — and never membership;
+                    # the verdict above is what says he is not in this network.
                     result_count=count, screenshot=shot_name, networks_accepted=nets,
+                    matched_name=printed_name,
                 )
             if suggestions:
                 return result(
@@ -708,11 +712,16 @@ class HealthSparqDriver(PortalDriver):
         here, and in 1 of this payer's 24 networks" — and it corroborates the OON by a second,
         independent route, since the network we searched is absent from the list he came back with.
 
+        Returns (networks, name_the_payer_prints). The name matters because an OON has no card of its
+        own — `matched_name` was left NULL and the audit row showed a bare NPI — while this pass DOES
+        find the provider and reads their printed name. That name is IDENTITY, not membership: it
+        comes from the un-pinned union, which is exactly why the same pass can never license an IN.
+
         Costs a second visit, so it is only worth spending on an OON. Best-effort throughout: the
         verdict is already settled and nothing here may take it away.
         """
         if not site.generic_brand_code:
-            return ()  # this tenant publishes no "Do Not Know My Network" entry
+            return (), None  # this tenant publishes no "Do Not Know My Network" entry
         try:
             # A FRESH CONTEXT, not a reload. Once this Ember app has loaded a pinned network it keeps
             # showing it, and measured 2026-07-31 that survives everything short of a new context:
@@ -727,27 +736,27 @@ class HealthSparqDriver(PortalDriver):
             # absent from, which is how the first build of this silently returned nothing.
             browser = page.context.browser
             if browser is None:
-                return ()
+                return (), None
             with pb.portal_page(browser, portal_key=self.key, reuse_session=False) as fresh:
                 return self._read_networks_on(fresh, q, site, trail)
         except Exception:  # noqa: BLE001 — the OON stands regardless of what happens here
-            return ()
+            return (), None
 
     def _read_networks_on(self, page: Page, q: PortalQuery, site: HealthSparqSite,
-                          trail: list[str]) -> tuple[str, ...]:
+                          trail: list[str]) -> tuple[tuple[str, ...], str | None]:
         """Drive the un-pinned directory on an already-prepared page and read the plans dialog."""
         try:
             page.goto(self._generic_launch(site), wait_until="domcontentloaded", timeout=45_000)
             self._settle(page, 12_000)
             if self._refusal(page):
-                return ()
+                return (), None
             self._dismiss_overlays(page)
             where = self._location_term(q)
             if not where or not self._set_location(page, where):
-                return ()
+                return (), None
             self._dismiss_overlays(page)
             if not self._open_name_search(page):
-                return ()
+                return (), None
             # Record the chip: it is the proof this pass is reading the UN-PINNED directory rather
             # than still sitting in the pinned one. Its silence is how the first build hid its bug.
             trail.append(
@@ -755,15 +764,15 @@ class HealthSparqDriver(PortalDriver):
                 f"(chip now reads {self._pinned_network(page)!r})"
             )
             for term, _kind in self._search_terms(q):
-                found, _count, _matched, _suggestions = self._run_search(page, term, q)
+                found, _count, matched, _suggestions = self._run_search(page, term, q)
                 if found:
                     nets = self._plans_accepted(page)
                     if nets:
                         trail.append(f"networks named: {len(nets)}")
-                    return nets
-            return ()
+                    return nets, matched
+            return (), None
         except Exception:  # noqa: BLE001
-            return ()
+            return (), None
 
     def _plans_accepted(self, page: Page) -> tuple[str, ...]:
         """EVERY network this provider is in, read from the card's "N in network" link.

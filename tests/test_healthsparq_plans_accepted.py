@@ -182,13 +182,13 @@ class _Q:
 
 def test_second_pass_returns_the_networks_from_the_unpinned_directory(monkeypatch):
     d, page = _driver_with(monkeypatch)
-    assert d._read_networks_on(page, _Q(), _Site(), []) == ("ACA Health Choice",)
+    assert d._read_networks_on(page, _Q(), _Site(), [])[0] == ("ACA Health Choice",)
 
 
 def test_second_pass_is_skipped_when_there_is_no_unpinned_directory(monkeypatch):
     """Not every HealthSparq tenant publishes a 'Do Not Know My Network' entry."""
     d, page = _driver_with(monkeypatch)
-    assert d._networks_via_unpinned(page, _Q(), _Site(generic=None), []) == ()
+    assert d._networks_via_unpinned(page, _Q(), _Site(generic=None), []) == ((), None)
 
 
 def test_second_pass_never_costs_the_verdict(monkeypatch):
@@ -196,7 +196,7 @@ def test_second_pass_never_costs_the_verdict(monkeypatch):
     opening must all yield () rather than propagate — the OON is already established."""
     for kw in ({"nav_raises": True}, {"located": False}, {"searched": False}):
         d, page = _driver_with(monkeypatch, **kw)
-        assert d._read_networks_on(page, _Q(), _Site(), []) == (), kw
+        assert d._read_networks_on(page, _Q(), _Site(), []) == ((), None), kw
 
 
 def test_second_pass_records_its_steps_in_the_trail(monkeypatch):
@@ -236,3 +236,22 @@ def test_second_pass_uses_a_FRESH_context_not_the_walk_s_page(monkeypatch):
     page.context = _PageCtx()
     d._networks_via_unpinned(page, _Q(), _Site(), [])
     assert seen.get("reuse_session") is False, "second pass must not inherit the pinned session"
+
+
+def test_second_pass_also_returns_the_name_the_payer_prints(monkeypatch):
+    """An OON verdict has no card by definition, so `matched_name` was left NULL and the row showed a
+    bare NPI. The second pass DOES find the provider — in the un-pinned directory — so it already
+    knows the name the payer prints and should hand it back.
+
+    NB this name is identity, not membership: it comes from the un-pinned union, which is exactly why
+    the same pass cannot license an IN. The note already says so.
+    """
+    d, page = _driver_with(monkeypatch)
+    nets, name = d._read_networks_on(page, _Q(), _Site(), [])
+    assert nets == ("ACA Health Choice",)
+    assert name == "Hedson R. Desir, MD"
+
+
+def test_second_pass_name_is_none_when_nothing_was_found(monkeypatch):
+    d, page = _driver_with(monkeypatch, searched=False)
+    assert d._read_networks_on(page, _Q(), _Site(), []) == ((), None)
