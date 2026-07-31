@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -125,7 +125,17 @@ class ProviderNetworkFact(Base):
 
     __tablename__ = "provider_network_facts"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "payer_key", "npi", "tin", "source", name="uq_pnf_identity"),
+        # Identity = payer + provider + TIN + source + NETWORK + PERIOD.
+        #   network — a provider-first read returns participation across EVERY network in one fetch
+        #     (Oscar for NPI 1700846789: net 065 IN, 082 OUT, 083 OUT, same payer/TIN/source). Without
+        #     it that set collapsed to whichever row came first, discarding the OUT facts.
+        #   start_date — one network has a TIMELINE (065 is OUT to 2026-01-26, IN from 2026-01-27, OUT
+        #     again from 2027-01-01). Without it the periods collapse and an EXPIRED one can win,
+        #     leaving the network with no fact effective today.
+        UniqueConstraint(
+            "tenant_id", "payer_key", "npi", "tin", "source", "network_name", "start_date",
+            name="uq_pnf_identity",
+        ),
     )
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     tenant_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tenants.id"), nullable=True, index=True)
@@ -136,7 +146,20 @@ class ProviderNetworkFact(Base):
     source: Mapped[str] = mapped_column(String(20))
     plan: Mapped[str | None] = mapped_column(String(160), nullable=True)
     network_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    #: Free-text as the source printed it. Kept for provenance; `start_date`/`end_date` are the
+    #: machine-comparable form and are what the read path filters on.
     effective_date: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    #: The contract's own dates, where the source gives them. Oscar's `network_infos` does; the
+    #: portals and TiC crosswalks do not, so these are usually NULL — and a NULL means "undated",
+    #: never "expired". Without them a verdict silently means "today", which is already wrong for a
+    #: provider whose contract terminates during the coverage year (Ins Test 3 row 3, 2027-01-01).
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    #: When the SOURCE was built — an MRF's publish date, a directory read. Distinct from
+    #: `retrieved_at`, which is when WE wrote the row. Only this can say whether a source predates a
+    #: contract, which is the comparison `domain.fact_reconcile` needs to tell a stale source from a
+    #: genuine conflict.
+    source_built_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
