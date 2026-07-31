@@ -77,7 +77,24 @@ TARGETS: tuple[PortalTarget, ...] = (
         key="aetna-ahpublic",
         portal_name="Aetna Find Care (health.aetna.com guest)",
         entry_url="https://health.aetna.com/ahpublic/results?q=",
-        payer_keys=("aetna-il", "aetna-az"),
+        # Every Aetna Commercial market on the roster. This portal is national: the launch URL carries
+        # no state, and the network is pinned on-page by ZIP + the plan picker (which offers "Show all
+        # plans (including those not in my area)"). So a market key never changes the walk — only the
+        # ZIP and plan do, and both already come from the caller. Aetna Better Health (Medicaid) is a
+        # DIFFERENT portal and is deliberately not listed here.
+        payer_keys=(
+            "aetna-az",
+            "aetna-co-denver",
+            "aetna-fl-south-florida",
+            "aetna-fl-tampa",
+            "aetna-ga-atlanta",
+            "aetna-il",
+            "aetna-nj-uvc",
+            "aetna-nj-vascular-health",
+            "aetna-ny",
+            "aetna-tx-dallas",
+            "aetna-tx-houston",
+        ),
         sheet_rows=("Aetna Commercial ",),
         notes=(
             "Reached by hand in Test 2 (Desir, NPI 1346866332 → absent from 35 results → OON). NB Aetna's ToS "
