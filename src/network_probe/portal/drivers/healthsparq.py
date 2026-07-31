@@ -344,14 +344,26 @@ class HealthSparqDriver(PortalDriver):
             found, count, matched, suggestions = self._run_search(page, term, q)
             trail.append(f"searched {kind} {term!r} → {count} result(s), {suggestions} suggestion(s)")
             if found and plan_confirmed:
+                # Order matters: read the count, then SHOOT, then open the plans dialog. The
+                # screenshot must show the card and the NETWORK chip the verdict was read from —
+                # `_plans_accepted` opens a modal over exactly that.
+                accepted = self._accepted(page)
+                shot_name = shot(f"match-{kind}")
                 return result(
                     PortalStatus.IN_NETWORK,
                     f"{self.portal_name} lists {matched!r} in {network_desc} within 30 miles of "
                     f"{where} — matched NPI {q.npi} ({who}) by {kind} {term!r}"
-                    f"{self._accepted(page)}. Network pinned on screen as {pinned!r}.",
-                    result_count=count, matched_name=matched, screenshot=shot(f"match-{kind}"),
+                    f"{accepted}. Network pinned on screen as {pinned!r}.",
+                    result_count=count, matched_name=matched, screenshot=shot_name,
+                    networks_accepted=self._plans_accepted(page),
                 )
             if found:
+                # Same ordering as the pinned branch, and the networks matter MORE here: the walk
+                # could not pin a network, but the dialog names every network this provider is in,
+                # which is what a plan-to-network match can then be made against.
+                accepted = self._accepted(page)
+                shot_name = shot(f"match-unpinned-{kind}")
+                nets = self._plans_accepted(page)
                 # A match in the UN-PINNED directory is NOT an in-network answer, and this is not
                 # theoretical: on 2026-07-28 Hedson Desir (NPI 1346866332) was found in exactly this
                 # un-pinned view of AZ Blue — card "1 network accepted" — while being absent from
@@ -361,12 +373,15 @@ class HealthSparqDriver(PortalDriver):
                 return result(
                     PortalStatus.UNKNOWN,
                     f"{self.portal_name} lists {matched!r} ({who}, NPI {q.npi}) within 30 miles of "
-                    f"{where}{self._accepted(page)}, but the NETWORK chip read {pinned!r} — this is the "
+                    f"{where}{accepted}, but the NETWORK chip read {pinned!r} — this is the "
                     f"un-pinned directory, a union of every network this payer sells. Presence there "
                     f"does not put the provider in the member's network (verified live: this same "
                     f"surface lists a provider who is absent from Statewide / National PPO), so the "
-                    f"answer stays UNKNOWN until the plan can be mapped to a named network.",
-                    result_count=count, matched_name=matched, screenshot=shot(f"match-unpinned-{kind}"),
+                    f"answer stays UNKNOWN until the plan can be mapped to a named network."
+                    + (f" The portal does name the {len(nets)} network(s) it has them in: "
+                       f"{', '.join(nets)}." if nets else ""),
+                    result_count=count, matched_name=matched, screenshot=shot_name,
+                    networks_accepted=nets,
                 )
             if suggestions and plan_confirmed:
                 # The typeahead is this platform's in-network NAME INDEX; present-but-not-ours is the
@@ -662,6 +677,59 @@ class HealthSparqDriver(PortalDriver):
         count = self._result_count(page) or len(cards)
         hit = self._match(cards, q) or suggested
         return bool(hit), count, hit, len(suggestions)
+
+    #: Rows inside the "Plans accepted" dialog that are its own furniture rather than networks — the
+    #: accordion headers and the CTA sit in the same <li> markup as the network names.
+    _DIALOG_CHROME = frozenset({
+        "Find a plan", "Medical Networks", "Medicare Networks", "Dental Networks", "Vision Networks",
+        "Plans accepted", "Accepting new patients",
+    })
+
+    def _plans_accepted(self, page: Page) -> tuple[str, ...]:
+        """EVERY network this provider is in, read from the card's "N in network" link.
+
+        Discovered live 2026-07-31 on Arthur Maydell (NPI 1992078745): the link opens a "Plans
+        accepted" dialog whose two accordions — Medical Networks and Medicare Networks — list all 14
+        by name once expanded. This is the provider-FIRST read, and it is worth far more than the
+        count `_accepted` already scrapes: one walk answers "which of this payer's networks is he in?"
+        for every network at once, where the pinned-network walk answers it for exactly one.
+
+        Deliberately best-effort and silent on failure. It runs AFTER the verdict is established, so a
+        moved selector must cost the extra evidence and never the capture that already succeeded.
+
+        An empty result means "not asked, or the portal did not say". It never means "no networks",
+        so a caller may only treat absence from this list as evidence when the list is non-empty.
+        """
+        try:
+            trigger = page.locator("[data-test='plans-accepted-trigger']")
+            if not trigger.count():
+                return ()
+            trigger.first.click()
+            pb.settle(page, 3_000)
+            # The dialog stack: the plans-accepted panel is the innermost one opened.
+            dialogs = page.locator("[role=dialog]")
+            if not dialogs.count():
+                return ()
+            dlg = dialogs.nth(min(2, dialogs.count() - 1))
+            # Both sections start collapsed and their rows are not in the DOM until expanded.
+            for label in ("Medical Networks", "Medicare Networks"):
+                try:
+                    dlg.get_by_text(label, exact=True).first.click()
+                    pb.settle(page, 1_500)
+                except (PlaywrightTimeout, PlaywrightError):
+                    continue  # a payer with only one of the two sections is normal
+            rows = dlg.locator("li")
+            out: list[str] = []
+            for i in range(min(rows.count(), 60)):
+                text = (rows.nth(i).inner_text() or "").replace("\xa0", " ").strip()
+                # The dialog's own furniture shares this markup with the networks.
+                if not text or text in self._DIALOG_CHROME or len(text) > 120:
+                    continue
+                if text not in out:
+                    out.append(text)
+            return tuple(out)
+        except Exception:  # noqa: BLE001 — evidence only; never fail a settled capture
+            return ()
 
     def _accepted(self, page: Page) -> str:
         """The card's own networks-accepted count, e.g. " (card: '14 in network')". Pure evidence —

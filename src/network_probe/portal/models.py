@@ -76,6 +76,12 @@ class PortalCapture:
     screenshot: str | None = None  # filename under api/static/portal/live/
     result_count: int | None = None  # providers the portal returned for the search
     matched_name: str | None = None  # the name the portal showed for our NPI, when it matched
+    #: EVERY network the portal says this provider participates in, when it will name them — not just
+    #: the one we searched. A provider-first read: one walk answers the question for all of a payer's
+    #: networks instead of one walk per network. AZ Blue names all 14 of Maydell's behind its
+    #: "14 in network" card link. Empty tuple means the portal was not asked or did not say; it never
+    #: means "none", so absence from this list is only evidence when the list is non-empty.
+    networks_accepted: tuple[str, ...] = ()
     reachability: Reachability | None = None
     duration_ms: int | None = None
     captured_at: datetime = field(default_factory=lambda: datetime.now(UTC))
@@ -99,6 +105,7 @@ class PortalCapture:
             "screenshot": self.screenshot,
             "result_count": self.result_count,
             "matched_name": self.matched_name,
+            "networks_accepted": list(self.networks_accepted),
             "reachability": self.reachability.value if self.reachability else None,
             "duration_ms": self.duration_ms,
             "captured_at": self.captured_at.isoformat(),
