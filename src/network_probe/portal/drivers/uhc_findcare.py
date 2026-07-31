@@ -14,6 +14,7 @@ and when we cannot confirm which network was searched the verdict stays UNKNOWN 
 from __future__ import annotations
 
 import re
+import time
 
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Page
@@ -41,6 +42,17 @@ BROWSE = "https://findcare.guest.uhc.com/guest-plan-selection/browse"
 
 _SEARCH = "[data-testid='primary-search-input']"
 _LOCATION = "[data-testid='location-search-input']"
+
+# Waiting is condition-based, not clock-based: see `_settle` and `_await_suggestions` for the measured
+# reasons. Both caps exist only so a wedged portal cannot hang a walk forever — in a healthy run
+# neither is reached.
+_SETTLE_MAX_S = 6.0  # ceiling on waiting for the SPA to stop re-rendering after a click
+_SETTLE_POLL_MS = 250
+_SETTLE_STABLE_POLLS = 2  # consecutive unchanged samples that count as "rendered"
+_TYPEAHEAD_DEBOUNCE_MS = 1_200  # let the location autocomplete close before reading provider hits
+_TYPEAHEAD_MAX_S = 12.0  # a genuinely empty typeahead must be waited out, not assumed
+_TYPEAHEAD_POLL_MS = 300
+_SEARCH_INPUT_MAX_MS = 30_000  # plan selection re-renders the shell; waiting costs nothing if it is quick
 
 # Dismissable overlays that sit on top of the first step.
 _OVERLAYS = (
@@ -79,6 +91,10 @@ def _norm(s: str | None) -> str:
 class UhcFindCareDriver(PortalDriver):
     key = "uhc-findcare"
     portal_name = "UHC Find Care (guest)"
+    # This portal commits a location from the ZIP alone (`_commit_location`); a state or city on the
+    # query is never typed anywhere. Without the narrowing, a state-only query passes the guard in
+    # run_capture and then spends ~120s on a portal whose plan list never populates.
+    location_fields = ("zip_code",)
 
     def capture(self, page: Page, q: PortalQuery, shot) -> PortalCapture:
         trail_box: list[str] = []
@@ -114,9 +130,13 @@ class UhcFindCareDriver(PortalDriver):
             except (PlaywrightTimeout, PlaywrightError):
                 pass
 
+        # Generous on purpose. This is a condition-based wait, so a longer ceiling costs nothing when
+        # the input appears promptly — but plan selection re-renders the whole shell, and the walk
+        # arrives here with less slack now that `_settle` no longer spends a dead 10s per step. A run
+        # on 2026-07-31 hit the old 15s and reported BLOCKED after having pinned the plan correctly.
         try:
             search = page.locator(_SEARCH).first
-            search.wait_for(state="visible", timeout=15_000)
+            search.wait_for(state="visible", timeout=_SEARCH_INPUT_MAX_MS)
         except (PlaywrightTimeout, PlaywrightError):
             return result(PortalStatus.BLOCKED, "no provider-search input appeared — portal shell did "
                           "not hydrate, or the guest flow changed.", screenshot=shot("no-search-input"))
@@ -264,12 +284,33 @@ class UhcFindCareDriver(PortalDriver):
         return False
 
     def _settle(self, page: Page, pause_ms: int = 2_500) -> None:
-        """Best-effort wait for the next step to render. Never raises — these portals stream analytics
-        indefinitely and may never reach networkidle."""
-        try:
-            page.wait_for_load_state("networkidle", timeout=10_000)
-        except (PlaywrightTimeout, PlaywrightError):
-            pass
+        """Best-effort wait for the next step to render. Never raises.
+
+        This deliberately does NOT wait for networkidle. Instrumented across a full live walk on
+        2026-07-31, `wait_for_load_state("networkidle", timeout=10_000)` timed out 7 times out of 7 at
+        its full 10s — it never once settled, because Find Care streams analytics for as long as the
+        tab is open. So it detected nothing and simply added 70s to a 143s walk (62% of that walk was
+        spent inside this method). Polling the DOM for quiescence tests what we actually care about —
+        that the SPA has re-rendered after the click — and returns as soon as it is true, typically in
+        well under a second.
+        """
+        last, stable = -1, 0
+        deadline = time.monotonic() + _SETTLE_MAX_S
+        while time.monotonic() < deadline:
+            try:
+                size = page.evaluate("document.body ? document.body.innerHTML.length : 0")
+            except (PlaywrightTimeout, PlaywrightError):
+                break  # mid-navigation the page cannot be measured; the pause below still applies
+            if size == last:
+                stable += 1
+                if stable >= _SETTLE_STABLE_POLLS:
+                    break
+            else:
+                last, stable = size, 0
+            try:
+                page.wait_for_timeout(_SETTLE_POLL_MS)
+            except PlaywrightError:
+                break
         try:
             page.wait_for_timeout(pause_ms)
         except PlaywrightError:
@@ -426,9 +467,7 @@ class UhcFindCareDriver(PortalDriver):
             search.fill(term)
         except (PlaywrightTimeout, PlaywrightError):
             return False, 0, None
-        page.wait_for_timeout(4_000)  # the typeahead debounces, then queries the pinned plan's network
-
-        cands = self._suggestions(page)
+        cands = self._await_suggestions(page)
         # Try to open a full results page too; when it works the cards are richer than the suggestions.
         cards = []
         try:
@@ -450,6 +489,36 @@ class UhcFindCareDriver(PortalDriver):
         # A same-surname stranger means this result set cannot show our provider is ABSENT, so
         # report zero results rather than a countable set the caller could read as an OON.
         return False, (0 if namesake else count), None
+
+    def _await_suggestions(self, page: Page) -> list[str]:
+        """Wait for the typeahead to answer, rather than sleeping a fixed 4s and reading whatever
+        happens to be on screen.
+
+        The blind sleep was a race, and it lost: two live runs of the SAME query (NPI 1245461292,
+        "Bui", 85032, Dual Complete) returned 6 suggestions and then 0, i.e. OUT_OF_NETWORK on one run
+        and UNKNOWN on the next. Returning as soon as suggestions render makes the fast path quicker
+        than 4s and stops a slow response being misread as an empty result set — and an empty return
+        after the full deadline now means the typeahead really had nothing, which is the distinction
+        `_search` needs to tell "absent from this network" from "not loaded yet".
+
+        The initial debounce wait is not optional: `_suggestions` falls back to `[role=option]`, which
+        also matches the LOCATION autocomplete, so polling the instant we type can read the location
+        options as if they were provider hits.
+        """
+        try:
+            page.wait_for_timeout(_TYPEAHEAD_DEBOUNCE_MS)
+        except PlaywrightError:
+            return []
+        deadline = time.monotonic() + _TYPEAHEAD_MAX_S
+        while time.monotonic() < deadline:
+            got = self._suggestions(page)
+            if got:
+                return got
+            try:
+                page.wait_for_timeout(_TYPEAHEAD_POLL_MS)
+            except PlaywrightError:
+                break
+        return []
 
     def _suggestions(self, page: Page) -> list[str]:
         """The typeahead's provider suggestions. Read via UHC's own suggestion testid first, because
