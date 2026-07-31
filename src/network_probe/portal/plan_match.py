@@ -36,8 +36,12 @@ from dataclasses import dataclass, field
 # alone, or contract+PBP(+segment) concatenated (H2406018000 = H2406 / 018 / 000).
 _CONTRACT = re.compile(r"\b([HRSE]\d{4})(\d{3})?(\d{3})?\b", re.I)
 
-# Market/plan codes payers print in plan names: "FL-0026", "FL-35", "IL-0001".
-_MARKET = re.compile(r"\b([A-Z]{2}-\d{1,4})\b", re.I)
+# Market/plan codes payers print in plan names: "FL-0026", "FL-35", "IL-0001" — and also "FL-001P",
+# "FL-MA01", "FL-MA2". The suffix is NOT digits-only: measured on 2026-07-29 against UHC's live FL AARP
+# list, a digits-only pattern saw 4 of 7 real codes and silently missed the rest. Medicare is the one
+# line where identifiers converge between a 271 and a portal label, so an unreadable code is a tier-1
+# match that never happens. A digit is still required (see `_market_codes`) or "HMO-POS" would qualify.
+_MARKET = re.compile(r"\b([A-Z]{2}-[A-Z0-9]{1,5})\b", re.I)
 
 # ACA / marketplace HIOS Standard Component ID: 5-digit issuer + 2-char state + 7 digits, optionally
 # with a "-01" variant suffix (e.g. 12345FL0010001-01). Added because the Medicare-shaped identifiers
@@ -57,10 +61,19 @@ _NON_DISTINCTIVE = frozenset({
     "AND", "FOR", "INC", "LLC", "COMPANY", "MEMBER", "MEMBERS", "CHOICE",  # too generic alone
     "HMO", "PPO", "POS", "EPO", "SNP", "HMOPOS", "PFFS",  # plan TYPE, not plan identity
     "COMMERCIAL", "EMPLOYER", "INDIVIDUAL", "FAMILY", "MARKETPLACE", "EXCHANGE",
-    "STATEWIDE", "NATIONAL", "REGIONAL", "OPEN", "ACCESS", "SELECT", "PREFERRED", "STANDARD",
+    "STATEWIDE", "NATIONAL", "REGIONAL", "OPEN", "SELECT", "PREFERRED", "STANDARD",
 })
+# NOTE "ACCESS" was removed from that set on 2026-07-29. It is not near-universal — it is the ONLY thing
+# separating UHC's "NHP HMO/POS" from "NHP HMO/POS Access", so discarding it made those two options
+# indistinguishable. The bar for this set is "appears in nearly every plan name for a line of business";
+# ACCESS does not clear it.
 
 _MIN_DISTINCTIVE_TOKENS = 2  # below this, word overlap is noise
+# 3, not 4. Network names carry short but highly discriminating codes — NHP (Neighborhood Health
+# Partnership), OAP, HPN, BCO. A 4-char floor discarded them, which is why "UHC Commerical NHP Access
+# HMO" — the one Ins Test 3 string that names a real network — scored zero against every option.
+# Generic plan TYPES of the same length (HMO/PPO/POS/EPO/SNP) stay excluded via _NON_DISTINCTIVE.
+_MIN_TOKEN_LEN = 3
 _TOKEN_RE = re.compile(r"[^A-Za-z0-9]+")
 
 
@@ -85,6 +98,19 @@ class PlanMatch:
         return self.confidence == "high"
 
 
+def _market_codes(text: str | None) -> set[str]:
+    """Market/plan codes like FL-0026, FL-001P, FL-MA01 — requiring at least one digit.
+
+    The digit requirement is what keeps the loosened pattern honest: without it "HMO-POS", "D-SNP" and
+    any other hyphenated product word would read as a plan identifier and could license an OON.
+    """
+    return {
+        m.group(1).upper()
+        for m in _MARKET.finditer(text or "")
+        if any(ch.isdigit() for ch in m.group(1))
+    }
+
+
 def identifiers(text: str | None) -> set[str]:
     """Contract / PBP / market identifiers in a plan string. These are what actually identify a plan.
 
@@ -105,8 +131,7 @@ def identifiers(text: str | None) -> set[str]:
             found.add(contract + pbp)
             if segment:
                 found.add(contract + pbp + segment)
-    for m in _MARKET.finditer(text or ""):
-        found.add(m.group(1).upper())
+    found |= _market_codes(text)
     for m in _HIOS.finditer(text or ""):
         base, variant = m.group(1).upper(), m.group(2)
         found.add(base)

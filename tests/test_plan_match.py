@@ -140,3 +140,90 @@ def test_medicaid_has_no_identifier_and_that_is_documented_behaviour():
     future Medicaid driver author."""
     assert identifiers("TX - Texas STAR") == set()
     assert identifiers("Molina Healthcare Texas STAR / Managed Medicaid") == set()
+
+
+# --- D3: the matcher was blind to the ONE Insurance string that names a real network ---------------
+
+# UHC's real Employer-and-Individual network catalogue, read live 2026-07-29. Note two NHP entries:
+# the row's string must pin the "Access" one, not its sibling.
+UHC_COMMERCIAL_OPTIONS = [
+    "Choice Plus",
+    "Options PPO",
+    "Navigate Plus",
+    "Neighborhhood Health Partnership (NHP) - Level Funded",  # UHC's own typo, kept verbatim
+    "NHP HMO/POS",
+    "NHP HMO/POS Access",
+]
+
+
+def test_nhp_access_hmo_pins_uhcs_own_nhp_access_network():
+    """Ins Test 3 row 4's Insurance string is the only one of eleven that names a real network.
+
+    "UHC Commerical NHP Access HMO" (client's typo) must reach UHC's "NHP HMO/POS Access". It failed
+    because NHP is 3 characters — below distinctive_tokens' 4-char floor — and ACCESS sits in
+    _NON_DISTINCTIVE, so every distinctive token was discarded and the string scored zero against
+    every option. healthsparq.py already uses a 3-char floor for exactly this reason ("PPO"/"HMO"/"EPO").
+    """
+    m = match_plan("UHC Commerical NHP Access HMO", UHC_COMMERCIAL_OPTIONS)
+    assert m is not None, "the one string that names a network must not decline"
+    assert m.label == "NHP HMO/POS Access"
+
+
+def test_nhp_is_a_distinctive_token_despite_being_three_characters():
+    assert "NHP" in distinctive_tokens("UHC Commerical NHP Access HMO")
+
+
+def test_three_char_floor_does_not_admit_generic_plan_type_words():
+    """Lowering the floor must not make HMO/PPO/POS look distinctive — they are plan TYPE, not identity."""
+    for generic in ("HMO", "PPO", "POS", "EPO", "SNP"):
+        assert generic not in distinctive_tokens(f"Some {generic} Plan")
+
+
+# --- D5: three of UHC's seven FL market codes were invisible to the identifier regex ---------------
+
+def test_market_code_with_a_trailing_letter_is_an_identifier():
+    """UHC prints FL-001P alongside FL-0006. The regex required digits only after the dash."""
+    assert "FL-001P" in identifiers("AARP Medicare Advantage from UHC FL-001P (HMO-POS)")
+
+
+def test_market_code_with_letters_after_the_dash_is_an_identifier():
+    """FL-MA01 and FL-MA2 are real UHC plan codes, read live from the FL AARP list 2026-07-29."""
+    assert "FL-MA01" in identifiers("AARP Medicare Advantage Patriot No Rx FL-MA01 (Regional PPO)")
+    assert "FL-MA2" in identifiers("AARP Medicare Advantage Patriot No Rx FL-MA2 (PPO)")
+
+
+def test_every_real_uhc_fl_plan_code_is_recognised():
+    """All seven codes from the live Kennesaw/Port St. Lucie AARP list must be identifier-grade —
+    Medicare is the ONE line where identifiers converge between a 271 and a portal label, so a code
+    the regex cannot see is a tier-1 match that silently never happens."""
+    live = {
+        "AARP Medicare Advantage CareFlex from UHC FL-35 (HMO-POS)": "FL-35",
+        "AARP Medicare Advantage from UHC FL-0006 (HMO-POS)": "FL-0006",
+        "AARP Medicare Advantage from UHC FL-001P (HMO-POS)": "FL-001P",
+        "AARP Medicare Advantage from UHC FL-0025 (PPO)": "FL-0025",
+        "AARP Medicare Advantage from UHC FL-0031 (Regional PPO)": "FL-0031",
+        "AARP Medicare Advantage Patriot No Rx FL-MA01 (Regional PPO)": "FL-MA01",
+        "AARP Medicare Advantage Patriot No Rx FL-MA2 (PPO)": "FL-MA2",
+    }
+    missing = [code for label, code in live.items() if code not in identifiers(label)]
+    assert not missing, f"invisible to the identifier regex: {missing}"
+
+
+def test_two_uhc_fl_plans_do_not_match_each_other_on_their_codes():
+    """The codes must DISCRIMINATE, not merely be found — pinning the wrong AARP plan is the CareFlex bug."""
+    m = match_plan(
+        "AARP Medicare Advantage from UHC FL-001P (HMO-POS)",
+        [
+            "AARP Medicare Advantage from UHC FL-0006 (HMO-POS)",
+            "AARP Medicare Advantage from UHC FL-001P (HMO-POS)",
+            "AARP Medicare Advantage Patriot No Rx FL-MA01 (Regional PPO)",
+        ],
+    )
+    assert m is not None and m.confirms_network
+    assert m.label == "AARP Medicare Advantage from UHC FL-001P (HMO-POS)"
+
+
+def test_a_state_abbreviation_alone_is_still_not_an_identifier():
+    """Loosening the market pattern must not make bare state/product noise look identifier-grade."""
+    assert identifiers("Aetna Medicare AZ") == set()
+    assert identifiers("BCBS Blue Shield California AZ") == set()

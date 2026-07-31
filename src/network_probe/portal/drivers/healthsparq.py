@@ -147,33 +147,43 @@ class HealthSparqSite:
 
 
 # AZ Blue's medical networks, read out of the Sitecore JSON on
-# www.azblue.com/find-a-doctor/browse-the-network on 2026-07-28. Dental brands (BCBSAZDENTAL) and the
+# www.azblue.com/find-a-doctor/browse-the-network. Dental brands (BCBSAZDENTAL) and the
 # "Do Not Know My Network" entry are deliberately absent: the first is the wrong network for a physician
 # check, the second is the un-pinned directory.
+#
+# RE-HARVESTED 2026-07-29. The gate was restyled into two steps — Type of Coverage (Individual &
+# Families / Medicare Supplement Senior Preferred / Medicare Advantage / Employer Provided / Indemnity /
+# Workers Compensation) and then Network, scoped to that coverage type. It publishes ~100 links for 24
+# distinct networks because one network recurs under several coverage types. This is only a FALLBACK:
+# `_network_map` harvests the gate live and lets live entries win.
 _AZBLUE_NETWORKS: tuple[tuple[str, str, str, str], ...] = (
-    ("Statewide / National PPO", "PPO", "BCBSAZBLUE", "XBP"),
-    ("Statewide/National PPO + Prosano", "PRS", "BCBSAZBLUE", ""),
-    ("Statewide HMO", "HMO", "BCBSAZBLUE", "XBK"),
-    ("Alliance HMO", "ALH", "BCBSAZBLUE", "XAH"),
-    ("Alliance PPO / EPO", "ALN", "BCBSAZBLUE", "XBA"),
-    ("Alliance PPO + Prosano", "APR", "BCBSAZBLUE", "S3C"),
-    ("BlueHPN National EPO (In AZ: Alliance Network)", "HPN", "BCBSAZBLUE", "Z5M"),
-    ("EPO", "PPO", "BCBSAZBLUE", "XBP"),
-    ("CHS", "CHS", "BCBSAZBLUE", "XBP"),
-    ("Blue Preferred Care Tiers", "SOA", "BCBSAZMAYO", "S3Z"),
-    ("High Deductible Health Plan", "PP2", "BCBSAZMAYO", "SYD"),
-    ("PimaConnect", "PMA", "BCBSAZBLUE", "PMA"),
-    ("PimaConnect PPO and Prosano", "PPR", "BCBSAZBLUE", ""),
-    ("Indemnity", "PAR", "BCBSAZBLUE", "XBC"),
     ("ACA Health Choice", "STH", "BCBSAZBLUE", "IAZ"),
+    ("Alliance HMO", "ALH", "BCBSAZBLUE", "XAH"),
+    ("Alliance PPO + Prosano", "APR", "BCBSAZBLUE", "S3C"),
+    ("Alliance PPO / EPO", "ALN", "BCBSAZBLUE", "XBA"),
+    ("Blue Best Life - Classic/Plus", "MDH", "AZMEDICARE", ""),
+    ('Blue Preferred Care Tiers ("Triple Choice Plan" for State of AZ employees)',
+     "SOA", "BCBSAZMAYO", "S3Z"),
+    ("BlueHPN National EPO (In AZ: Alliance Network)", "HPN", "BCBSAZBLUE", "Z5M"),
+    ("BlueJourney PPO", "MPP", "AZMEDICARE", ""),
+    ("CHS", "CHS", "BCBSAZBLUE", "XBP"),
+    ("EPO", "PPO", "BCBSAZBLUE", "XBP"),
     ("Focus", "FCS", "BCBSAZBLUE", "FZI"),
     ("Focus + Prosano", "FCP", "BCBSAZBLUE", "FPZ"),
+    ("High Deductible Health Plan", "PP2", "BCBSAZMAYO", "SYD"),
+    ("Indemnity", "PAR", "BCBSAZBLUE", "XBC"),
     ("MaricopaFocus (Maricopa County)", "MCF", "BCBSAZBLUE", "FLH"),
-    ("PimaFocus (Pima County)", "PMF", "BCBSAZBLUE", "FPO"),
-    ("Neighborhood (All counties except for Maricopa and Pima)", "NBR", "BCBSAZBLUE", "NNJ"),
-    ("Blue Best Life - Classic/Plus", "MDH", "AZMEDICARE", ""),
-    ("BlueJourney PPO", "MPP", "AZMEDICARE", ""),
     ("Medicare Supplement Senior Preferred Medical", "SEN", "BCBSAZBLUE", "XBS"),
+    # The gate publishes this network under BOTH labels (identical product/brand/prefix) because it is
+    # now coverage-type-scoped and one network appears under several types. Kept verbatim.
+    ("Neighborhood", "NBR", "BCBSAZBLUE", "NNJ"),
+    ("Neighborhood (All counties except for Maricopa and Pima)", "NBR", "BCBSAZBLUE", "NNJ"),
+    ("PimaConnect", "PMA", "BCBSAZBLUE", "PMA"),
+    ("PimaConnect PPO and Prosano", "PPR", "BCBSAZBLUE", ""),
+    ("PimaFocus (Pima County)", "PMF", "BCBSAZBLUE", "FPO"),
+    ("Statewide / National PPO", "PPO", "BCBSAZBLUE", "XBP"),
+    ("Statewide / National PPO + Prosano", "PRS", "BCBSAZBLUE", ""),
+    ("Statewide HMO", "HMO", "BCBSAZBLUE", "XBK"),
 )
 
 SITES: dict[str, HealthSparqSite] = {
@@ -190,15 +200,34 @@ SITES: dict[str, HealthSparqSite] = {
 }
 
 # The payer gate embeds its network links as Sitecore JSON, `&` escaped as &.
+# The label group must accept JSON escapes, not stop at the first quote. AZ Blue publishes
+# `Blue Preferred Care Tiers (\"Triple Choice Plan\" for State of AZ employees)`, and a `[^"]*` group
+# captured only `Blue Preferred Care Tiers (\` — discarding the very tokens that distinguish that
+# network from the others. Found live 2026-07-29.
 _GATE_LINK_RE = re.compile(
-    r'"href"\s*:\s*"(?P<url>https://[^"]*?/healthsparq/public/\#/one/[^"]*)"\s*,\s*"text"\s*:\s*"(?P<label>[^"]*)"'
+    r'"href"\s*:\s*"(?P<url>https://[^"]*?/healthsparq/public/\#/one/[^"]*)"\s*,\s*'
+    r'"text"\s*:\s*"(?P<label>(?:[^"\\]|\\.)*)"'
 )
+
+
+def _gate_label(raw: str | None) -> str:
+    """Decode a label captured from the gate's Sitecore JSON into what the payer actually displays."""
+    return (raw or "").replace('\\"', '"').replace("\\u0026", "&").replace("\\/", "/").strip()
 
 
 def _tokens(s: str | None) -> set[str]:
     """Distinctive tokens for plan/network matching. Length >= 3, not >= 4: "PPO"/"HMO"/"EPO" are the
     single most discriminating tokens in a Blues network name and a 4-char floor would drop them."""
     return {t for t in re.split(r"[^A-Za-z0-9]+", (s or "").upper()) if len(t) >= 3}
+
+
+def _label_key(s: str | None) -> str:
+    """Identity of a network LABEL, insensitive to spacing, punctuation and case.
+
+    "Statewide / National PPO + Prosano" and "Statewide/National PPO + Prosano" are the same network
+    written two ways; keyed by the raw string they became two entries and produced a self-tie.
+    """
+    return re.sub(r"[^a-z0-9]+", "", (s or "").lower())
 
 
 def _norm_name(s: str | None) -> list[str]:
@@ -449,11 +478,27 @@ class HealthSparqDriver(PortalDriver):
         this plan year — and merged with the baked-in map so a restyled gate degrades instead of
         breaking. Live entries win; baked-in entries fill the gaps.
         """
-        live = self._harvest_gate(page, site)
-        merged: dict[str, str] = dict(live)
+        return self._merge_networks(self._harvest_gate(page, site), site)
+
+    def _merge_networks(
+        self, live: list[tuple[str, str]], site: HealthSparqSite
+    ) -> list[tuple[str, str]]:
+        """Live gate entries, with the baked-in map filling only genuine gaps.
+
+        Matched on a punctuation-insensitive key, NOT the raw label. AZ Blue's gate prints
+        "Statewide / National PPO + Prosano" while the baked-in map carries
+        "Statewide/National PPO + Prosano" — one network, two spellings. Keyed by raw label they
+        merged as two entries, so the map offered the same network twice; `_best_network` then
+        (correctly) refused the tie and returned None, and the member's plan could not be pinned at
+        all. Measured live 2026-07-29. The same key also repairs "Blue Preferred Care Tiers", whose
+        live label arrives truncated by an escape sequence.
+
+        The LIVE label wins on collision — the payer's own gate is the authority on this year's wording.
+        """
+        merged: dict[str, tuple[str, str]] = {_label_key(l): (l, u) for l, u in live}
         for label, product, brand, prefix in site.networks:
-            merged.setdefault(label, self._launch(site, product, brand, prefix))
-        return sorted(merged.items())
+            merged.setdefault(_label_key(label), (label, self._launch(site, product, brand, prefix)))
+        return sorted(merged.values())
 
     def _harvest_gate(self, page: Page, site: HealthSparqSite) -> list[tuple[str, str]]:
         if not site.network_gate_url:
@@ -467,7 +512,7 @@ class HealthSparqDriver(PortalDriver):
         out: dict[str, str] = {}
         for m in _GATE_LINK_RE.finditer(html):
             url = m.group("url").replace("\\u0026", "&").replace("\\/", "/")
-            label = m.group("label").replace("\\u0026", "&").strip()
+            label = _gate_label(m.group("label"))
             if site.host not in url or "productCode=" not in url:
                 continue  # no productCode -> the un-pinned directory (trap 2)
             if re.search(r"brandCode=[^&]*(DENTAL|VISION)", url, re.I):
@@ -698,7 +743,7 @@ class HealthSparqDriver(PortalDriver):
     })
 
     def _networks_via_unpinned(self, page: Page, q: PortalQuery, site: HealthSparqSite,
-                               trail: list[str]) -> tuple[str, ...]:
+                               trail: list[str]) -> tuple[tuple[str, ...], str | None]:
         """After a decisive OON, go back and ask which networks this provider IS in.
 
         The list lives on the provider's result CARD, and a pinned search that proves absence by
