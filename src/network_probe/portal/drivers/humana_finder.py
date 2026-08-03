@@ -752,20 +752,38 @@ class HumanaFinderDriver(PortalDriver):
                 texts = []
             idx = next((i for i, t in enumerate(texts) if self._is_our_place(t, q)), None)
             if idx is None:
-                # No suggestion we trust. Do NOT press Enter on a term Places rejected — that is what
-                # left the field in its "Enter a valid address…" error state, so Continue never
-                # advanced and the walk died two steps later at "type of care 'Medical' not
-                # clickable". Try the next form of the location instead.
-                if texts:
-                    continue
-                continue
+                continue  # try the next form before giving up on the suggestion route
             try:
                 page.locator(f"{_LOC_ITEM}:visible").nth(idx).click()
             except (PlaywrightTimeout, PlaywrightError):
                 continue
             page.wait_for_timeout(1_500)
             return typed
-        return None
+
+        # No form produced a suggestion we trust. Commit raw text with Enter, which this portal
+        # accepts — that was the ORIGINAL behaviour and it is load-bearing: Places is intermittent
+        # here, and on a quiet response the suggestion list is simply empty. Removing this fallback
+        # turned a flaky-but-working walk into "location not accepted", which is the regression this
+        # comment exists to prevent someone repeating.
+        #
+        # Enter the ZIP rather than the old "ST ZIP": the ZIP is the form Places validates, and
+        # whether the portal actually landed near the clinic is not decided here anyway — the caller
+        # reads the portal's OWN echo into `geo_ok`, and `_absence_blockers` refuses an OON when that
+        # echo does not carry the clinic ZIP.
+        fallback = (q.zip_code or "").strip() or next(iter(self._location_terms(q)), "")
+        if not fallback:
+            return None
+        try:
+            inp = page.locator(_LOC_INPUT).first
+            inp.click()
+            inp.fill("")
+            inp.type(fallback, delay=110)
+            page.wait_for_timeout(2_500)
+            inp.press("Enter")
+        except (PlaywrightTimeout, PlaywrightError):
+            return None
+        page.wait_for_timeout(1_500)
+        return fallback
 
     def _location_terms(self, q: PortalQuery) -> list[str]:
         """The forms of this location to try, most reliable first.
