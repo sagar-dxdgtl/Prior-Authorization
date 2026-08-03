@@ -153,7 +153,12 @@ function committedNetwork(
     return { text: status.replace(/_/g, ' '), tone: networkStatusTone(status), unsettled: false };
   }
   const lean = determination?.display_code;
-  if (!lean || lean === 'UNKNOWN') return { text: 'UNKNOWN', tone: 'neutral', unsettled: false };
+  // No member, no network question — say that rather than commit to a direction. See
+  // domain/determination._not_established.
+  if (lean === 'NOT_ESTABLISHED') {
+    return { text: 'NOT ESTABLISHED', tone: 'neutral', unsettled: false };
+  }
+  if (!lean || lean === 'UNKNOWN') return { text: 'NOT ESTABLISHED', tone: 'neutral', unsettled: false };
   // Every OON flavour (payer-level, physician, with-benefits) is out-of-network on this axis; the
   // distinction between them belongs to the Determination tile, not to provider-network status.
   const inn = lean === 'IN_NETWORK';
@@ -181,6 +186,9 @@ function verdictHeadline(v: NetworkVerdict, committed: { text: string; unsettled
  *  finding. Same reason as above: only a confirmed verdict earns a decisive colour. */
 function committedDeterminationTone(d: Determination | null): Tone {
   if (!d) return 'neutral';
+  // "Eligibility not established" is not a verdict of any colour — it reports that the check did
+  // not run, so it must not borrow the amber a real low-confidence reading earns.
+  if (d.display_code === 'NOT_ESTABLISHED' || d.confidence === 'none') return 'neutral';
   if (d.confidence === 'low') return 'warning';
   return determinationTone(d.display_code ?? d.code);
 }
@@ -437,12 +445,12 @@ export default function ResultsView({
             )}
             {/* A low-confidence reading is a lean, so the evidence behind it and the one thing that
                 would settle it are the actionable part — without them the tile is just an opinion. */}
-            {result.determination?.confidence === 'low' && result.determination?.basis && (
+            {result.determination?.confidence !== 'high' && result.determination?.basis && (
               <div style={{ ...styles.verdictBody, marginTop: 6, fontSize: 12 }}>
                 <strong>Why:</strong> {result.determination.basis}
               </div>
             )}
-            {result.determination?.confidence === 'low' && result.determination?.next_step && (
+            {result.determination?.confidence !== 'high' && result.determination?.next_step && (
               <div style={{ ...styles.verdictBody, marginTop: 4, fontSize: 12 }}>
                 <strong>To confirm:</strong> {result.determination.next_step}
               </div>

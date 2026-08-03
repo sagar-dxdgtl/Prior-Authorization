@@ -137,7 +137,14 @@ def check_eligibility(
     # discard evidence that already succeeded.
     from network_probe.domain.service import _catalogue_row
 
-    ev: dict = {}
+    ev: dict = {
+        # Did the 271 establish a member at all? `coverage_active is None` means the payer returned
+        # nothing usable — no plan, nothing to pin, no search possible. A network status is a
+        # property of a member's plan, so without one there is no direction to commit to; the
+        # determination says "eligibility not established" instead of guessing. False (a definite
+        # "not covered") is a real answer and does NOT suppress anything.
+        "coverage_established": result.coverage_active is not None,
+    }
     try:
         mp = getattr(verdict, "matched_provider", None) if verdict is not None else None
         if isinstance(mp, dict):

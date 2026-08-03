@@ -158,6 +158,27 @@ def _best_available(evidence: dict) -> tuple[str | None, str | None, str | None]
     )
 
 
+def _not_established(ev: dict) -> tuple[str, str, str]:
+    """(basis, next_step, why) when the 271 never established a member at all.
+
+    Distinct from "we cannot pin the network", and the distinction is the whole point: a NETWORK
+    status is a property of a member's plan, so with no member there is nothing for it to be true or
+    false about. Committing to a direction there is not a cautious lean, it is a statement about a
+    check that never ran — measured live when a Molina row whose answer is IN rendered
+    "Out-of-Network · low confidence" off a silent 271, an unpinnable plan and no search at all.
+
+    Directory evidence does NOT rescue this. "In 11 of this payer's networks" is about the provider;
+    it cannot supply the member's plan.
+    """
+    return (
+        "The payer's 271 did not return coverage for this member, so no plan could be read and no "
+        "network could be searched. This is not a finding about the provider.",
+        "Check the member ID, date of birth and payer, then re-run the eligibility check — the "
+        "network verdict needs a member before it can mean anything.",
+        "eligibility not established",
+    )
+
+
 def _committed_display(provisional: str | None, effective: bool | None) -> tuple[str, str]:
     """(display_code, display_label) for an UNKNOWN verdict — the direction we commit to on screen.
 
@@ -261,6 +282,23 @@ def _determine(
             "Needs Review",
             f"Provider network status conflicts across sources; {_oon_tail(effective)}{infer}.",
             confidence="medium",
+        )
+
+    # No member, no network question. Checked BEFORE `_best_available` because directory evidence
+    # is about the provider and cannot supply the member's plan — see `_not_established`.
+    if (evidence or {}).get("coverage_established") is False:
+        basis, next_step, _ = _not_established(evidence or {})
+        return Determination(
+            "UNKNOWN",
+            "Eligibility not established",
+            "The payer returned no coverage for this member, so no network determination can be made.",
+            basis=basis,
+            next_step=next_step,
+            display_code="NOT_ESTABLISHED",
+            display_label="Eligibility not established",
+            # Not "low" — a low-confidence reading is still a reading. There is nothing here to be
+            # confident about, so the UI renders no meter at all.
+            confidence="none",
         )
 
     # UNKNOWN, but never blank: surface the best available reading and what would settle it.
