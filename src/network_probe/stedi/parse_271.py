@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from decimal import Decimal, InvalidOperation
 
 from network_probe.domain.benefits import BenefitCategory, BenefitLine, CoverageLevel, EligibilityResult, Network
@@ -76,6 +77,23 @@ _AAA_MEANINGS = {
     "75": "subscriber not found — verify member ID",
     "79": "invalid participant identification",
 }
+
+
+def _subscriber_zip(data: dict) -> str | None:
+    """The member's 5-digit residence ZIP from the 271's own subscriber address.
+
+    Needed because some portals scope their PLAN LIST by where the member lives rather than where the
+    clinic is — UHC Medicare's plan step is literally "Select the area where you live", and its lists
+    are disjoint between counties. The payer already told us this in its own response, so it costs no
+    extra data entry and cannot drift from what the payer believes.
+
+    Measured 2026-08-03 across the cached real 271s: present in 7 of 7, spanning UnitedHealthcare,
+    Humana, Devoted, Oscar and Cigna. Returned as ZIP+4 by several payers ("338111635"), so it is
+    truncated — the portals' location boxes take 5 digits and reject the 9-digit form.
+    """
+    addr = ((data.get("subscriber") or {}).get("address")) or {}
+    raw = re.sub(r"\D", "", str(addr.get("postalCode") or ""))
+    return raw[:5] if len(raw) >= 5 else None
 
 
 def parse_271_benefits(data: dict) -> EligibilityResult:
@@ -184,6 +202,7 @@ def parse_271_benefits(data: dict) -> EligibilityResult:
 
     candidates, selected = derive_plan_candidates(infos)
     plan = data.get("planInformation") or {}
+    member_zip = _subscriber_zip(data)
     return EligibilityResult(
         coverage_active=coverage_active,
         # `groupDescription` is deliberately NOT a fallback here. It is the EMPLOYER (or the carrier's
@@ -208,4 +227,5 @@ def parse_271_benefits(data: dict) -> EligibilityResult:
         plan_candidates=candidates,
         selected_plan=selected,
         out_of_network_benefits=oon_benefits,
+        member_zip=member_zip,
     )

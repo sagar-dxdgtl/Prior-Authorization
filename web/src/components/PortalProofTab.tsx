@@ -37,7 +37,14 @@ export interface PortalTarget {
   provider_last_name?: string | null;
   state?: string | null;
   city?: string | null;
+  /** The CLINIC's ZIP — where care is delivered. Scopes the provider search. */
   zip?: string | null;
+  /** The MEMBER's residence ZIP, read from the 271 (never typed by a user). Some portals scope
+   *  their PLAN LIST by where the member lives rather than where the clinic is — UHC Medicare's
+   *  step says "Select the area where you live", and its county lists are disjoint, so the clinic
+   *  ZIP cannot pin a member's plan when they travel for care. Selects a plan list only; it is
+   *  never typed into a provider search box. */
+  member_zip?: string | null;
   tin?: string | null;
 }
 

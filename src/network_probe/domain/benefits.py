@@ -87,6 +87,11 @@ class EligibilityResult:
     # must reconcile with the same inputs; without it a silent-271 member reconciles to plain
     # "Out-of-Network" where the plan type says "Out-of-Network (with benefits)".
     plan_oon_capability: bool | None = None
+    #: The member's 5-digit residence ZIP, read from the 271's own subscriber address. Carried ONLY
+    #: because some portals scope their plan list by where the member lives (UHC Medicare: "Select
+    #: the area where you live"), so the clinic ZIP cannot pin the member's plan. It selects a plan
+    #: list and is never typed into a provider search box — no other member field ever leaves here.
+    member_zip: str | None = None
     # Final client-facing INN/OON determination {code,label,reason}: provider network_status combined
     # with out_of_network_benefits (IN / OON / OON-with-benefits / REVIEW / UNKNOWN). Set by check_eligibility.
     determination: dict | None = None
@@ -114,6 +119,7 @@ class EligibilityResult:
             "stedi_network_status": self.stedi_network_status.value if self.stedi_network_status else None,
             "out_of_network_benefits": self.out_of_network_benefits,
             "plan_oon_capability": self.plan_oon_capability,
+            "member_zip": self.member_zip,
             "determination": self.determination,
             "evidence_sources": self.evidence_sources,
         }

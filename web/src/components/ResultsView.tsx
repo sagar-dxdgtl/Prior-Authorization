@@ -67,6 +67,9 @@ export interface EligibilityResponse {
   stedi_network_status: string | null;
   out_of_network_benefits: boolean | null;
   plan_oon_capability: boolean | null;
+  /** The member's residence ZIP from the 271 — pins the plan list on portals that scope it by
+   *  where the member lives. See PortalTarget.member_zip. */
+  member_zip: string | null;
   determination: Determination | null;
   evidence_sources?: EvidenceSource[];
   source_audit?: { source?: string; note?: string; error_codes?: string[] } | null;

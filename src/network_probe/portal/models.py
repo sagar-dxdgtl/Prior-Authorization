@@ -47,7 +47,9 @@ class Reachability(str, Enum):
 
 @dataclass
 class PortalQuery:
-    """A single provider lookup. Provider + clinic data only — no member PHI ever reaches a portal."""
+    """A single provider lookup. Provider + clinic data, plus the member's residence ZIP where a
+    portal scopes its PLAN LIST by it. No other member data ever reaches a portal — never a name,
+    never a member id, never a DOB."""
 
     payer_key: str
     npi: str
@@ -56,8 +58,19 @@ class PortalQuery:
     plan: str | None = None  # the product to select in the portal, e.g. "AARP Medicare Advantage … (PPO)"
     state: str | None = None
     city: str | None = None
-    zip_code: str | None = None
+    zip_code: str | None = None  # the CLINIC's ZIP — where care is delivered; scopes the provider search
     tin: str | None = None  # carried through to the audit row, never sent to the portal
+    #: The MEMBER's residence ZIP, used only where a portal scopes its plan list by where the member
+    #: lives rather than where the clinic is. UHC Medicare does: its plan step reads "Select the area
+    #: where you live", and the lists are genuinely disjoint — measured 2026-08-03, Port St. Lucie
+    #: 34986 offers 12 Medicare plans and Miami 33101 a different 17, with the member's own FL-0026 in
+    #: neither. Feeding the clinic ZIP there makes the member's plan unpinnable, and the walk then
+    #: cannot confirm a network no matter how correct the 271 is.
+    #:
+    #: Deliberately narrow: it selects a plan list and is never typed into a provider search box, so
+    #: it cannot be used to look the member up. Not echoed into capture notes either — the trail says
+    #: a member ZIP was used, not which one.
+    member_zip: str | None = None
 
 
 @dataclass

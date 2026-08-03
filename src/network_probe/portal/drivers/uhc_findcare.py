@@ -256,8 +256,20 @@ class UhcFindCareDriver(PortalDriver):
                 "type of care 'Medical' NOT clickable"]
         trail.append("care: Medical")
 
-        if q.zip_code and self._commit_location(page, q.zip_code):
-            trail.append(f"county via ZIP {q.zip_code}")
+        # THE MEMBER'S ZIP, not the clinic's. This step is UHC's "Select the area where you live",
+        # and its plan list is scoped to the member's county — measured 2026-08-03, Port St. Lucie
+        # 34986 offers 12 Medicare plans and Miami 33101 a different 17, with the member's own
+        # FL-0026 in neither. A patient who travels to a specialist outside their home county
+        # therefore had an unpinnable plan, and the walk could never confirm a network however
+        # correct the 271 was. Falls back to the clinic ZIP, which is the old behaviour and still
+        # right whenever the member is treated where they live.
+        plan_zip = q.member_zip or q.zip_code
+        if plan_zip and self._commit_location(page, plan_zip):
+            # The member's ZIP is NOT echoed — this note is stored and displayed. Which county was
+            # searched is auditable from the screenshot, which shows the portal's own echo.
+            trail.append(
+                "county via member ZIP" if q.member_zip else f"county via clinic ZIP {q.zip_code}"
+            )
         # "Plans will populate upon location selection" — the plan list does not exist until the
         # location is *committed* with the Select button. Filling the ZIP is not enough.
         if self._click_any(page, "[data-testid*='location-select']", "Select", timeout_ms=6_000):

@@ -300,6 +300,10 @@ export default function Eligibility() {
                 plan: result?.selected_plan ?? result?.plan_name ?? null,
                 state: submitted.state ?? null,
                 zip: submitted.zip ?? null,
+                // From the payer's own 271, not the form. UHC Medicare scopes its plan list by the
+                // member's county, so without this a member treated outside their home county has
+                // an unpinnable plan and the walk can never confirm a network.
+                member_zip: result?.member_zip ?? null,
                 tin: submitted.tin ?? null,
                 // The verdict as it stands now, so the portal answer is reconciled against it
                 // rather than displayed beside it.

@@ -355,8 +355,9 @@ class RecheckRequest(BaseModel):
 
 
 class PortalCaptureRequest(BaseModel):
-    """A find-a-doctor walk for one provider. Provider + clinic fields ONLY — no member PHI ever
-    reaches a portal (HANDOFF §7); `plan` is the network to pin, taken from the live 271."""
+    """A find-a-doctor walk for one provider. Provider + clinic fields, plus `member_zip` where a
+    portal scopes its plan list by the member's county. No member NAME, ID or DOB ever reaches a
+    portal (HANDOFF §7); `plan` is the network to pin, taken from the live 271."""
 
     payer_key: str
     npi: str
@@ -366,6 +367,11 @@ class PortalCaptureRequest(BaseModel):
     state: str | None = None
     city: str | None = None
     zip: str | None = None
+    #: The MEMBER's residence ZIP, read from the 271 (never typed by a user). Used only to scope a
+    #: portal's PLAN LIST where the portal keys it on where the member lives — UHC Medicare's plan
+    #: step is "Select the area where you live", and its county lists are disjoint. It selects a plan
+    #: and is never typed into a provider search box, so it cannot be used to look the member up.
+    member_zip: str | None = None
     tin: str | None = None
     # The verdict as it stands when the walk starts, so the portal answer can be reconciled against
     # it on completion instead of sitting beside it as decoration. All optional: with none of it the
@@ -608,6 +614,7 @@ def portal_capture_start(req: PortalCaptureRequest, ctx: RequestContext = Depend
         state=req.state or None,
         city=req.city or None,
         zip_code=req.zip or None,
+        member_zip=req.member_zip or None,
         tin=req.tin or None,
     )
     prior = {
