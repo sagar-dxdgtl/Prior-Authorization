@@ -21,11 +21,29 @@ def reconcile(stedi_status: NetworkStatus, verdict) -> tuple[NetworkStatus, list
     to REVIEW (the Perry/Munar false-conflicts).
     """
     if verdict is None:
-        return stedi_status, []
+        return _weak_271(stedi_status), []
     corr = verdict.corroboration or []
     if verdict.status != NetworkStatus.UNKNOWN:
         return verdict.status, corr
-    return stedi_status, corr
+    return _weak_271(stedi_status), corr
+
+
+def _weak_271(stedi_status: NetworkStatus) -> NetworkStatus:
+    """What a 271 may assert on its own, with no provider-level source behind it.
+
+    NOT in-network. The 271's network indicator is a PLAN-TIER flag — the evidence panel says so in
+    its own words, "a 271 gives plan-tier only — provider-specific network is UNKNOWN here" — and
+    letting it stand as the final verdict turned that flag into a confident provider-level IN backed
+    by nothing. Live on 2026-08-03: Susan Smith (Aetna Medicare Prime Extra, NPI 1780175349) read
+    "In-Network · high" while credentialing said NO_RECORD, TiC said N/A (Medicare is federally
+    exempt), the payer directory errored and PECOS said only "enrolled != in-network". The member is
+    on an ARIZONA Medicare HMO; the provider practises in Illinois.
+
+    OUT_OF_NETWORK is deliberately left standing. It is equally plan-tier, but it is the conservative
+    direction: a false OON is caught and recovered, a false IN is billed and denied. The asymmetry is
+    the same one used everywhere else here.
+    """
+    return NetworkStatus.UNKNOWN if stedi_status == NetworkStatus.IN_NETWORK else stedi_status
 
 
 def check_eligibility(
