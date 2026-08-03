@@ -274,30 +274,34 @@ class AetnaMedicareDirectDriver(PortalDriver):
         the PBP being captured) and one contract covers several plans in a county. Radios whose
         `planId` is not a contract id are skipped — the page repeats the same labels under a
         pharmacy section with opaque hashed ids, and those would tie with the real ones.
+
+        Read in ONE `page.evaluate` rather than per-radio Playwright locators. The context default
+        timeout is 45s, and a per-radio `label[for=…].inner_text()` that resolves to nothing waits
+        that full 45s — with a dozen radios that is minutes of dead time for a page whose DOM is
+        already fully rendered. One evaluate is also simply faster: no round trip per element.
         """
-        out: list[dict] = []
         try:
-            radios = page.locator("input[type=radio]")
-            for i in range(radios.count()):
-                r = radios.nth(i)
-                rid = r.get_attribute("id") or ""
-                raw = r.get_attribute("value") or ""
-                if not rid or not raw.strip().startswith("{"):
-                    continue
-                try:
-                    plan_id = (json.loads(raw) or {}).get("planId") or ""
-                except (ValueError, TypeError):
-                    continue
-                if not re.match(r"\s*[HRSE]\d{4}", plan_id, re.I):
-                    continue  # hashed pharmacy duplicate, or the "pick later" option
-                label = ""
-                try:
-                    label = (page.locator(f"label[for='{rid}']").first.inner_text() or "").strip()
-                except (PlaywrightTimeout, PlaywrightError):
-                    pass
-                out.append({"id": rid, "plan_id": plan_id, "label": label[:120]})
+            raw = page.evaluate(
+                """() => Array.from(document.querySelectorAll('input[type=radio]')).map(r => {
+                     const lab = document.querySelector(`label[for="${r.id}"]`);
+                     return { id: r.id || '', value: r.value || '',
+                              label: (lab ? lab.innerText : '').trim() };
+                   })"""
+            ) or []
         except PlaywrightError:
-            return out
+            return []
+        out: list[dict] = []
+        for row in raw:
+            rid, val = row.get("id") or "", (row.get("value") or "").strip()
+            if not rid or not val.startswith("{"):
+                continue
+            try:
+                plan_id = (json.loads(val) or {}).get("planId") or ""
+            except (ValueError, TypeError):
+                continue
+            if not re.match(r"\s*[HRSE]\d{4}", plan_id, re.I):
+                continue  # hashed pharmacy duplicate, or the "pick later" option
+            out.append({"id": rid, "plan_id": plan_id, "label": (row.get("label") or "")[:120]})
         return out
 
     def _pick_plan(self, page: Page, plan: str | None, options: list[dict], trail: list[str]) -> _Pin:
@@ -333,9 +337,10 @@ class AetnaMedicareDirectDriver(PortalDriver):
             self._dismiss_overlays(page)
             try:
                 box = page.locator(_SEARCH).first
-                box.click()
-                box.fill("")
-                box.type(term, delay=90)
+                box.wait_for(state="visible", timeout=15_000)
+                box.click(timeout=10_000)
+                box.fill("", timeout=10_000)
+                box.type(term, delay=90, timeout=15_000)
             except (PlaywrightTimeout, PlaywrightError):
                 continue
             page.wait_for_timeout(4_000)
@@ -349,7 +354,7 @@ class AetnaMedicareDirectDriver(PortalDriver):
                 if not self._looks_like_our_provider(text, q):
                     continue
                 try:
-                    opts.nth(i).click()
+                    opts.nth(i).click(timeout=10_000)
                 except (PlaywrightTimeout, PlaywrightError):
                     continue
                 self._settle(page, 4_000)
@@ -454,15 +459,15 @@ class AetnaMedicareDirectDriver(PortalDriver):
             try:
                 box = page.locator(_ADDRESS).first
                 box.wait_for(state="visible", timeout=20_000)
-                box.click()
-                box.fill("")
-                box.type(loc, delay=110)
+                box.click(timeout=10_000)
+                box.fill("", timeout=10_000)
+                box.type(loc, delay=110, timeout=20_000)
             except (PlaywrightTimeout, PlaywrightError):
                 continue
             # Condition-based: wait for the suggestion, do not assume a duration.
             try:
                 page.locator(_ADDRESS_OPTION).first.wait_for(state="visible", timeout=15_000)
-                page.locator(_ADDRESS_OPTION).first.click()
+                page.locator(_ADDRESS_OPTION).first.click(timeout=10_000)
             except (PlaywrightTimeout, PlaywrightError):
                 if attempt == 0:
                     self._dismiss_overlays(page)
