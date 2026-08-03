@@ -114,6 +114,7 @@ They are all one family: a claim in the note that the code had not actually esta
 from __future__ import annotations
 
 import re
+import time
 
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Page
@@ -123,6 +124,12 @@ from network_probe.portal import browser as pb
 from network_probe.portal import plan_match
 from network_probe.portal.drivers.base import PortalDriver
 from network_probe.portal.models import PortalCapture, PortalQuery, PortalStatus
+
+#: Wall-clock after which leg B (a SECOND full walk) is skipped. Leg A alone has been
+#: measured at 150s+, and the pair ran past 300s live on 2026-08-03 against a UI that
+#: promises 50-120s. Leg B only adds evidence, so this bounds the wait without ever
+#: changing a verdict's direction.
+_LEG_B_BUDGET_S = 150.0
 
 ENTRY = "https://www.wellcarefindaprovider.com/"
 HUB = "https://my.wellcare.com"
@@ -273,6 +280,7 @@ class WellcareHubDriver(PortalDriver):
 
     def capture(self, page: Page, q: PortalQuery, shot) -> PortalCapture:
         trail: list[str] = []
+        started = time.monotonic()
 
         def result(status: PortalStatus, note: str, **kw) -> PortalCapture:
             # The trail is mandatory: a walk that stopped early and then claimed OON is the failure
@@ -292,10 +300,23 @@ class WellcareHubDriver(PortalDriver):
         # Leg B costs the portal three more lookups, so it is skipped only when leg A has already
         # answered about the member's OWN product — i.e. the plan was identifier-confirmed. Any
         # weaker pinning and leg B is the only thing that can resolve a line-level plan string.
+        spent = time.monotonic() - started
         if self._leg_a_settles(confirmed, a):
             b = {**_leg_b_blank(),
                  "detail": "not run — the identifier-confirmed pinned product already answered"}
             trail.append("all-plans lookup not needed (plan confirmed by identifier)")
+        elif spent > _LEG_B_BUDGET_S:
+            # Leg B is a SECOND full walk (its own navigation, location and three lookups), so a slow
+            # leg A means the pair can run past five minutes — measured at 300s+ live on 2026-08-03,
+            # against a UI that tells the user to expect 50-120s. Skipping it is safe in the one
+            # direction that matters: leg B only ever ADDS evidence, so dropping it can make a verdict
+            # less decisive but never wrong. Recorded in the note so a reader can see the answer was
+            # bounded by time rather than by the portal.
+            b = {**_leg_b_blank(),
+                 "detail": f"not run — leg A already took {spent:.0f}s, past the {_LEG_B_BUDGET_S:.0f}s "
+                           f"budget for a single capture. This can only weaken the verdict, never "
+                           f"change its direction."}
+            trail.append(f"all-plans lookup SKIPPED after {spent:.0f}s (time budget)")
         else:
             b = self._lookup_all_plans(page, q, trail, shot)
 
