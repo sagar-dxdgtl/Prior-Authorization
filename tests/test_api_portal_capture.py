@@ -345,3 +345,41 @@ def test_a_blocked_walk_suppresses_nothing(monkeypatch, auth_header):
 
     d = c.get(f"/api/portal/capture/{job_id}", headers=auth_header).json()["reconciled"]["determination"]
     assert d["provisional"] == "LIKELY_IN_NETWORK"
+
+
+@pytest.mark.db
+def test_a_walk_that_FOUND_them_never_counts_as_absence(monkeypatch, auth_header):
+    """`portal_absent` must mean "searched and did NOT list them" — not merely "returned UNKNOWN".
+
+    UHC's driver returns UNKNOWN with BOTH `result_count` and `matched_name` set when it finds the
+    provider in the un-pinned directory but cannot confirm which network it searched. Keying the
+    suppressor on `result_count is not None` alone therefore read a provider the portal had just
+    FOUND as evidence against them, and flipped a likely-IN into an OON lean.
+
+    This is Test 3 row 1 (Manayan, NPI 1902811656, UHC Medicare Advantage GA) — the single row with
+    staff ground truth, and that ground truth is IN. Getting it backwards there is the worst
+    available outcome.
+    """
+    from network_probe.portal.models import PortalCapture, PortalStatus
+
+    _stub_store(monkeypatch, capture=PortalCapture(
+        payer_key=AZ, npi=NPI, status=PortalStatus.UNKNOWN, portal_name="UHC Find Care (guest)",
+        portal_url="https://findcare.guest.uhc.com/x", driver="uhc-findcare",
+        result_count=4, matched_name="Conrad Chang Manayan",
+        note="present in the un-pinned directory, but the guest plan could not be confirmed.",
+    ))
+    c = _client()
+    job_id = c.post(
+        "/api/portal/capture",
+        json={"payer_key": AZ, "npi": NPI, "prior_network_status": "UNKNOWN",
+              "prior_evidence": {"directory_networks": 3, "plan_given": False}},
+        headers=auth_header,
+    ).json()["job_id"]
+    from network_probe.portal.jobs import default_capture_jobs
+    default_capture_jobs().wait(job_id, timeout=5)
+
+    d = c.get(f"/api/portal/capture/{job_id}", headers=auth_header).json()["reconciled"]["determination"]
+    assert d["provisional"] == "LIKELY_IN_NETWORK", (
+        "the portal found them — that cannot be evidence of absence"
+    )
+    assert d["display_code"] == "IN_NETWORK"

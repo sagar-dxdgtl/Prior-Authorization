@@ -651,6 +651,13 @@ def _portal_searched_without_listing(capture) -> bool:
 
     if getattr(capture, "status", None) != PortalStatus.UNKNOWN:
         return False
+    # A capture that NAMED our provider is the opposite of absence, even though it is UNKNOWN: the
+    # UHC driver returns exactly that when it finds them in the un-pinned directory but cannot
+    # confirm which network it searched. Keying only on `result_count` read a provider the portal had
+    # just found as evidence against them — backwards, and on Test 3 row 1 (the one row with staff
+    # ground truth, and that truth is IN) it would have flipped a likely-IN into an OON lean.
+    if getattr(capture, "matched_name", None):
+        return False
     # `result_count` is set only when a result set was actually read (0 included: "searched, empty").
     # None means the walk never got far enough to search.
     return getattr(capture, "result_count", None) is not None
