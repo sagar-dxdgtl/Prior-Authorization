@@ -589,7 +589,7 @@ def portal_capture_start(req: PortalCaptureRequest, ctx: RequestContext = Depend
     from network_probe.portal.jobs import default_capture_jobs
     from network_probe.portal.models import PortalQuery
 
-    if driver_for(req.payer_key) is None:
+    if driver_for(req.payer_key, req.plan) is None:
         raise HTTPException(
             status_code=404,
             detail={"message": f"no portal driver for payer {req.payer_key!r}"},

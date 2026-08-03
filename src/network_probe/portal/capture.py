@@ -21,6 +21,7 @@ from pathlib import Path
 
 from network_probe.portal import browser as pb
 from network_probe.portal.drivers.aetna_ahpublic import AetnaFindCareDriver
+from network_probe.portal.drivers.aetna_medicare_direct import AetnaMedicareDirectDriver
 from network_probe.portal.drivers.base import PortalDriver
 from network_probe.portal.drivers.bcbsil_provider_finder import BcbsilProviderFinderDriver
 from network_probe.portal.drivers.cigna_hcp import CignaHcpDriver
@@ -42,6 +43,7 @@ DRIVERS: tuple[PortalDriver, ...] = (
     UhcFindCareDriver(),
     HealthSparqDriver(),
     AetnaFindCareDriver(),
+    AetnaMedicareDirectDriver(),
     CignaHcpDriver(),
     BcbsilProviderFinderDriver(),
     MolinaProviderSearchDriver(),
@@ -57,12 +59,26 @@ _LOCK = threading.Lock()  # serialise captures: never two concurrent hits at one
 LIVE_SHOT_DIR = Path(__file__).resolve().parents[1] / "api" / "static" / "portal" / "live"
 
 
-def driver_for(payer_key: str) -> PortalDriver | None:
-    """The driver that can answer for this roster payer key, or None if we have no portal path yet."""
+def driver_for(payer_key: str, plan: str | None = None) -> PortalDriver | None:
+    """The driver that can answer for this roster payer key, or None if we have no portal path yet.
+
+    `plan` matters for one payer today. Aetna sells Commercial and Medicare under the SAME roster
+    keys (`aetna-il` carries both benefit types), but they live on two different portals with two
+    different networks — and `aetna_ahpublic` deliberately refuses a Medicare line rather than answer
+    it from the commercial directory, which left every Aetna Medicare row with no portal evidence at
+    all. So the line of business, not the key, picks the driver here. With no plan the key's default
+    driver stands: that path already declines rather than guessing.
+    """
     target = target_for_payer(payer_key)
     if target is None:
         return None
-    return next((d for d in DRIVERS if d.key == target.key), None)
+    key = target.key
+    if key == "aetna-ahpublic" and plan:
+        from network_probe.domain.line_of_business import line_of_business
+
+        if line_of_business(plan, None) in ("medicare", "dual"):
+            key = "aetna-medicare-direct"
+    return next((d for d in DRIVERS if d.key == key), None)
 
 
 def _slug(s: str) -> str:
@@ -71,7 +87,7 @@ def _slug(s: str) -> str:
 
 def run_capture(q: PortalQuery, headed: bool | None = None, shot_dir: Path | None = None) -> PortalCapture:
     """Drive the payer's portal for one provider. Never raises — a failure is a BLOCKED capture."""
-    driver = driver_for(q.payer_key)
+    driver = driver_for(q.payer_key, q.plan)
     if driver is None:
         target = target_for_payer(q.payer_key)
         return PortalCapture(
