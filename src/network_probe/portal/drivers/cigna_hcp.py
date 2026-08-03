@@ -84,6 +84,7 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeout
 from network_probe.portal import browser as pb
 from network_probe.portal.drivers.base import PortalDriver
 from network_probe.portal.models import PortalCapture, PortalQuery, PortalStatus
+from network_probe.portal.plan_match import match_plan_with_fallback as match_plan
 
 ENTRY = "https://hcpdirectory.cigna.com/"
 
@@ -576,14 +577,11 @@ class CignaHcpDriver(PortalDriver):
         # against a commercial plan list can only mislead — those lines go straight to the guarded
         # family keywords and confirm nothing if none of them is present.
         if lob not in _OFF_DIRECTORY_LOB:
-            want = self._plan_tokens(q.plan)
-            best, best_score = None, 0
-            for i, text in enumerate(labels):
-                score = len(self._plan_tokens(f"{text} {families.get(i, '')}") & want)
-                if score > best_score:
-                    best, best_score = i, score
-            if best is not None:
-                return best, "plan name"
+            # Scored against the label PLUS its product-family heading, because the family is what
+            # carries "OAP" for "Open Access Plus, OA plus, …" — dropping it would lose real matches.
+            m = self.choose_plan([f"{t} {families.get(i, '')}".strip() for i, t in enumerate(labels)], q.plan)
+            if m is not None:
+                return m.index, f"plan name — {m.basis}"
 
         for keyword in _FAMILY_PREFERENCE.get(lob, ()):
             hits = [i for i, text in enumerate(labels)
@@ -592,6 +590,21 @@ class CignaHcpDriver(PortalDriver):
             if len(hits) == 1:
                 return hits[0], f"product family {keyword!r}"
         return None, "none"
+
+    def choose_plan(self, labels: list[str], plan: str | None):
+        """Resolve the 271's plan string onto Cigna's own plan labels. A `PlanMatch`, or None.
+
+        Delegates to `portal/plan_match`: identifiers rank above word overlap, non-distinctive words
+        are excluded, and a tie is refused outright. The driver used to score token overlap itself
+        with `score > best_score`, which broke ties by whichever plan the portal listed FIRST — so
+        "Cigna LocalPlus" vs "Cigna LocalPlus IN" (a narrower network) was decided by render order.
+
+        Cigna's labels carry no plan identifier, so `confirms_network` is False on every real match
+        here — the pin scopes the search and never licenses an out-of-network reading on its own.
+        """
+        if not plan or not labels:
+            return None
+        return match_plan(plan, labels)
 
     def _plan_tokens(self, text: str | None) -> set[str]:
         """Scoring tokens of a plan label: length >= 3 so OAP/PPO/HMO survive, minus the words every

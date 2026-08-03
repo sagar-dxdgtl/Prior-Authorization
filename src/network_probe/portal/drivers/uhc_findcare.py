@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import re
 import time
+from dataclasses import dataclass
 
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Page
@@ -23,6 +24,20 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeout
 from network_probe.portal import browser as pb
 from network_probe.portal.drivers.base import PortalDriver
 from network_probe.portal.models import PortalCapture, PortalQuery, PortalStatus
+from network_probe.portal.plan_match import match_plan_with_fallback as match_plan
+
+
+@dataclass
+class _Pin:
+    """The plan we pinned, and whether it is strong enough to license an absence reading.
+
+    Same shape as the Humana driver's `_Pin`, deliberately: the two drivers must not disagree about
+    what makes an out-of-network reading legitimate.
+    """
+
+    name: str | None
+    why: str
+    confirms: bool = False  # identifier-grade plan match — the only thing that may license an OON
 
 """Observed guest flow (2026-07-28), each step gated on the previous:
 
@@ -133,9 +148,13 @@ class UhcFindCareDriver(PortalDriver):
         # keeping the 3s the Abyss shell needs to hydrate after load.
         self._settle(page, 3_000)
 
-        plan_confirmed, trail = self._walk_to_plan(page, q)
+        pin, trail = self._walk_to_plan(page, q)
         trail_box.extend(trail)
         shot("plan-walk")
+        plan_confirmed = pin.name is not None
+        # Absence may only be read as OON when the pin is identifier-grade. A names-only pin still
+        # scopes the *search* — it just cannot license a negative.
+        blockers = self._absence_blockers(pin)
         if not plan_confirmed:
             # Fall through to the unpinned directory: still worth a screenshot and an IN if the
             # provider shows up (presence in UHC's directory at all is a real signal), but never an OON.
@@ -169,20 +188,21 @@ class UhcFindCareDriver(PortalDriver):
                 )
                 return result(status, note, result_count=count, matched_name=matched,
                               screenshot=shot(f"match-{kind}"))
-            if count and plan_confirmed:
+            if count and not blockers:
                 return result(
                     PortalStatus.OUT_OF_NETWORK,
                     f"UHC Find Care returned {count} result(s) for {kind} {term!r} in plan "
-                    f"{q.plan!r} near {q.zip_code or 'the clinic'}, and NPI {q.npi} is not among "
-                    f"them — out-of-network for this plan.",
+                    f"{pin.name!r} near {q.zip_code or 'the clinic'}, and NPI {q.npi} is not among "
+                    f"them — out-of-network for this plan. The plan was pinned by identifier "
+                    f"({pin.why}), so this absence is absence from the member's own network.",
                     result_count=count, screenshot=shot(f"absent-{kind}"),
                 )
             if count:
                 return result(
                     PortalStatus.UNKNOWN,
                     f"UHC Find Care returned {count} result(s) for {kind} {term!r} without NPI "
-                    f"{q.npi}, but the guest plan could not be confirmed — absence from an "
-                    f"unconfirmed network is not evidence of out-of-network.",
+                    f"{q.npi}, but absence cannot be read as out-of-network here: "
+                    + "; ".join(blockers) + ".",
                     result_count=count, screenshot=shot(f"absent-noplan-{kind}"),
                 )
 
@@ -212,12 +232,13 @@ class UhcFindCareDriver(PortalDriver):
             terms.append((full, "full name"))
         return terms
 
-    def _walk_to_plan(self, page: Page, q: PortalQuery) -> tuple[bool, list[str]]:
+    def _walk_to_plan(self, page: Page, q: PortalQuery) -> tuple[_Pin, list[str]]:
         """Walk coverage type → type of care → county → plan list, pinning the member's network.
 
-        Returns (plan_confirmed, trail). `trail` records each step reached so a capture that stops
-        early says exactly where — the portals redesign often, and a silent partial walk that then
-        reports OON would be the worst possible failure mode.
+        Returns (pin, trail). `trail` records each step reached so a capture that stops early says
+        exactly where — the portals redesign often, and a silent partial walk that then reports OON
+        would be the worst possible failure mode. `pin.confirms` is the identifier-grade gate: only
+        it may license reading an absence as OUT_OF_NETWORK.
         """
         trail: list[str] = []
         self._dismiss_overlays(page)
@@ -225,12 +246,14 @@ class UhcFindCareDriver(PortalDriver):
 
         sel, label = _COVERAGE[self._coverage_type(q)]
         if not self._click_any(page, sel, label):
-            return False, trail + [f"coverage type {label!r} NOT clickable"]
+            return _Pin(None, f"coverage type {label!r} NOT clickable"), trail + [
+                f"coverage type {label!r} NOT clickable"]
         trail.append(f"coverage: {label}")
 
         # "Type of care" — always Medical for a physician network check.
         if not self._click_any(page, "[data-testid*='medical']", "Medical"):
-            return False, trail + ["type of care 'Medical' NOT clickable"]
+            return _Pin(None, "type of care 'Medical' NOT clickable"), trail + [
+                "type of care 'Medical' NOT clickable"]
         trail.append("care: Medical")
 
         if q.zip_code and self._commit_location(page, q.zip_code):
@@ -241,11 +264,17 @@ class UhcFindCareDriver(PortalDriver):
             trail.append("location committed (Select)")
         self._dismiss_overlays(page)  # a fresh coachmark appears on the plan-selection step
 
-        picked = self._pick_plan(page, q.plan)
-        if picked:
-            trail.append(f"plan pinned: {picked}")
-            return True, trail
-        return False, trail + [f"no plan matched {q.plan!r} in the plan list"]
+        m = self._pick_plan(page, q.plan)
+        if m is not None:
+            # The basis goes in the trail, not just the label: whether the pin was an identifier
+            # match or a word match is what decides if an absence may be read as OON, so a reader
+            # has to be able to see which one happened.
+            trail.append(f"plan pinned: {m.label} [{m.basis}]")
+            if not m.confirms_network:
+                trail.append("pin is names-only — absence cannot be read as out-of-network")
+            return _Pin(m.label, m.basis, confirms=m.confirms_network), trail
+        return _Pin(None, f"no plan matched {q.plan!r}"), trail + [
+            f"no plan matched {q.plan!r} in the plan list"]
 
     def _coverage_type(self, q: PortalQuery) -> str:
         """Map the 271's plan string to UHC's coverage-type card. Reuses the domain's own LOB rules so
@@ -324,42 +353,70 @@ class UhcFindCareDriver(PortalDriver):
         self._settle(page)
         return True
 
-    def _pick_plan(self, page: Page, plan: str | None) -> str | None:
-        """Choose the plan whose label shares the most distinctive tokens with the 271 plan string.
-        Returns the chosen label, or None — we never pick arbitrarily just to proceed."""
+    def choose_plan(self, labels: list[str], plan: str | None):
+        """Resolve the 271's plan string onto the portal's own labels. Returns a `PlanMatch` or None.
+
+        Delegates entirely to `portal/plan_match`, which ranks identifiers (contract / PBP / market
+        code such as FL-0026) above word overlap and refuses ties outright. The driver used to score
+        ≥4-char token overlap itself, which is how "AARP Medicare Advantage CareFlex from UHC FL-35
+        (HMO-POS)" was pinned for a member on FL-0026 (PPO): AARP, MEDICARE, ADVANTAGE and FROM are
+        shared by every UHC Medicare product and identify nothing.
+        """
+        if not plan or not labels:
+            return None
+        return match_plan(plan, labels)
+
+    def _plan_labels(self, loc) -> list[str]:
+        """Read every visible option label, in portal order. No cap.
+
+        The old scorer stopped at 12; UHC's Florida Medicare list is longer than that, so the
+        member's own plan could sit outside the window and lose to a filler product that merely
+        shared marketing words.
+        """
+        out: list[str] = []
+        for i in range(loc.count()):
+            try:
+                out.append((loc.nth(i).inner_text() or "").strip().splitlines()[0][:120])
+            except PlaywrightError:
+                out.append("")
+        return out
+
+    def _pick_plan(self, page: Page, plan: str | None):
+        """Pin the member's plan in the portal's list. Returns the `PlanMatch` clicked, or None."""
         if not plan:
             return None
         for sel in _PLAN_SURFACES:
             try:
                 loc = page.locator(f"{sel}:visible")
-                n = loc.count()
-                if not n:
+                if not loc.count():
                     continue
-                idx = self._best_option(loc, plan)
-                if idx is None:
+                m = self.choose_plan(self._plan_labels(loc), plan)
+                if m is None:
                     continue
-                label = (loc.nth(idx).inner_text() or "").strip().splitlines()[0][:120]
-                loc.nth(idx).click()
+                loc.nth(m.index).click()
             except (PlaywrightTimeout, PlaywrightError):
                 continue
             self._settle(page, 3_000)  # post-click, so a slow settle cannot discard a pinned plan
-            return label
+            return m
         return None
 
-    def _best_option(self, opts, plan: str) -> int | None:
-        """Pick the autocomplete option sharing the most distinctive tokens with the 271 plan string.
-        Never guess: with no token overlap we return None and the network stays unconfirmed."""
-        want = {t for t in re.split(r"[^A-Za-z0-9]+", plan.upper()) if len(t) >= 4}
-        best, best_score = None, 0
-        for i in range(min(opts.count(), 12)):
-            try:
-                text = (opts.nth(i).inner_text() or "").upper()
-            except PlaywrightError:
-                continue
-            score = len({t for t in re.split(r"[^A-Za-z0-9]+", text) if len(t) >= 4} & want)
-            if score > best_score:
-                best, best_score = i, score
-        return best
+    def _absence_blockers(self, pin) -> list[str]:
+        """Everything that must hold before "not in the results" may be called OUT_OF_NETWORK.
+        Empty list = it may. Mirrors the same gate in the Humana driver.
+
+        Absence is the asymmetric direction: absence from the WRONG network is indistinguishable
+        from absence from the right one, so it needs an identifier-grade pin. Presence does not —
+        finding the provider in the list that was searched is positive evidence either way.
+        """
+        if not getattr(pin, "name", None):
+            return [f"no plan was pinned ({getattr(pin, 'why', 'no match')}), so absence is absence "
+                    f"from an unknown scope — UHC's un-pinned directory is the union of every "
+                    f"network it sells"]
+        if not getattr(pin, "confirms", False):
+            return [f"the plan matched {pin.name!r} on names only, not on a plan identifier "
+                    f"({getattr(pin, 'why', '')}); every UHC Medicare product shares the words AARP, "
+                    f"Medicare and Advantage, so this may not be the member's network"]
+        return []
 
     def _set_location(self, page: Page, zip_code: str) -> None:
         try:
