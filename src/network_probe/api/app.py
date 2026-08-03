@@ -375,6 +375,11 @@ class PortalCaptureRequest(BaseModel):
     out_of_network_benefits: bool | None = None
     group_contracted: bool | None = None
     plan_oon_capability: bool | None = None
+    #: The evidence the eligibility check already gathered (directory networks, roster, enrollment).
+    #: Carried so the recomputed determination keeps the reading it had. Without it an INCONCLUSIVE
+    #: walk silently flipped a directory-backed "likely in-network" into an out-of-network display —
+    #: exactly what `reconcile_portal` promises a portal that could not answer can never do.
+    prior_evidence: dict | None = None
 
 
 class OverrideRequest(BaseModel):
@@ -611,6 +616,7 @@ def portal_capture_start(req: PortalCaptureRequest, ctx: RequestContext = Depend
         "out_of_network_benefits": req.out_of_network_benefits,
         "group_contracted": req.group_contracted,
         "plan_oon_capability": req.plan_oon_capability,
+        "evidence": req.prior_evidence,
     }
     job_id = default_capture_jobs().submit(q, prior=prior if req.prior_network_status else None)
     log.info("portal capture %s queued for %s/%s", job_id, req.payer_key, req.npi)
@@ -630,6 +636,24 @@ def portal_capture_status(job_id: str, ctx: RequestContext = Depends(get_context
     if job.status == "done" and job.capture is not None and job.prior:
         body["reconciled"] = _reconcile_capture(job)
     return body
+
+
+def _portal_searched_without_listing(capture) -> bool:
+    """Did the walk actually reach the payer's directory and come back without our provider?
+
+    Deliberately narrow. A BLOCKED walk, a shell that never hydrated, or a driver that fell over
+    proves nothing about the provider and must not suppress anything — the signal is only real when
+    the portal WAS searched. A decisive IN/OUT is excluded because `reconcile_portal` has already
+    acted on it; this exists for the UNKNOWN walk, which changes the verdict not at all and yet is
+    still the member-facing directory declining to list them.
+    """
+    from network_probe.portal.models import PortalStatus
+
+    if getattr(capture, "status", None) != PortalStatus.UNKNOWN:
+        return False
+    # `result_count` is set only when a result set was actually read (0 included: "searched, empty").
+    # None means the walk never got far enough to search.
+    return getattr(capture, "result_count", None) is not None
 
 
 def _reconcile_capture(job) -> dict:
@@ -654,11 +678,21 @@ def _reconcile_capture(job) -> dict:
         source_url=prior.get("source_url"),
         portal_name=job.capture.portal_name,
     )
+    # The evidence the eligibility check gathered, PLUS what this walk itself observed. Recomputed
+    # rather than copied because `after` may have moved — but from the same evidence, or an
+    # inconclusive walk would erase a directory finding it never contradicted.
+    evidence = dict(prior.get("evidence") or {})
+    if _portal_searched_without_listing(job.capture):
+        # Not enough to call out-of-network (`after` is unchanged and `code` stays UNKNOWN), but it
+        # must stop a public-directory read from displaying as in-network. The member-facing portal
+        # is the accuracy check on that directory, so it cannot be out-voted by it.
+        evidence["portal_absent"] = True
     determination = final_determination(
         after,
         prior.get("out_of_network_benefits"),
         group_contracted=prior.get("group_contracted"),
         plan_oon_capability=prior.get("plan_oon_capability"),
+        evidence=evidence,
     )
     return {
         "network_status_before": before.value,

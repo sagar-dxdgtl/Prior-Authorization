@@ -38,6 +38,22 @@ class Determination:
     provisional: str | None = None
     basis: str | None = None  # the strongest evidence found, in one line
     next_step: str | None = None  # the single thing that would settle it
+    #: The COMMITTED reading, always one of the four actionable codes (or REVIEW) — never UNKNOWN.
+    #: A biller has to bill something either way, so the display commits to a direction and states
+    #: how strongly it is held in `confidence`. Like `provisional`, this is DISPLAY ONLY: `code` is
+    #: what billing, audit and the override store read, and it still says UNKNOWN when we do not know.
+    display_code: str = ""
+    display_label: str = ""
+    confidence: str = "high"  # high (confirmed) | medium (conflict) | low (a lean, not a finding)
+    #: The evidence this reading was computed from, echoed back so a later recomputation (the async
+    #: portal capture reconciles in its own request) can use the SAME inputs. Without it an
+    #: inconclusive walk erased a directory finding it never contradicted.
+    evidence: dict | None = None
+
+    def __post_init__(self) -> None:
+        # A confirmed verdict displays as itself. Only the UNKNOWN branch passes these explicitly.
+        self.display_code = self.display_code or self.code
+        self.display_label = self.display_label or self.label
 
     def to_dict(self) -> dict:
         return {
@@ -47,6 +63,10 @@ class Determination:
             "provisional": self.provisional,
             "basis": self.basis,
             "next_step": self.next_step,
+            "display_code": self.display_code or self.code,
+            "display_label": self.display_label or self.label,
+            "confidence": self.confidence,
+            "evidence": self.evidence,
         }
 
 
@@ -72,6 +92,38 @@ def _best_available(evidence: dict) -> tuple[str | None, str | None, str | None]
         )
 
     if nets:
+        # Presence only leans IN when it is presence in the MEMBER'S network. Two things break that,
+        # and either alone is enough — see test_lean_requires_the_members_network.py.
+        #
+        #   * a plan WAS given and none of the networks matched it. The same fact then points the
+        #     other way: contracted with this payer for OTHER products. Leaning IN here is the false
+        #     IN that resolved Georgia Medicare members onto New Mexico and Medicaid networks.
+        #   * the payer's own member-facing portal searched and did not list them. It cannot prove
+        #     out-of-network, but a public directory read must not out-vote it into a confident IN.
+        plan_mismatch = ev.get("plan_given") and not ev.get("matched_network")
+        portal_absent = bool(ev.get("portal_absent"))
+        if plan_mismatch or portal_absent:
+            # Sentences, not one clause joined by "and" — and never str.capitalize(), which
+            # lowercases everything after the first character and turned "UnitedHealthcare" into
+            # "unitedhealthcare" on screen.
+            why = []
+            if plan_mismatch:
+                why.append(
+                    f"The provider is in {payer}'s directory under {nets} network(s), but none of "
+                    f"them matched the member's plan — so they are contracted with this payer for "
+                    f"other products, not for the member's network."
+                )
+            if portal_absent:
+                why.append(
+                    f"{payer}'s own member-facing portal was then searched for the member's plan "
+                    f"and did not list them."
+                )
+            return (
+                None,  # no IN lean — but still not doctrinal evidence of OON; `code` stays UNKNOWN
+                " ".join(why),
+                "Map the member's plan to one of the payer's named networks, or load the clinic's "
+                "credentialing record for this payer — either settles it.",
+            )
         return (
             "LIKELY_IN_NETWORK",
             f"The provider is listed in {payer}'s own directory under {nets} network(s), so they "
@@ -106,6 +158,31 @@ def _best_available(evidence: dict) -> tuple[str | None, str | None, str | None]
     )
 
 
+def _committed_display(provisional: str | None, effective: bool | None) -> tuple[str, str]:
+    """(display_code, display_label) for an UNKNOWN verdict — the direction we commit to on screen.
+
+    `code` stays UNKNOWN; this is only what the tile reads, because a blank "Not yet established"
+    gives the person working the account nothing to bill. The lean follows the evidence when there
+    is any, and defaults to out-of-network when there is none: an unconfirmed IN bills as in-network
+    and comes back denied, while an unconfirmed OON is the recoverable error. `confidence: low` and
+    the determination's own `next_step` carry the caveat.
+
+    Directory ABSENCE is still not doctrinal evidence of out-of-network — `_best_available` refuses
+    to lean on it and `code` remains UNKNOWN, so no other layer may read this as a finding.
+
+    The label is the bare reading. How strongly it is held travels in `confidence`, which the UI
+    renders as a meter beside the label rather than as words inside it — a strength is a quantity,
+    and reading it off a bar is faster than parsing a parenthetical.
+    """
+    if provisional == "LIKELY_IN_NETWORK":
+        return "IN_NETWORK", "In-Network"
+    if provisional == "LIKELY_PHYSICIAN_OUT_OF_NETWORK":
+        return "PHYSICIAN_OUT_OF_NETWORK", "Physician Out-of-Network"
+    if effective is True:
+        return "OUT_OF_NETWORK_WITH_BENEFITS", "Out-of-Network with benefits"
+    return "OUT_OF_NETWORK", "Out-of-Network"
+
+
 def _oon_tail(out_of_network_benefits: bool | None) -> str:
     if out_of_network_benefits is True:
         return "the plan pays out-of-network benefits"
@@ -115,6 +192,23 @@ def _oon_tail(out_of_network_benefits: bool | None) -> str:
 
 
 def final_determination(
+    network_status: NetworkStatus,
+    out_of_network_benefits: bool | None,
+    group_contracted: bool | None = None,
+    plan_oon_capability: bool | None = None,
+    evidence: dict | None = None,
+) -> Determination:
+    """The determination, with the evidence it was computed from echoed back on it.
+
+    The echo is what lets the async portal capture recompute this in a separate request from the
+    same inputs. See `Determination.evidence`.
+    """
+    d = _determine(network_status, out_of_network_benefits, group_contracted, plan_oon_capability, evidence)
+    d.evidence = evidence or None
+    return d
+
+
+def _determine(
     network_status: NetworkStatus,
     out_of_network_benefits: bool | None,
     group_contracted: bool | None = None,
@@ -160,10 +254,13 @@ def final_determination(
         )
 
     if network_status == NetworkStatus.REVIEW:
+        # Not forced into a direction: a genuine cross-source conflict (a contract disagreeing with a
+        # published directory) is a real state a human has to see, not a low-confidence lean.
         return Determination(
             "REVIEW",
             "Needs Review",
             f"Provider network status conflicts across sources; {_oon_tail(effective)}{infer}.",
+            confidence="medium",
         )
 
     # UNKNOWN, but never blank: surface the best available reading and what would settle it.
@@ -172,6 +269,7 @@ def final_determination(
         "LIKELY_IN_NETWORK": "Likely In-Network — not confirmed",
         "LIKELY_PHYSICIAN_OUT_OF_NETWORK": "Likely Physician Out-of-Network — not confirmed",
     }.get(provisional, "Not yet established")
+    d_code, d_label = _committed_display(provisional, effective)
     return Determination(
         "UNKNOWN",
         label,
@@ -179,4 +277,7 @@ def final_determination(
         provisional=provisional,
         basis=basis,
         next_step=next_step,
+        display_code=d_code,
+        display_label=d_label,
+        confidence="low",
     )

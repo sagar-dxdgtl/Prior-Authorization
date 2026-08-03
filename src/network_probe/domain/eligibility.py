@@ -124,9 +124,19 @@ def check_eligibility(
         plan_cap = resolve_plan_type(plan_for_pbp, benefit_type, store=pbp_store).capability
     except Exception:
         plan_cap = None
+    # Carried on the response so the async portal capture can reconcile with the same inputs.
+    result.plan_oon_capability = plan_cap
     # An UNKNOWN row must never render blank: collect whatever we DO know so the determination can
     # state a best-available reading and the one thing that would settle it. Best-effort — evidence
     # gathering must never fail a check.
+    # Each source of evidence gets its OWN try. They were once collected under a single one, whose
+    # tail called an unbound name (`_catalogue_row` lives in domain/service and was never imported):
+    # every check raised NameError there, hit `except: ev = {}`, and threw away the directory finding
+    # gathered two lines earlier. Live result — a provider listed in UHC's own directory under 11
+    # networks rendered as "Not yet established". A later, optional enrichment must never be able to
+    # discard evidence that already succeeded.
+    from network_probe.domain.service import _catalogue_row
+
     ev: dict = {}
     try:
         mp = getattr(verdict, "matched_provider", None) if verdict is not None else None
@@ -135,6 +145,12 @@ def check_eligibility(
             if nets:
                 ev["directory_networks"] = len(nets)
             ev["in_directory"] = bool(mp.get("npi"))
+            # Whether those networks are the MEMBER'S is the whole question. Adapters set
+            # `matched_network` only when a network actually resolved to the member's plan, so a
+            # plan given + no match means the directory hit is about OTHER products — which must
+            # not read as in-network. See domain/determination._best_available.
+            ev["plan_given"] = bool((q.plan_hint or "").strip() or result.selected_plan)
+            ev["matched_network"] = bool(mp.get("matched_network"))
             if mp.get("group_contracted"):
                 ev["group_contracted"] = True
                 ev["roster_other_npis"] = len(mp.get("roster_npis_at_tin") or [])
@@ -142,11 +158,14 @@ def check_eligibility(
                 ev["medicare_enrolled"] = True
         elif verdict is not None and mp is None:
             ev["in_directory"] = False
-        row = _catalogue_row(q.payer, cat) if "cat" in dir() else None
+    except Exception:  # noqa: BLE001 — evidence gathering must never fail a check
+        pass
+    try:
+        row = _catalogue_row(q.payer, cat)
         if row is not None and getattr(row, "label", None):
             ev["payer_label"] = row.label
-    except Exception:
-        ev = {}
+    except Exception:  # noqa: BLE001 — a missing label costs the wording, not the finding
+        pass
     result.determination = final_determination(
         result.network_status, result.out_of_network_benefits,
         group_contracted=gc, plan_oon_capability=plan_cap, evidence=ev,

@@ -192,3 +192,156 @@ def test_no_prior_verdict_means_no_reconciliation_block(monkeypatch, auth_header
     from network_probe.portal.jobs import default_capture_jobs
     default_capture_jobs().wait(job_id, timeout=5)
     assert "reconciled" not in c.get(f"/api/portal/capture/{job_id}", headers=auth_header).json()
+
+
+@pytest.mark.db
+def test_reconciled_payload_carries_the_committed_display_reading(monkeypatch, auth_header):
+    """The tiles read `display_*`, so the poll response has to carry them.
+
+    The UI lifts this block into the page (Eligibility.onPortalReconciled). Before that existed the
+    tab rendered "Verdict updated UNKNOWN → OUT OF NETWORK" while the Determination tile a few
+    pixels above still read "Not yet established" — two contradictory answers on one screen.
+    """
+    _stub_store(monkeypatch)  # OUT_OF_NETWORK
+    c = _client()
+    job_id = c.post(
+        "/api/portal/capture",
+        json={"payer_key": AZ, "npi": NPI, "prior_network_status": "UNKNOWN",
+              "out_of_network_benefits": True},
+        headers=auth_header,
+    ).json()["job_id"]
+    from network_probe.portal.jobs import default_capture_jobs
+    default_capture_jobs().wait(job_id, timeout=5)
+
+    d = c.get(f"/api/portal/capture/{job_id}", headers=auth_header).json()["reconciled"]["determination"]
+    assert d["display_code"] == "OUT_OF_NETWORK_WITH_BENEFITS"
+    assert d["display_label"]
+    assert d["confidence"] == "high"  # the portal settled it — this is a finding, not a lean
+
+
+@pytest.mark.db
+def test_plan_type_fills_a_silent_271_through_the_capture(monkeypatch, auth_header):
+    """A PPO member whose 271 said nothing about the OON tier is still "OON with benefits".
+
+    `plan_oon_capability` travels from the eligibility response, through the UI, to this endpoint.
+    The field was already accepted here but was never exposed on the eligibility response, so the
+    UI had nothing to send and every silent-271 member reconciled to plain "Out-of-Network".
+    """
+    _stub_store(monkeypatch)  # OUT_OF_NETWORK
+    c = _client()
+    job_id = c.post(
+        "/api/portal/capture",
+        json={"payer_key": AZ, "npi": NPI, "prior_network_status": "UNKNOWN",
+              "out_of_network_benefits": None, "plan_oon_capability": True},
+        headers=auth_header,
+    ).json()["job_id"]
+    from network_probe.portal.jobs import default_capture_jobs
+    default_capture_jobs().wait(job_id, timeout=5)
+
+    d = c.get(f"/api/portal/capture/{job_id}", headers=auth_header).json()["reconciled"]["determination"]
+    assert d["code"] == "OUT_OF_NETWORK_WITH_BENEFITS"
+    assert "inferred from plan type" in d["reason"]
+
+
+@pytest.mark.db
+def test_an_inconclusive_walk_does_not_flip_the_displayed_lean(monkeypatch, auth_header):
+    """`reconcile_portal` promises a portal that could not answer "changes nothing at all".
+
+    It kept that promise for `network_status` but not for the determination: `_reconcile_capture`
+    recomputed `final_determination` with NO evidence, because the capture request never carried
+    the directory finding the eligibility check had. So a provider listed in the payer's own
+    directory under 11 networks — a LIKELY_IN_NETWORK lean — silently became an out-of-network
+    reading the moment an UNKNOWN walk came back.
+
+    Caught live on 2026-08-03 (Orem, UHC FL): the walk returned "no results ... guest plan
+    unconfirmed" and the Determination tile still moved from "In-Network (low confidence)" to
+    "Out-of-Network with benefits (low confidence)". A portal that could not answer must not be
+    able to move a verdict in EITHER direction.
+    """
+    from network_probe.portal.models import PortalCapture, PortalStatus
+
+    _stub_store(monkeypatch, capture=PortalCapture(
+        payer_key=AZ, npi=NPI, status=PortalStatus.UNKNOWN, portal_name="UHC Find Care (guest)",
+        portal_url="https://findcare.guest.uhc.com/x", driver="uhc-findcare",
+        note="no results — an empty result set does not distinguish OON from a failed search.",
+    ))
+    c = _client()
+    job_id = c.post(
+        "/api/portal/capture",
+        json={"payer_key": AZ, "npi": NPI, "prior_network_status": "UNKNOWN",
+              "out_of_network_benefits": True,
+              "prior_evidence": {"directory_networks": 11, "in_directory": True,
+                                 "payer_label": "UnitedHealthcare"}},
+        headers=auth_header,
+    ).json()["job_id"]
+    from network_probe.portal.jobs import default_capture_jobs
+    default_capture_jobs().wait(job_id, timeout=5)
+
+    r = c.get(f"/api/portal/capture/{job_id}", headers=auth_header).json()["reconciled"]
+    assert r["changed"] is False
+    assert r["signal"]["result"] == "inconclusive"
+    d = r["determination"]
+    assert d["provisional"] == "LIKELY_IN_NETWORK", "the directory evidence must survive the walk"
+    assert d["display_code"] == "IN_NETWORK", (
+        "an inconclusive walk flipped the committed reading from IN to OON"
+    )
+
+
+@pytest.mark.db
+def test_a_walk_that_searched_and_did_not_list_them_stops_the_in_lean(monkeypatch, auth_header):
+    """The Orem demo case: 11 directory networks, none the member's, and the portal shows nothing.
+
+    The walk stays UNKNOWN and moves no verdict — but it must stop the directory read from
+    DISPLAYING as in-network. "IN NETWORK · low confidence" for a provider the payer's own
+    member-facing directory does not list is the false IN this system exists to remove.
+    """
+    from network_probe.portal.models import PortalCapture, PortalStatus
+
+    _stub_store(monkeypatch, capture=PortalCapture(
+        payer_key=AZ, npi=NPI, status=PortalStatus.UNKNOWN, portal_name="UHC Find Care (guest)",
+        portal_url="https://findcare.guest.uhc.com/x", driver="uhc-findcare", result_count=0,
+        note="no results — an empty result set does not distinguish OON from a failed search.",
+    ))
+    c = _client()
+    job_id = c.post(
+        "/api/portal/capture",
+        json={"payer_key": AZ, "npi": NPI, "prior_network_status": "UNKNOWN",
+              "out_of_network_benefits": True,
+              "prior_evidence": {"directory_networks": 11, "in_directory": True,
+                                 "plan_given": True, "matched_network": False,
+                                 "payer_label": "UnitedHealthcare"}},
+        headers=auth_header,
+    ).json()["job_id"]
+    from network_probe.portal.jobs import default_capture_jobs
+    default_capture_jobs().wait(job_id, timeout=5)
+
+    r = c.get(f"/api/portal/capture/{job_id}", headers=auth_header).json()["reconciled"]
+    assert r["network_status_after"] == "UNKNOWN"   # the walk moved nothing, correctly
+    d = r["determination"]
+    assert d["display_code"] == "OUT_OF_NETWORK_WITH_BENEFITS"
+    assert d["provisional"] != "LIKELY_IN_NETWORK"
+
+
+@pytest.mark.db
+def test_a_blocked_walk_suppresses_nothing(monkeypatch, auth_header):
+    """A portal that refused automated access never searched, so it says nothing about the provider.
+    Only a walk that actually reached the directory may suppress the lean."""
+    from network_probe.portal.models import PortalCapture, PortalStatus
+
+    _stub_store(monkeypatch, capture=PortalCapture(
+        payer_key=AZ, npi=NPI, status=PortalStatus.BLOCKED, portal_name="UHC Find Care (guest)",
+        portal_url="https://findcare.guest.uhc.com/x", driver="uhc-findcare",
+        note="portal shell did not hydrate.",
+    ))
+    c = _client()
+    job_id = c.post(
+        "/api/portal/capture",
+        json={"payer_key": AZ, "npi": NPI, "prior_network_status": "UNKNOWN",
+              "prior_evidence": {"directory_networks": 3, "plan_given": False}},
+        headers=auth_header,
+    ).json()["job_id"]
+    from network_probe.portal.jobs import default_capture_jobs
+    default_capture_jobs().wait(job_id, timeout=5)
+
+    d = c.get(f"/api/portal/capture/{job_id}", headers=auth_header).json()["reconciled"]["determination"]
+    assert d["provisional"] == "LIKELY_IN_NETWORK"

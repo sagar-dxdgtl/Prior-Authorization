@@ -67,17 +67,28 @@ def parse_contract(plan: str | None) -> str | None:
 
 
 def resolve_plan_type(plan_hint: str | None, benefit_type: str | None = None, store=None) -> PlanTypeResolution:
-    """Resolve a member's plan string to an OON-tier signal, Medicare/Dual only.
+    """Resolve a member's plan string to an OON-tier signal, for ANY line of business.
 
-    Precedence: an authoritative PBP match (when a `store` is provided and resolves) → the explicit
-    product token written in the plan string → unknown. `store=None` (test env / live disabled) skips
-    the DB entirely and uses the string token. Commercial/other lines → N/A (PBP is Medicare-only)."""
+    Precedence: an authoritative PBP match (Medicare/Dual only — CMS publishes Part C benefit files,
+    so a commercial plan can never be in that store) → the explicit product token written in the plan
+    string → unknown. `store=None` (test env / live disabled) skips the DB entirely.
+
+    The LOB gate used to wrap this whole function, which also switched off the plan-string fallback
+    for every non-Medicare member. That fallback is not Medicare-specific: a PPO pays out-of-network
+    because it is a PPO, whoever sells it. The effect was that a commercial member with a silent 271
+    could never be shown "Out-of-Network (with benefits)" — measured on Aetna Choice POS II PPO,
+    Cigna Open Access Plus PPO and BCBS Blue Choice PPO, all of which returned no signal at all while
+    the identical Medicare PPO string returned True.
+
+    Medicaid still defers: managed-care OON rules are set per state and are not readable from a plan
+    name. D-SNP still defers via `plan_oon_capability(dsnp=True)`.
+    """
     lob = line_of_business(plan_hint, benefit_type)
     contract = parse_contract(plan_hint)
-    if lob not in ("medicare", "dual"):
+    if lob == "medicaid":
         return PlanTypeResolution("unknown", None, "n/a", None, contract)
 
-    if store is not None:
+    if store is not None and lob in ("medicare", "dual"):
         try:
             rec = store.resolve(plan_hint, contract=contract)
         except Exception:  # noqa: BLE001 — a store/DB hiccup must degrade to the string token, not error

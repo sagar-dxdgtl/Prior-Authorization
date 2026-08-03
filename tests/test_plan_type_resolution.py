@@ -43,10 +43,18 @@ def test_unknown_when_no_token_and_no_pbp():
     assert r.plan_type == "unknown" and r.capability is None and r.source == "none"
 
 
-def test_commercial_line_is_na():
-    # CMS PBP is Medicare-only — never consulted for a commercial line
+def test_commercial_line_never_consults_the_pbp_store():
+    """CMS PBP is Medicare-only — never consulted for a commercial line.
+
+    It still resolves from the plan-string token, though: this used to assert `capability is None`,
+    which was the over-broad LOB gate rather than the intent. A PPO pays out-of-network because it
+    is a PPO, so gating the string fallback on Medicare left every commercial member with a silent
+    271 unable to show "Out-of-Network (with benefits)". See test_oon_capability_all_lines.py.
+    """
     r = resolve_plan_type("Ambetter ACA PPO", benefit_type="ACA Commercial", store=_FakeStore(_rec()))
-    assert r.source == "n/a" and r.capability is None
+    assert r.source == "plan-string", "the PBP record must not be used for a commercial plan"
+    assert r.record is None
+    assert r.capability is True
 
 
 def test_parses_h_contract_from_plan_string():
