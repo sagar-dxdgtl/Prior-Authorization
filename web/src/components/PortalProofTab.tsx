@@ -8,8 +8,15 @@ const { Text } = Typography;
 /** What the payer's own find-a-doctor portal said, captured live.
  *
  * A walk takes 40-210s against a real payer, so it cannot run inside the eligibility request:
- * the fast verdict renders first and this polls for the proof. It is started by a button, never
- * automatically — one lookup per provider is the volume boundary this system holds itself to.
+ * the fast verdict renders first and this polls for the proof.
+ *
+ * It STARTS AUTOMATICALLY once per target. The page withholds the network verdict until the portal
+ * has answered, so making the user press a button to get any verdict at all was pure friction. The
+ * volume boundary that the manual button used to enforce is now enforced by the target key instead:
+ * exactly one walk per (payer, NPI, plan, location), re-armed only when one of those changes, and
+ * never retried on failure. That distinction matters — Cigna's WAF blocks after ~4 walks in 10
+ * minutes, so an auto-start that could re-fire on a re-render would take the payer offline for the
+ * rest of a demo. "Check again" remains for a deliberate re-run.
  */
 
 export interface PortalTarget {
@@ -19,6 +26,12 @@ export interface PortalTarget {
   prior_network_status?: string | null;
   prior_source_url?: string | null;
   out_of_network_benefits?: boolean | null;
+  /** Structural OON tier from the plan TYPE (PPO → true, HMO/EPO → false, POS/D-SNP → null).
+   *  Without it a member whose 271 was silent on the OON tier reconciles to plain "Out-of-Network"
+   *  where the plan type says "Out-of-Network (with benefits)". */
+  plan_oon_capability?: boolean | null;
+  /** The evidence behind the standing determination, so the recomputed one keeps its reading. */
+  prior_evidence?: Record<string, unknown> | null;
   group_contracted?: boolean | null;
   provider_first_name?: string | null;
   provider_last_name?: string | null;
@@ -28,12 +41,28 @@ export interface PortalTarget {
   tin?: string | null;
 }
 
-interface Reconciled {
+export interface Reconciled {
   network_status_before: string;
   network_status_after: string;
   changed: boolean;
   signal: { source: string; result: string; detail: string };
-  determination: { code: string; label: string; reason: string };
+  determination: Determination;
+}
+
+export interface Determination {
+  code: string;
+  label: string;
+  reason: string;
+  /** The committed reading — never UNKNOWN. See domain/determination.py. */
+  display_code?: string;
+  display_label?: string;
+  confidence?: string;
+  provisional?: string | null;
+  basis?: string | null;
+  next_step?: string | null;
+  /** The evidence this reading was computed from, echoed back so the capture can recompute the
+   *  determination from the same inputs. Opaque to the UI — forwarded, never interpreted. */
+  evidence?: Record<string, unknown> | null;
 }
 
 interface CaptureStatus {
@@ -70,7 +99,24 @@ function splitNote(note: string | null): { prose: string; steps: string[] } {
   return { prose: m[1].trim(), steps: m[2].split('→').map((s) => s.trim()).filter(Boolean) };
 }
 
-export default function PortalProofTab({ target }: { target: PortalTarget | null }) {
+export default function PortalProofTab({
+  target,
+  onReconciled,
+  onFinished,
+}: {
+  target: PortalTarget | null;
+  /** Raise the reconciled verdict to the page. The walk is the strongest source this system has —
+   *  it is the member-facing directory — so when it settles or overrides a verdict, the summary
+   *  tiles must move with it. Without this the tab showed "Verdict updated UNKNOWN → OUT OF
+   *  NETWORK" while Determination still read "Not yet established" a few pixels above it. */
+  onReconciled?: (r: Reconciled) => void;
+  /** Fired once the walk reaches a terminal state, whatever it said. The page withholds the network
+   *  verdict until the portal has been asked, so it needs "the walk finished" as a distinct signal
+   *  from "the walk moved the verdict" — a BLOCKED or inconclusive portal changes nothing but has
+   *  still been asked, and leaving the row pending forever would be worse than showing the
+   *  standing read with its confidence stated. */
+  onFinished?: () => void;
+}) {
   const [state, setState] = useState<CaptureStatus | null>(null);
   const [starting, setStarting] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
@@ -78,6 +124,11 @@ export default function PortalProofTab({ target }: { target: PortalTarget | null
   const [shotUrl, setShotUrl] = useState<string | null>(null);
   const timer = useRef<number | null>(null);
   const poller = useRef<number | null>(null);
+  //: The target this component has already auto-started a walk for. A ref, not state, so it is
+  //  written before React can re-render and cannot itself trigger one — that is what makes the
+  //  guard hold under StrictMode's double-invoked effects and under the parent re-rendering with a
+  //  fresh `target` object literal on every keystroke.
+  const autoStarted = useRef<string | null>(null);
 
   const stop = useCallback(() => {
     if (timer.current) window.clearInterval(timer.current);
@@ -124,6 +175,10 @@ export default function PortalProofTab({ target }: { target: PortalTarget | null
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         setFailed(body?.detail?.message ?? `Could not start the check (HTTP ${res.status}).`);
+        // The portal HAS been asked and cannot answer (no driver for this payer, bad NPI). That is
+        // a terminal state too: leaving the page waiting for a check that can never run would hide
+        // the standing verdict forever, which is worse than showing it with its confidence stated.
+        onFinished?.();
         return;
       }
       const { job_id } = await res.json();
@@ -134,12 +189,42 @@ export default function PortalProofTab({ target }: { target: PortalTarget | null
         if (!r.ok) return;
         const body: CaptureStatus = await r.json();
         setState(body);
-        if (body.status === 'done' || body.status === 'error') stop();
+        if (body.status === 'done' || body.status === 'error') {
+          stop();
+          // Only a finished walk that actually produced a reconciliation moves the page. An errored
+          // or inconclusive capture leaves the standing verdict exactly where it was — a portal that
+          // could not answer is not evidence of anything.
+          if (body.status === 'done' && body.reconciled) onReconciled?.(body.reconciled);
+          onFinished?.();
+        }
       }, 2000);
     } finally {
       setStarting(false);
     }
-  }, [target, stop]);
+  }, [target, stop, onReconciled, onFinished]);
+
+  // What identifies "the same check". A walk is only valid for the network and market it searched,
+  // so any of these changing is a genuinely different question and re-arms the auto-start; nothing
+  // else does. The parent rebuilds `target` as a fresh object on every render, so this has to be
+  // compared by VALUE — depending on the object identity would start a walk per keystroke.
+  const targetKey = target
+    ? [target.payer_key, target.npi, target.plan ?? '', target.zip ?? '', target.city ?? '', target.state ?? ''].join('|')
+    : null;
+  // A portal search cannot run without a committed location; mirrors `hasLocation` below and the
+  // server-side guard in portal/capture.py. Auto-starting without one spends two minutes on a portal
+  // that was never able to search.
+  const canAutoStart = Boolean(target?.npi && (target?.zip || target?.city || target?.state));
+
+  useEffect(() => {
+    if (!targetKey || !canAutoStart) return;
+    if (autoStarted.current === targetKey) return;
+    autoStarted.current = targetKey; // claim it BEFORE the await, or a re-render races a second walk
+    void start();
+    // `start` is intentionally not a trigger: it is rebuilt whenever the parent passes new callback
+    // identities, and re-running on that would be a walk per render. The ref guard is the real
+    // safety, and the key is the real trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetKey, canAutoStart]);
 
   if (!target) {
     return (
@@ -168,6 +253,8 @@ export default function PortalProofTab({ target }: { target: PortalTarget | null
         valid for the network it searched, which is why the plan from the 271 is pinned before the walk.
       </div>
 
+      {/* Reached only when the walk did NOT auto-start — in practice, no committed location. The
+          button stays so the check is still reachable once a ZIP is added. */}
       {!state && !failed && (
         <>
           <Button
@@ -289,8 +376,11 @@ export default function PortalProofTab({ target }: { target: PortalTarget | null
               </div>
               <div style={styles.reconBody}>{state.reconciled.signal.detail}</div>
               <div style={styles.reconDet}>
-                Determination: <strong>{state.reconciled.determination.label}</strong> —{' '}
-                {state.reconciled.determination.reason}
+                Determination:{' '}
+                <strong>
+                  {state.reconciled.determination.display_label ?? state.reconciled.determination.label}
+                </strong>{' '}
+                — {state.reconciled.determination.reason}
               </div>
             </div>
           )}

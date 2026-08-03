@@ -33,6 +33,10 @@ export default function Eligibility() {
   const [selectedPayer, setSelectedPayer] = useState<PayerOption | null>(null);
   const [payerSearching, setPayerSearching] = useState(false);
   const [rechecking, setRechecking] = useState(false);
+  // The network verdict is withheld until the payer's own portal has been asked. Reset on every new
+  // check and on every plan re-check, because a walk answers for ONE plan in ONE market — carrying
+  // a previous "checked" across either would show a settled verdict the portal never gave.
+  const [portalChecked, setPortalChecked] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchSeq = useRef(0);
 
@@ -62,6 +66,7 @@ export default function Eligibility() {
   const handleSubmit = async (values: EligibilityRequest) => {
     setLoading(true);
     setResult(null);
+    setPortalChecked(false);
     const payload = {
       ...values,
       stedi_payer_id:
@@ -84,6 +89,10 @@ export default function Eligibility() {
   };
 
   const collapsed = formCollapsed && !!result;
+  // Mirrors PortalProofTab's own guard: NPI plus a location the portal can commit to.
+  const canRunPortal = Boolean(
+    submitted?.npi && (submitted?.zip || submitted?.state),
+  );
 
   return (
     <AppShell pageTitle="Eligibility Check">
@@ -141,6 +150,10 @@ export default function Eligibility() {
                       <span>
                         {o.label}
                         {o.market ? <span style={{ color: palette.slate400 }}> · {o.market}</span> : null}
+                        {/* What Stedi says about THIS payer's eligibility check specifically —
+                            `transactionSupport.eligibilityCheck`, corrected in migration 0041.
+                            "not supported" is a different fact from "needs enrollment": enrolling
+                            would not help, so it must not wear the same amber badge. */}
                         {o.enrollment_status === 'supported' ? (
                           <Tag color="green" style={{ marginLeft: 6 }}>
                             supported
@@ -149,6 +162,12 @@ export default function Eligibility() {
                           <Tag color="gold" style={{ marginLeft: 6 }}>
                             needs enrollment
                           </Tag>
+                        ) : o.enrollment_status === 'not_supported' ? (
+                          <Tag color="red" style={{ marginLeft: 6 }}>
+                            no eligibility check
+                          </Tag>
+                        ) : o.enrollment_status === 'needs_payer_id' ? (
+                          <Tag style={{ marginLeft: 6 }}>payer id unresolved</Tag>
                         ) : o.source === 'stedi' ? (
                           <Tag style={{ marginLeft: 6 }}>Stedi</Tag>
                         ) : null}
@@ -235,6 +254,7 @@ export default function Eligibility() {
               }))}
               onChange={async (plan) => {
                 setRechecking(true);
+                setPortalChecked(false); // a walk is valid only for the plan it searched
                 try {
                   const upd = await recheckNetwork({
                     payer: form.getFieldValue('payer'),
@@ -286,6 +306,14 @@ export default function Eligibility() {
                 prior_network_status: result?.network_status ?? null,
                 prior_source_url: result?.network_verdict?.source_url ?? null,
                 out_of_network_benefits: result?.out_of_network_benefits ?? null,
+                // The plan-TYPE OON tier. The capture re-runs the determination server-side in its
+                // own request, so it needs the same inputs this page was given — without it a
+                // silent 271 reconciles to plain "Out-of-Network" instead of "with benefits".
+                plan_oon_capability: result?.plan_oon_capability ?? null,
+                // The evidence this page's determination was computed from. The capture recomputes
+                // the determination server-side, and without the same evidence an inconclusive walk
+                // would erase a directory finding it never contradicted.
+                prior_evidence: result?.determination?.evidence ?? null,
                 group_contracted:
                   (result?.network_verdict?.matched_provider?.group_contracted as boolean | undefined) ?? null,
                 // NB: submitted.first_name / last_name are the MEMBER's — never sent to a portal.
@@ -293,6 +321,26 @@ export default function Eligibility() {
               }
             : null
         }
+        // The gate falls open when no portal check is POSSIBLE. Every payer portal gates provider
+        // search behind a committed location, so with no ZIP/city/state the button is disabled —
+        // and a verdict held for a check that can never run would just be permanently hidden.
+        portalChecked={portalChecked || !canRunPortal}
+        onPortalFinished={() => setPortalChecked(true)}
+        onPortalReconciled={(r) => {
+          // The portal walk finished and moved the verdict. It is the member-facing directory —
+          // the accuracy check on every other source — so the summary tiles adopt its result
+          // rather than sitting above the tab contradicting it.
+          setResult((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  network_status: r.network_status_after as EligibilityResponse['network_status'],
+                  determination: r.determination,
+                  corroboration: [...(prev.corroboration ?? []), r.signal],
+                }
+              : prev,
+          );
+        }}
       />
     </AppShell>
   );
