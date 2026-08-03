@@ -90,6 +90,19 @@ const VERDICT_TONE: Record<string, { text: string; bg: string }> = {
   BLOCKED: { text: '#8a6100', bg: '#fdf3dd' },
 };
 
+/** What the PORTAL did, in words — never the bare token "UNKNOWN".
+ *
+ * This pill reports the walk, not the determination: the verdict tiles above already commit to
+ * INN/OON. "UNKNOWN" told a reader nothing and looked like a failure of the product rather than a
+ * portal declining to answer, which is a real and different outcome. The note underneath always
+ * says exactly which guard fired. */
+const VERDICT_LABEL: Record<string, string> = {
+  IN_NETWORK: 'FOUND IN NETWORK',
+  OUT_OF_NETWORK: 'NOT IN THIS NETWORK',
+  UNKNOWN: 'PORTAL COULD NOT CONFIRM',
+  BLOCKED: 'PORTAL REFUSED ACCESS',
+};
+
 /** The driver appends "[portal walk: a → b → c]" to its note. Split it back out: the trail is the
  *  audit record of how the answer was reached, and reads better as steps than as prose. */
 function splitNote(note: string | null): { prose: string; steps: string[] } {
@@ -267,7 +280,9 @@ export default function PortalProofTab({
           </Button>
           <div style={styles.meta}>
             {target.payer_key} · NPI {target.npi}
-            {target.plan ? ` · pinning “${target.plan}”` : ' · no plan given, so the walk can only return UNKNOWN'}
+            {target.plan
+              ? ` · pinning “${target.plan}”`
+              : ' · no plan given, so the walk cannot confirm a network'}
             {location ? ` · searching near ${location}` : ''}
           </div>
           {/* Every portal gates provider search behind a committed location. Starting without one
@@ -326,7 +341,7 @@ export default function PortalProofTab({
                 background: (VERDICT_TONE[state.verdict ?? 'UNKNOWN'] ?? VERDICT_TONE.UNKNOWN).bg,
               }}
             >
-              {(state.verdict ?? 'UNKNOWN').replace(/_/g, ' ')}
+              {VERDICT_LABEL[state.verdict ?? 'UNKNOWN'] ?? (state.verdict ?? '').replace(/_/g, ' ')}
             </span>
             <span style={styles.resultMeta}>
               {state.portal_name}
@@ -362,16 +377,25 @@ export default function PortalProofTab({
           {state.reconciled && (
             <div style={state.reconciled.changed ? styles.reconChanged : styles.reconSame}>
               <div style={styles.reconHead}>
+                {/* Both arms read the DETERMINATION's committed label, never the raw network status
+                    — "Verdict unchanged · UNKNOWN" was the last place the bare token still showed. */}
                 {state.reconciled.changed ? (
                   <>
                     Verdict updated
                     <span style={styles.reconArrow}>
                       {state.reconciled.network_status_before.replace(/_/g, ' ')} →{' '}
-                      <strong>{state.reconciled.network_status_after.replace(/_/g, ' ')}</strong>
+                      <strong>
+                        {state.reconciled.determination.display_label ??
+                          state.reconciled.network_status_after.replace(/_/g, ' ')}
+                      </strong>
                     </span>
                   </>
                 ) : (
-                  <>Verdict unchanged · {state.reconciled.network_status_after.replace(/_/g, ' ')}</>
+                  <>
+                    Verdict unchanged ·{' '}
+                    {state.reconciled.determination.display_label ??
+                      state.reconciled.network_status_after.replace(/_/g, ' ')}
+                  </>
                 )}
               </div>
               <div style={styles.reconBody}>{state.reconciled.signal.detail}</div>
