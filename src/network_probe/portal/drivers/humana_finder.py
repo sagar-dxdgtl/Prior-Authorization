@@ -734,35 +734,64 @@ class HumanaFinderDriver(PortalDriver):
         we asked for. Otherwise we commit the raw text with Enter, which the portal accepts. Whatever
         happens, the portal's own echo (read by the caller) is what decides whether an absence counts.
         """
-        typed = ", ".join(p for p in (q.city, " ".join(x for x in (q.state, q.zip_code) if x)) if p)
-        typed = typed.strip(", ") or (q.zip_code or q.state or "")
-        if not typed:
-            return None
-        try:
-            inp = page.locator(_LOC_INPUT).first
-            inp.wait_for(state="visible", timeout=20_000)
-            inp.click()
-            inp.fill("")
-            inp.type(typed, delay=110)  # real keystrokes: the Places request is keyup-driven
-        except (PlaywrightTimeout, PlaywrightError):
-            return None
-        page.wait_for_timeout(4_000)  # Places debounces, then repaints the list more than once
+        for typed in self._location_terms(q):
+            try:
+                inp = page.locator(_LOC_INPUT).first
+                inp.wait_for(state="visible", timeout=20_000)
+                inp.click()
+                inp.fill("")
+                inp.type(typed, delay=110)  # real keystrokes: the Places request is keyup-driven
+            except (PlaywrightTimeout, PlaywrightError):
+                continue
+            page.wait_for_timeout(4_000)  # Places debounces, then repaints the list more than once
 
-        try:
-            items = page.locator(f"{_LOC_ITEM}:visible")
-            texts = [items.nth(i).inner_text() or "" for i in range(min(items.count(), 10))]
-        except PlaywrightError:
-            texts = []
-        idx = next((i for i, t in enumerate(texts) if self._is_our_place(t, q)), None)
-        try:
+            try:
+                items = page.locator(f"{_LOC_ITEM}:visible")
+                texts = [items.nth(i).inner_text() or "" for i in range(min(items.count(), 10))]
+            except PlaywrightError:
+                texts = []
+            idx = next((i for i, t in enumerate(texts) if self._is_our_place(t, q)), None)
             if idx is None:
-                page.locator(_LOC_INPUT).first.press("Enter")
-            else:
+                # No suggestion we trust. Do NOT press Enter on a term Places rejected — that is what
+                # left the field in its "Enter a valid address…" error state, so Continue never
+                # advanced and the walk died two steps later at "type of care 'Medical' not
+                # clickable". Try the next form of the location instead.
+                if texts:
+                    continue
+                continue
+            try:
                 page.locator(f"{_LOC_ITEM}:visible").nth(idx).click()
-        except (PlaywrightTimeout, PlaywrightError):
-            return None
-        page.wait_for_timeout(1_500)
-        return typed
+            except (PlaywrightTimeout, PlaywrightError):
+                continue
+            page.wait_for_timeout(1_500)
+            return typed
+        return None
+
+    def _location_terms(self, q: PortalQuery) -> list[str]:
+        """The forms of this location to try, most reliable first.
+
+        "ST ZIP" was the ONLY form tried, and Google Places rejects it: the live field showed
+        `FL 33618` with "Enter a valid address, city and state, or ZIP code." Places wants a ZIP on
+        its own, or a properly comma-separated "City, ST". The bare ZIP is safe here even though
+        Places reads one as a house number, because `_is_our_place` refuses a suggestion whose ZIP is
+        not the one we asked for — that guard is what "ST ZIP" was working around, and it was never
+        needed.
+        """
+        state = (q.state or "").strip()[:2].upper()
+        city = (q.city or "").strip()
+        terms: list[str] = []
+        for candidate in (
+            f"{city}, {state} {q.zip_code}" if city and state and q.zip_code else None,
+            q.zip_code,
+            f"{city}, {state}" if city and state else None,
+            city,
+            f"{state} {q.zip_code}" if state and q.zip_code else None,  # the old form, last
+            state,
+        ):
+            c = (candidate or "").strip().strip(",")
+            if c and c not in terms:
+                terms.append(c)
+        return terms
 
     def _is_our_place(self, text: str, q: PortalQuery) -> bool:
         """Is this Places suggestion actually the clinic's ZIP?
