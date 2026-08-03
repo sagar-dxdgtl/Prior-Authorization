@@ -6,6 +6,14 @@ import re
 # Known Stedi ids seeded for verified payers; best-guess for Aetna/Ambetter/Cigna (resolver confirms);
 # everything else None/needs_payer_id (Task 20 resolver fills from Stedi's payer network).
 #
+# ⚠️ The `enrollment_status` values below are the ORIGINAL GUESS and are wrong on 163 of these rows —
+# they said "needs enrollment" for payers whose eligibility checks Stedi fully supports, Cigna among
+# them. Migration `0041_enrollment_status_truth` overwrites them from Stedi's own
+# `transactionSupport.eligibilityCheck` and runs AFTER every seeding migration, so a freshly migrated
+# DB is correct regardless of what this tuple says. Do not "fix" a badge by editing this column here:
+# regenerate with `scripts/refresh_enrollment_status.py` and add a migration, or the next seed run
+# silently reintroduces the guess.
+#
 # Stedi-id precedence (multi-source expansion): keep the original verified ids; add a research
 # stedi_hint ONLY where it AGREES with the resolver proposal (docs/payer-sources/stedi-proposals.txt)
 # or is an authoritative government id. Clearly-wrong fuzzy proposals (e.g. Noridian->03302 North
