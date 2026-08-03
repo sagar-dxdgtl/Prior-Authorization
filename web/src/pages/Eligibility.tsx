@@ -18,6 +18,7 @@ interface EligibilityRequest {
   last_name: string;
   plan?: string;
   state?: string;
+  city?: string;
   zip?: string;
   tin?: string;
   base_url?: string;
@@ -91,7 +92,7 @@ export default function Eligibility() {
   const collapsed = formCollapsed && !!result;
   // Mirrors PortalProofTab's own guard: NPI plus a location the portal can commit to.
   const canRunPortal = Boolean(
-    submitted?.npi && (submitted?.zip || submitted?.state),
+    submitted?.npi && (submitted?.zip || submitted?.city || submitted?.state),
   );
 
   return (
@@ -230,6 +231,18 @@ export default function Eligibility() {
                   <Input placeholder="78701" maxLength={10} />
                 </Form.Item>
               </div>
+              {/* Not decoration, and not a duplicate of the ZIP. Portals geocode a typed location and
+                  some ZIPs simply do not resolve: 5801 Oakbend Trail's 76152 is PO-box-only, so
+                  Molina's box fell through to the bare state and committed "Houston, TX — 77001" —
+                  260 miles from the clinic. The drivers' fallback chain already prefers
+                  "City, ST" over a bare state; it was just never given a city. */}
+              <Form.Item name="city" label="Clinic City (recommended)">
+                <Input placeholder="Fort Worth" />
+              </Form.Item>
+              <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: -8 }}>
+                Used only if the ZIP does not geocode — some clinic ZIPs are PO-box-only, and without
+                a city the portal falls back to the state and searches the wrong metro.
+              </Text>
             </div>
           </div>
           <div style={styles.formFooter}>
@@ -299,6 +312,7 @@ export default function Eligibility() {
                 // return UNKNOWN rather than answer from an un-pinned directory.
                 plan: result?.selected_plan ?? result?.plan_name ?? null,
                 state: submitted.state ?? null,
+                city: submitted.city ?? null,
                 zip: submitted.zip ?? null,
                 // From the payer's own 271, not the form. UHC Medicare scopes its plan list by the
                 // member's county, so without this a member treated outside their home county has
