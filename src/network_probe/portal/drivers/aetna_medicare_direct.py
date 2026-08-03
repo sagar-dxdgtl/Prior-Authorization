@@ -265,7 +265,47 @@ class AetnaMedicareDirectDriver(PortalDriver):
         except (PlaywrightTimeout, PlaywrightError):
             return pin, False
         trail.append("provider search reached")
+        # Two different questions, two different locations. The plan list is scoped to where the
+        # MEMBER lives; the provider search must be scoped to where CARE IS DELIVERED. Using one for
+        # both searched an Illinois clinic near Glendale, Arizona — "no results" guaranteed, whatever
+        # the network. Harmless while the pin was names-only (absence licenses nothing), but an
+        # identifier-grade pin would have turned it into a confident wrong OUT_OF_NETWORK.
+        self._retarget_search_location(page, q, trail)
         return pin, True
+
+    def _retarget_search_location(self, page: Page, q: PortalQuery, trail: list[str]) -> None:
+        """Point the provider search at the CLINIC after the plan has been pinned.
+
+        Best-effort by design: if the drawer is not there, leave the search where it is and say so.
+        The walk still produces its previous answer, so this can only improve a verdict, never break
+        one — which is the property that made it safe to add.
+        """
+        clinic = (q.zip_code or "").strip() or (q.city or "").strip()
+        if not clinic or clinic == (q.member_zip or "").strip():
+            return  # nothing to change, or the member is treated where they live
+        try:
+            page.locator("[data-test='location-drawer-btn']").first.click(timeout=10_000)
+            page.wait_for_timeout(2_000)
+            box = page.locator("#typeahead-location-input").first
+            box.wait_for(state="visible", timeout=10_000)
+            box.click(timeout=8_000)
+            box.fill("", timeout=8_000)
+            box.type(clinic, delay=110, timeout=15_000)
+            page.locator(_ADDRESS_OPTION).first.wait_for(state="visible", timeout=15_000)
+            page.locator(_ADDRESS_OPTION).first.click(timeout=8_000)
+            page.wait_for_timeout(1_500)
+            page.get_by_role("button", name="Apply", exact=True).first.click(timeout=8_000)
+            self._settle(page, 4_000)
+        except (PlaywrightTimeout, PlaywrightError):
+            trail.append(f"could NOT retarget the search to the clinic ({clinic}) — "
+                         f"it is still scoped to the member's area")
+            return
+        try:
+            shown = (page.locator("[data-test='location-drawer-btn']").first.inner_text(timeout=5_000)
+                     or "").strip()
+        except (PlaywrightTimeout, PlaywrightError):
+            shown = ""
+        trail.append(f"search retargeted to the clinic: {shown or clinic}")
 
     def _plan_options(self, page: Page) -> list[dict]:
         """Every plan radio as {id, plan_id, label}.
