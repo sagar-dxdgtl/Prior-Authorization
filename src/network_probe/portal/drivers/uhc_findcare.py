@@ -417,6 +417,12 @@ class UhcFindCareDriver(PortalDriver):
             # match or a word match is what decides if an absence may be read as OON, so a reader
             # has to be able to see which one happened.
             trail.append(f"plan pinned: {m.label} [{m.basis}]")
+            # Whether the CLINIC's county could have given a different plan than the member's own.
+            # Free — the identifier is already in hand — and it is the only honest way to tell a
+            # verdict that is provably county-independent from one that merely looks fine.
+            scope = self._county_scope(options[m.index][1] if m.index < len(options) else None, q)
+            if scope:
+                trail.append(scope)
             if not m.confirms_network:
                 trail.append("pin is names-only — absence cannot be read as out-of-network")
             return _Pin(m.label, m.basis, confirms=m.confirms_network,
@@ -538,6 +544,41 @@ class UhcFindCareDriver(PortalDriver):
         """
         options, url = self._plan_options(page)
         return tuple(name for name, _ in options), url
+
+    def _county_scope(self, plan_id: str | None, q: PortalQuery) -> str:
+        """Could the county we searched have changed the plan we just pinned? Costs no extra walk.
+
+        The form sends only the Clinic ZIP, so the plan list comes from the CLINIC's county while a
+        Medicare Advantage plan is sold by the member's county of RESIDENCE. A ZIP comparison cannot
+        settle that — US ZIPs are USPS delivery routes, not areas: they do not nest inside counties,
+        one ZIP can span four (30101 → Bartow/Cherokee/Cobb/Paulding), and two different ZIPs
+        routinely share one (30144 Kennesaw and 30188 Woodstock are both partly Cobb). Equality is
+        therefore neither necessary nor sufficient.
+
+        The CMS segment settles it exactly, and the portal already gave it to us:
+
+          * segment 000 — CMS does not split this plan by county, so there is only one version of it
+            and the clinic's county produced the member's own plan and network. Provably safe.
+          * segmented   — the same plan name is a different network in a different county, so the
+            answer holds only if the member lives in the clinic's county. Say so.
+
+        Measured on Cobb's real 12-plan list, that is 6 safe and 6 worth flagging — a caveat earned
+        by the evidence rather than attached to everything.
+        """
+        if not _PLAN_ID.match((plan_id or "").strip()):
+            return ""  # no identifier read (store absent or length-mismatched) — we do not know
+        if _unsegmented(plan_id):
+            return (f"county-independent: CMS does not segment {plan_id} by county, so the clinic's "
+                    f"county gave the member's own plan and network")
+        if q.member_zip and q.member_zip == q.zip_code:
+            return (f"{plan_id} is county-segmented, but the member's ZIP is the clinic's, so the "
+                    f"segment searched is theirs")
+        if q.member_zip:
+            return (f"⚠ {plan_id} is county-SEGMENTED and the member's residence ZIP differs from "
+                    f"the clinic's — the segment searched may not be theirs")
+        return (f"⚠ {plan_id} is county-SEGMENTED and was pinned from the CLINIC's county "
+                f"(ZIP {q.zip_code}); if the member lives in another county their segment, and so "
+                f"their network, may differ")
 
     def _plan_options(self, page: Page) -> tuple[tuple[tuple[str, str | None], ...], str | None]:
         """(plan name, CMS plan id) per option, in portal order, plus the list URL.

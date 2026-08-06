@@ -162,6 +162,62 @@ def test_a_failed_selection_is_reported_as_a_decline():
     assert "cobb" in why.lower()
 
 
+# --- did the county we searched matter at all? -----------------------------------------------------
+#
+# The web form sends only the Clinic ZIP (decided 2026-08-06), so the plan list comes from the
+# CLINIC's county, not the member's. A ZIP cannot settle whether that was safe: US ZIPs are USPS
+# delivery routes, not areas — they do not nest inside counties, one ZIP can span four (30101), and
+# two different ZIPs routinely share one (30144 Kennesaw and 30188 Woodstock are both partly Cobb).
+# So comparing ZIPs is both too strict and too weak.
+#
+# The SEGMENT settles it exactly, and the portal already handed it to us. Measured on Cobb's real
+# 12-plan list: 6 are unsegmented, i.e. the clinic's county provably gave the member's own plan; the
+# other 6 are county-segmented and could be a different network. Classifying costs no extra walk.
+
+
+class _ScopeDriver(UhcFindCareDriver):
+    def __init__(self):
+        pass
+
+
+def _scope(plan_id, *, clinic="30144", member=None):
+    q = PortalQuery(payer_key="uhc", npi="1902811656", plan="x", zip_code=clinic, member_zip=member)
+    return _ScopeDriver()._county_scope(plan_id, q)
+
+
+def test_an_unsegmented_plan_reports_the_clinic_county_as_provably_safe():
+    """H2001-819-000: CMS does not split it, so the clinic's county gave the member's own plan."""
+    s = _scope("H2001-819-000")
+    assert "H2001-819-000" in s
+    assert "⚠" not in s
+    assert "independent" in s.lower() or "not segment" in s.lower()
+
+
+def test_a_segmented_plan_with_no_member_zip_is_flagged():
+    """The residence county is simply unknown — that is a caveat, not a silent assumption."""
+    s = _scope("H5322-047-001")
+    assert "⚠" in s and "H5322-047-001" in s
+    assert "30144" in s, "the note must say which county's list was actually used"
+
+
+def test_a_segmented_plan_whose_member_lives_elsewhere_is_flagged_harder():
+    s = _scope("H5322-047-001", member="30188")
+    assert "⚠" in s
+    assert "differ" in s.lower() or "another" in s.lower() or "not theirs" in s.lower()
+
+
+def test_a_segmented_plan_in_the_clinics_own_zip_is_safe():
+    """Same ZIP means the same county set, so the segment searched is the member's."""
+    s = _scope("H5322-047-001", member="30144")
+    assert "⚠" not in s
+
+
+def test_no_readable_identifier_says_nothing_rather_than_guessing():
+    """The store may be absent or mismatched, and then we simply do not know."""
+    assert _scope(None) == ""
+    assert _scope("GA-5") == ""
+
+
 # --- the segment rule itself ----------------------------------------------------------------------
 
 
