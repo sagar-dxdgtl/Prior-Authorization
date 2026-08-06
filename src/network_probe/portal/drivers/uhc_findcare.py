@@ -565,19 +565,33 @@ class UhcFindCareDriver(PortalDriver):
         Measured on Cobb's real 12-plan list, that is 6 safe and 6 worth flagging — a caveat earned
         by the evidence rather than attached to everything.
         """
+        from network_probe.geo.zip_county import describe, same_county
+
         if not _PLAN_ID.match((plan_id or "").strip()):
             return ""  # no identifier read (store absent or length-mismatched) — we do not know
         if _unsegmented(plan_id):
             return (f"county-independent: CMS does not segment {plan_id} by county, so the clinic's "
                     f"county gave the member's own plan and network")
-        if q.member_zip and q.member_zip == q.zip_code:
-            return (f"{plan_id} is county-segmented, but the member's ZIP is the clinic's, so the "
-                    f"segment searched is theirs")
+
+        # Segmented: the answer holds only if the member lives in the clinic's county. The Census
+        # crosswalk answers that in three values, and all three are used — including the one that
+        # says "not established", which is exactly the case a ZIP-equality test would have called a
+        # match (30144 is Cobb; 30188 is Cherokee-OR-Cobb).
+        shared = same_county(q.zip_code, q.member_zip) if q.member_zip else None
+        if shared is True:
+            return (f"{plan_id} is county-segmented, but the member's ZIP and the clinic's are in "
+                    f"the same county, so the segment searched is theirs")
+        if shared is False:
+            return (f"⚠ {plan_id} is county-SEGMENTED and the member's ZIP is in a DIFFERENT county "
+                    f"from the clinic's — the segment searched is very likely not theirs")
+        where = describe(q.zip_code)
+        scope = f" ({where})" if where else ""
         if q.member_zip:
-            return (f"⚠ {plan_id} is county-SEGMENTED and the member's residence ZIP differs from "
-                    f"the clinic's — the segment searched may not be theirs")
-        return (f"⚠ {plan_id} is county-SEGMENTED and was pinned from the CLINIC's county "
-                f"(ZIP {q.zip_code}); if the member lives in another county their segment, and so "
+            return (f"⚠ {plan_id} is county-SEGMENTED and the member's county could not be pinned "
+                    f"down from their ZIP — the segment searched, from the clinic's ZIP "
+                    f"{q.zip_code}{scope}, may not be theirs")
+        return (f"⚠ {plan_id} is county-SEGMENTED and was pinned from the CLINIC's ZIP "
+                f"{q.zip_code}{scope}; if the member lives in another county their segment, and so "
                 f"their network, may differ")
 
     def _plan_options(self, page: Page) -> tuple[tuple[tuple[str, str | None], ...], str | None]:

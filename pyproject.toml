@@ -45,7 +45,10 @@ dev = [
 where = ["src"]
 
 [tool.setuptools.package-data]
-network_probe = ["**/*.html"]
+# The ZIP->county crosswalk ships WITH the package: it is read at request time by the portal drivers,
+# so an install that omitted it would silently degrade every county check. Rebuilt by
+# scripts/build_zip_counties.py from the Census relationship file.
+network_probe = ["**/*.html", "geo/*.csv.gz"]
 
 [tool.pytest.ini_options]
 markers = [

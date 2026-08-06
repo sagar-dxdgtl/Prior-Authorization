@@ -200,10 +200,21 @@ def test_a_segmented_plan_with_no_member_zip_is_flagged():
     assert "30144" in s, "the note must say which county's list was actually used"
 
 
-def test_a_segmented_plan_whose_member_lives_elsewhere_is_flagged_harder():
+def test_a_segmented_plan_whose_member_is_certainly_elsewhere_is_flagged_hardest():
+    """Cobb GA against Miami-Dade FL: the county sets are disjoint, so the segment we searched is
+    very likely the wrong one."""
+    s = _scope("H5322-047-001", member="33101")
+    assert "⚠" in s
+    assert "different county" in s.lower()
+
+
+def test_a_segmented_plan_whose_member_county_cannot_be_pinned_says_exactly_that():
+    """The case ZIP-equality gets wrong: clinic 30144 is Cobb, member 30188 is Cherokee-OR-Cobb. Not
+    a match, not a mismatch — and the note must not pretend otherwise."""
     s = _scope("H5322-047-001", member="30188")
     assert "⚠" in s
-    assert "differ" in s.lower() or "another" in s.lower() or "not theirs" in s.lower()
+    assert "could not be pinned" in s.lower()
+    assert "different county" not in s.lower(), "overlapping counties are not a proven mismatch"
 
 
 def test_a_segmented_plan_in_the_clinics_own_zip_is_safe():
