@@ -102,7 +102,7 @@ class _SweepDriver(UhcFindCareDriver):
         self.pinned: list[str] = []
         self.searched: list[str] = []
 
-    def _repin(self, page, list_url, index, *, first=False):
+    def _repin(self, page, list_url, index, *, first=False, expect=None):
         if self.repin_fails_at is not None and len(self.pinned) >= self.repin_fails_at:
             return False
         self.pinned.append(GA_PLANS[index])

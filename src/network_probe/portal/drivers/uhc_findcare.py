@@ -90,6 +90,19 @@ _LOCATION = "[data-testid='location-search-input']"
 # search, "No results found. Phone number and NPI require 10 digits." on a short one.
 _NO_RESULTS = "[data-testid*='no-results']"
 
+# The "Select county" modal. UHC raises it INSTEAD of the inline location step when the ZIP spans
+# more than one county — reproduced 2026-08-06 for 30101 (Acworth: Bartow/Cherokee/Cobb/Paulding) and
+# 30188 (Woodstock), and never for single-county 30144 across ~8 runs. Nothing in `_OVERLAYS` or the
+# "Select" commit matches it, so the walk used to die here with zero plans. See `_resolve_county`.
+_COUNTY_TRIGGER = (
+    "[data-testid='geospatial-county-dropdown-abyss-select-input-input']",
+    "[data-testid*='county-dropdown'][data-testid$='select-input-input']",
+)
+_COUNTY_SUBMIT = (
+    "[data-testid='modal-search-button-abyss-button-root']",
+    "[role=dialog] button:has-text('Search as guest')",
+)
+
 # Waiting is condition-based, not clock-based: see `_settle` and `_await_suggestions` for the measured
 # reasons. Both caps exist only so a wedged portal cannot hang a walk forever — in a healthy run
 # neither is reached.
@@ -328,9 +341,17 @@ class UhcFindCareDriver(PortalDriver):
             trail.append(
                 "county via member ZIP" if q.member_zip else f"county via clinic ZIP {q.zip_code}"
             )
+        # A multi-county ZIP raises the "Select county" modal instead of committing inline. It must be
+        # answered — or declined — before anything else, because the Select button below is not part
+        # of it and the plan list stays empty until it is dealt with.
+        if self._county_modal(page):
+            resolved, why = self._resolve_county(page)
+            trail.append(why)
+            if not resolved:
+                return _Pin(None, why), trail
         # "Plans will populate upon location selection" — the plan list does not exist until the
         # location is *committed* with the Select button. Filling the ZIP is not enough.
-        if self._click_any(page, "[data-testid*='location-select']", "Select", timeout_ms=6_000):
+        elif self._click_any(page, "[data-testid*='location-select']", "Select", timeout_ms=6_000):
             trail.append("location committed (Select)")
         self._dismiss_overlays(page)  # a fresh coachmark appears on the plan-selection step
 
@@ -350,6 +371,84 @@ class UhcFindCareDriver(PortalDriver):
                         labels=labels, list_url=list_url), trail
         return _Pin(None, f"no plan matched {q.plan!r}", labels=labels, list_url=list_url), trail + [
             f"no plan matched {q.plan!r} in the plan list ({len(labels)} offered)"]
+
+    # --- the county step ---------------------------------------------------------------------------
+
+    def _county_modal(self, page: Page) -> bool:
+        """Whether UHC is asking which county the member lives in."""
+        for sel in _COUNTY_TRIGGER:
+            try:
+                if page.locator(sel).first.is_visible():
+                    return True
+            except (PlaywrightTimeout, PlaywrightError, AttributeError):
+                continue
+        return False
+
+    def _county_options(self, page: Page) -> list[str]:
+        """The counties on offer, in portal order. Opens the dropdown to read them."""
+        for sel in _COUNTY_TRIGGER:
+            try:
+                page.locator(sel).first.click()
+                page.wait_for_timeout(1_500)
+                opts = page.locator("[role=option]:visible")
+                names = [(opts.nth(i).inner_text() or "").strip() for i in range(opts.count())]
+                if names:
+                    return names
+            except (PlaywrightTimeout, PlaywrightError, AttributeError):
+                continue
+        return []
+
+    def _choose_county(self, page: Page, index: int) -> bool:
+        """Pick the index-th county and submit the modal as a guest."""
+        try:
+            opts = page.locator("[role=option]:visible")
+            if opts.count() <= index:
+                return False
+            opts.nth(index).click()
+            page.wait_for_timeout(1_000)
+        except (PlaywrightTimeout, PlaywrightError):
+            return False
+        for sel in _COUNTY_SUBMIT:
+            try:
+                btn = page.locator(sel).first
+                btn.wait_for(state="visible", timeout=6_000)
+                btn.click()
+            except (PlaywrightTimeout, PlaywrightError):
+                continue
+            self._settle(page, 3_000)
+            self._dismiss_overlays(page)
+            return True
+        return False
+
+    def _resolve_county(self, page: Page) -> tuple[bool, str]:
+        """Answer the county modal, or refuse to. Returns (resolved, reason-for-the-trail).
+
+        A ZIP is not a county, and on this portal the county picks the PLAN LIST. Measured across
+        fresh contexts for 30101 (Acworth): Cherokee offers 11 plans, Cobb 12, Bartow and Paulding 14,
+        and the products differ — Cobb alone carries GA-D001, only Bartow/Paulding carry GA-2 (PPO).
+        Choosing one on the member's behalf is therefore choosing a network for them, which is the
+        single failure this layer exists to prevent. So: one county is an answer, several is a
+        decline that names them, and a human who knows where the member lives can finish it.
+
+        Deliberately NOT "try each county and compare": the portal caches the first county's plan
+        list. Re-entering through the Edit control and selecting Paulding, then Cherokee, returned
+        Cobb's 12 both times — identical to the first pick. Only a fresh browser context reproduces
+        the real per-county lists, so an in-session comparison would compare one list with itself and
+        conclude the county did not matter. A stale UI is a bad oracle.
+        """
+        counties = self._county_options(page)
+        if not counties:
+            return False, ("UHC asked which county the member lives in, but the modal listed none — "
+                           "the plan list cannot be reached")
+        if len(counties) == 1:
+            if self._choose_county(page, 0):
+                return True, f"county {counties[0]} (the only one for this ZIP)"
+            return False, f"county {counties[0]} was the only option but could not be selected"
+        return False, (
+            f"the member's ZIP spans {len(counties)} counties ({'; '.join(counties)}) and UHC scopes "
+            f"its plan list by county — these lists genuinely differ — so which county the member "
+            f"lives in cannot be determined from a ZIP alone"
+        )
 
     def _plan_list(self, page: Page) -> tuple[tuple[str, ...], str | None]:
         """The plan options on screen, in portal order, plus the URL they are listed at.
@@ -392,19 +491,21 @@ class UhcFindCareDriver(PortalDriver):
             positive evidence wherever it is found, absence needs proof we searched the right network.
         """
         if not pin.labels or not pin.list_url:
+            # `pin.why` carries whatever stopped the walk — an unanswerable county, an empty list —
+            # and it must survive into the note, or the capture reads as a mysterious blank.
             return result(
                 PortalStatus.UNKNOWN,
-                f"The plan string {q.plan!r} matched no plan, and the walk never reached a readable "
-                f"plan list, so there was no network to search NPI {q.npi} in. UHC's un-pinned "
-                f"directory is not a fallback: without a plan it returns no results for anyone.",
+                f"UHC Find Care could not be searched for NPI {q.npi}: {pin.why}. Without a plan "
+                f"list there is no network to search in, and UHC's un-pinned directory is not a "
+                f"fallback — without a plan it returns no results for anyone.",
                 screenshot=shot("no-plan-list"),
             )
 
         total = len(pin.labels)
         seen: list[tuple[str, bool, str | None]] = []
         for n, i in enumerate(_sweep_indices(total, _SWEEP_MAX_PLANS)):
-            if not self._repin(page, pin.list_url, i, first=(n == 0)):
-                break  # a wedged re-pin is fewer plans searched, not a negative result
+            if not self._repin(page, pin.list_url, i, first=(n == 0), expect=pin.labels[i]):
+                break  # a wedged or shifted list is fewer plans searched, not a negative result
             found, _count, matched, _kind = self._find_provider(page, q)
             seen.append((pin.labels[i], found, matched))
             if len({f for _, f, _ in seen}) > 1:
@@ -454,12 +555,19 @@ class UhcFindCareDriver(PortalDriver):
             result_count=0, screenshot=shot("sweep-absent"),
         )
 
-    def _repin(self, page: Page, list_url: str, index: int, *, first: bool = False) -> bool:
+    def _repin(self, page: Page, list_url: str, index: int, *, first: bool = False,
+               expect: str | None = None) -> bool:
         """Select the index-th plan, returning to the plan list first when we have already left it.
 
         The return trip is a plain `goto`: the committed location survives it and the full list
         re-renders (verified live 2026-08-06, ~9s), which is what keeps a sweep near the cost of the
         single walk it replaces instead of multiplying it.
+
+        `expect` is the label the caller believes sits at `index`, and it is checked AFTER navigating.
+        The re-render is not always faithful: measured live, a re-navigation returned a ONE-plan list
+        where twelve had been captured. Clicking position `index` of a list that has shifted searches
+        one plan while the note names another — a confident answer about a plan we never looked at,
+        which is worse than searching one plan fewer. So a shifted list declines instead.
         """
         if not first:
             try:
@@ -468,6 +576,10 @@ class UhcFindCareDriver(PortalDriver):
                 return False
             self._settle(page, 2_500)
             self._dismiss_overlays(page)
+            if expect is not None:
+                now, _ = self._plan_list(page)
+                if index >= len(now) or now[index] != expect:
+                    return False
         for sel in _PLAN_SURFACES:
             try:
                 loc = page.locator(f"{sel}:visible")
