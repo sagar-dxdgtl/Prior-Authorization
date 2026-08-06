@@ -103,6 +103,57 @@ _COUNTY_SUBMIT = (
     "[role=dialog] button:has-text('Search as guest')",
 )
 
+# The plan list the SPA renders from, carrying the CMS identifier the rendered label does not:
+# {"planName": "AARP Medicare Advantage from UHC GA-5 (HMO-POS)", "planIdentifier": "H5322-047-001"}
+# — contract H5322 / PBP 047 / segment 001. `plan_match` ranks identifiers above every kind of word
+# overlap, and a real 271 gives contract+PBP rather than marketing words, so reading this store is
+# what lets a 271 pin exactly instead of scoring adjectives.
+#
+# It is also FRESHER than the DOM. Measured 2026-08-06: re-picking a county left the rendered list
+# stuck at the first county's 12 plans while this store correctly moved to 14 (segment 002) and then
+# 11 (segment 001). Where the two disagree the store is right — but see `_plan_options` for why a
+# disagreement makes us drop the identifiers rather than trust them.
+_PLAN_STORE_JS = """() => {
+  const raw = sessionStorage.getItem('availablePlans');
+  if (!raw) return null;
+  const out = [];
+  for (const grp of JSON.parse(raw)) {
+    for (const p of (grp.planDetails || [])) {
+      if (p && p.planName) out.push([p.planName, p.planIdentifier || null]);
+    }
+  }
+  return out;
+}"""
+
+# A CMS plan id, as this portal writes it: contract-PBP-segment, e.g. H5322-047-001.
+_PLAN_ID = re.compile(r"^([HRSE]\d{4})-(\d{3})-(\d{3})$", re.I)
+
+
+def _unsegmented(plan_id: str | None) -> bool:
+    """Whether this plan has NO service-area segments, i.e. exactly one version of it exists.
+
+    CMS segments partition a plan's service area by county, and segment 000 means "not segmented".
+    That is precisely what makes a county irrelevant: measured across all four counties of ZIP 30101,
+    every 000 plan (R2604-002-000, H2001-819-000, …) was byte-identical wherever it was offered,
+    while every segmented plan split — H5322-047-001 in Cherokee/Cobb against H5322-047-002 in
+    Bartow/Paulding. So a 000 plan cannot be a different network depending on which county the
+    member lives in, and a segmented one can.
+    """
+    m = _PLAN_ID.match((plan_id or "").strip())
+    return bool(m) and m.group(3) == "000"
+
+
+def _match_key(name: str, plan_id: str | None) -> str:
+    """The string `plan_match` scores: the label plus its identifier in both written forms.
+
+    Hyphenated ("H5322-047-001") survives for a 271 that writes it that way; the concatenated form
+    ("H5322047001") is what `plan_match.identifiers` decomposes into contract / contract+PBP /
+    contract+PBP+segment, so a 271 naming only the contract still matches.
+    """
+    if not plan_id:
+        return name
+    return f"{name} {plan_id} {plan_id.replace('-', '')}"
+
 # Waiting is condition-based, not clock-based: see `_settle` and `_await_suggestions` for the measured
 # reasons. Both caps exist only so a wedged portal cannot hang a walk forever — in a healthy run
 # neither is reached.
@@ -345,7 +396,7 @@ class UhcFindCareDriver(PortalDriver):
         # answered — or declined — before anything else, because the Select button below is not part
         # of it and the plan list stays empty until it is dealt with.
         if self._county_modal(page):
-            resolved, why = self._resolve_county(page)
+            resolved, why = self._resolve_county(page, q)
             trail.append(why)
             if not resolved:
                 return _Pin(None, why), trail
@@ -357,9 +408,10 @@ class UhcFindCareDriver(PortalDriver):
 
         # Read the list BEFORE picking, so a plan string that pins nothing still leaves `_sweep` the
         # options and the URL it needs. Costs one locator read (measured: 0.0s).
-        labels, list_url = self._plan_list(page)
+        options, list_url = self._plan_options(page)
+        labels = tuple(name for name, _ in options)
 
-        m = self._pick_plan(page, q.plan)
+        m = self._pick_plan(page, q.plan, options)
         if m is not None:
             # The basis goes in the trail, not just the label: whether the pin was an identifier
             # match or a word match is what decides if an absence may be read as OON, so a reader
@@ -420,21 +472,29 @@ class UhcFindCareDriver(PortalDriver):
             return True
         return False
 
-    def _resolve_county(self, page: Page) -> tuple[bool, str]:
+    def _resolve_county(self, page: Page, q: PortalQuery) -> tuple[bool, str]:
         """Answer the county modal, or refuse to. Returns (resolved, reason-for-the-trail).
 
         A ZIP is not a county, and on this portal the county picks the PLAN LIST. Measured across
         fresh contexts for 30101 (Acworth): Cherokee offers 11 plans, Cobb 12, Bartow and Paulding 14,
         and the products differ — Cobb alone carries GA-D001, only Bartow/Paulding carry GA-2 (PPO).
-        Choosing one on the member's behalf is therefore choosing a network for them, which is the
-        single failure this layer exists to prevent. So: one county is an answer, several is a
-        decline that names them, and a human who knows where the member lives can finish it.
+        Choosing one on the member's behalf is choosing a network for them, which is the single
+        failure this layer exists to prevent.
 
-        Deliberately NOT "try each county and compare": the portal caches the first county's plan
-        list. Re-entering through the Edit control and selecting Paulding, then Cherokee, returned
-        Cobb's 12 both times — identical to the first pick. Only a fresh browser context reproduces
-        the real per-county lists, so an in-session comparison would compare one list with itself and
-        conclude the county did not matter. A stale UI is a bad oracle.
+        But the county only matters when it can change the ANSWER, and that is checkable. UHC's plan
+        ids carry the CMS segment, and segments are exactly how a plan's service area is split by
+        county: `H5322-047-001` in Cherokee/Cobb against `H5322-047-002` in Bartow/Paulding, while
+        every unsegmented `-000` plan is one and the same wherever it is sold. So when the member's
+        plan resolves here to an unsegmented id, no county could have produced a different plan or a
+        different network, and there is nothing left to guess — proceed. When it resolves to a
+        segmented id, or does not resolve at all, the county genuinely decides and we decline, naming
+        the counties so a human who knows where the member lives can finish it.
+
+        Why the check runs against THIS county's list rather than all of them: only the first county
+        chosen in a session can actually be searched. Re-picking through the Edit control updates the
+        store but leaves the rendered list on the first pick, and a reload reverts the choice
+        outright (measured 2026-08-06). The unsegmented test needs one list, which is the one list
+        we can trust.
         """
         counties = self._county_options(page)
         if not counties:
@@ -444,26 +504,70 @@ class UhcFindCareDriver(PortalDriver):
             if self._choose_county(page, 0):
                 return True, f"county {counties[0]} (the only one for this ZIP)"
             return False, f"county {counties[0]} was the only option but could not be selected"
+
+        named = "; ".join(counties)
+        if not self._choose_county(page, 0):
+            return False, (f"the member's ZIP spans {len(counties)} counties ({named}) and none "
+                           f"could be selected to read a plan list")
+        options, _ = self._plan_options(page)
+        m = self._resolve_plan(options, q.plan)
+        if m is not None:
+            plan_id = options[m.index][1]
+            if _unsegmented(plan_id):
+                return True, (
+                    f"county {counties[0]} of {len(counties)} the ZIP spans ({named}) — safe: the "
+                    f"member's plan is {options[m.index][0]} ({plan_id}), which CMS does not segment "
+                    f"by county, so no other county could have given a different plan or network"
+                )
+            return False, (
+                f"the member's ZIP spans {len(counties)} counties ({named}) and their plan is "
+                f"{options[m.index][0]} ({plan_id}) — a county-SEGMENTED plan, so which county they "
+                f"live in decides which segment's network applies and it cannot be read off a ZIP"
+            )
         return False, (
-            f"the member's ZIP spans {len(counties)} counties ({'; '.join(counties)}) and UHC scopes "
-            f"its plan list by county — these lists genuinely differ — so which county the member "
-            f"lives in cannot be determined from a ZIP alone"
+            f"the member's ZIP spans {len(counties)} counties ({named}) whose UHC plan lists "
+            f"genuinely differ, and the plan string {q.plan!r} does not resolve to any plan in "
+            f"{counties[0]}, so neither the county nor the plan can be pinned"
         )
 
     def _plan_list(self, page: Page) -> tuple[tuple[str, ...], str | None]:
-        """The plan options on screen, in portal order, plus the URL they are listed at.
+        """The plan names on screen, in portal order, plus the URL they are listed at.
 
         Returns `((), None)` for any page that cannot be read — a driver that could not see the list
         must degrade to "no plan list", never to a partial one that a sweep would treat as complete.
         """
+        options, url = self._plan_options(page)
+        return tuple(name for name, _ in options), url
+
+    def _plan_options(self, page: Page) -> tuple[tuple[tuple[str, str | None], ...], str | None]:
+        """(plan name, CMS plan id) per option, in portal order, plus the list URL.
+
+        The rendered list is what we must CLICK, so it defines the order and the count. The store
+        (`_PLAN_STORE_JS`) supplies the identifiers the labels lack. They are zipped only when they
+        agree on length: when a stale render disagrees with the store — which happens after a county
+        is re-picked — pairing them by position would attach one plan's identifier to another plan's
+        row, which is a worse error than having no identifier at all. So a mismatch drops the
+        identifiers and keeps the rendered labels, and the driver degrades to name matching.
+        """
+        labels: tuple[str, ...] = ()
+        url = None
         for sel in _PLAN_SURFACES:
             try:
                 loc = page.locator(f"{sel}:visible")
                 if loc.count():
-                    return tuple(self._plan_labels(loc)), page.url
+                    labels, url = tuple(self._plan_labels(loc)), page.url
+                    break
             except (PlaywrightTimeout, PlaywrightError, AttributeError):
                 continue
-        return (), None
+        if not labels:
+            return (), None
+        try:
+            stored = page.evaluate(_PLAN_STORE_JS)
+        except (PlaywrightTimeout, PlaywrightError, AttributeError):
+            stored = None
+        if stored and len(stored) == len(labels):
+            return tuple((labels[i], stored[i][1]) for i in range(len(labels))), url
+        return tuple((name, None) for name in labels), url
 
     # --- the unpinnable-plan path ---------------------------------------------------------------
 
@@ -718,8 +822,32 @@ class UhcFindCareDriver(PortalDriver):
                 out.append("")
         return out
 
-    def _pick_plan(self, page: Page, plan: str | None):
-        """Pin the member's plan in the portal's list. Returns the `PlanMatch` clicked, or None."""
+    def _resolve_plan(self, options, plan: str | None):
+        """Match the 271's plan against these options — identifiers first, then bare names.
+
+        Two passes, deliberately. The enriched key is what reaches tier 1, the identifier tier, which
+        is the only thing that can license an out-of-network reading. But decorating a label with its
+        id also defeats tier 1.5, which asks whether the plan string simply IS one of the labels:
+        "UnitedHealthcare Group Medicare Advantage (PPO)" is exactly a label but is not exactly
+        "UnitedHealthcare Group Medicare Advantage (PPO) H2001-819-000 H2001819000". Losing an exact
+        name match to our own decoration would be a regression, so the names get their own pass.
+        """
+        if not options or not plan:
+            return None
+        m = self.choose_plan([_match_key(n, i) for n, i in options], plan)
+        if m is None:
+            m = self.choose_plan([n for n, _ in options], plan)
+        if m is not None:
+            m.label = options[m.index][0]  # report the plan's own name, never the matching key
+        return m
+
+    def _pick_plan(self, page: Page, plan: str | None, options=None):
+        """Pin the member's plan in the portal's list. Returns the `PlanMatch` clicked, or None.
+
+        `options` are the (name, plan id) pairs already read by the caller; matching runs against
+        `_match_key` so the CMS identifier counts, which is the only thing that reaches tier 1 and
+        therefore the only thing that can license an out-of-network reading.
+        """
         if not plan:
             return None
         for sel in _PLAN_SURFACES:
@@ -727,7 +855,10 @@ class UhcFindCareDriver(PortalDriver):
                 loc = page.locator(f"{sel}:visible")
                 if not loc.count():
                     continue
-                m = self.choose_plan(self._plan_labels(loc), plan)
+                opts = options if options is not None else [(x, None) for x in self._plan_labels(loc)]
+                if len(opts) != loc.count():
+                    opts = [(x, None) for x in self._plan_labels(loc)]
+                m = self._resolve_plan(opts, plan)
                 if m is None:
                     continue
                 loc.nth(m.index).click()

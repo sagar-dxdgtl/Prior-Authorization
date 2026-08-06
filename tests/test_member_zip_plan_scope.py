@@ -102,7 +102,8 @@ def _walk(member_zip, clinic_zip="34986"):
     d._dismiss_overlays = lambda page: None
     d._click_any = lambda page, sel, label, timeout_ms=8_000: True
     d._commit_location = lambda page, z: (committed.append(z), True)[1]
-    d._pick_plan = lambda page, plan: None  # stop after the location step; we only assert the ZIP
+    # stop after the location step; we only assert the ZIP
+    d._pick_plan = lambda page, plan, options=None: None
     pin, trail = d._walk_to_plan(
         object(),
         PortalQuery(payer_key="uhc", npi="1497741409", plan="AARP … FL-0026 (PPO)",

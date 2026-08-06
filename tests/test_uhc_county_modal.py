@@ -48,12 +48,23 @@ MEMBER = PortalQuery(
 )
 
 
+# The real Cobb list with the CMS ids from sessionStorage.availablePlans, read live 2026-08-06.
+COBB_OPTIONS = [
+    ("AARP Medicare Advantage from UHC GA-5 (HMO-POS)", "H5322-047-001"),      # segmented
+    ("UHC Complete Care Support GS-1A (Regional PPO C-SNP)", "R2604-002-000"),
+    ("UHC Dual Complete GA-D001 (PPO D-SNP)", "H2406-052-000"),
+    ("UHC Dual Complete GA-S1 (PPO D-SNP)", "H3256-005-001"),                  # segmented
+    ("UnitedHealthcare Group Medicare Advantage (PPO)", "H2001-819-000"),
+]
+
+
 class _CountyDriver(UhcFindCareDriver):
     """Scripts the modal so the DECISION is what gets tested, not Playwright."""
 
-    def __init__(self, counties, *, modal=True):
+    def __init__(self, counties, *, modal=True, options=()):
         self.counties = counties
         self.modal = modal
+        self.options = tuple(options)
         self.chosen: list[int] = []
 
     def _county_modal(self, page):
@@ -66,29 +77,67 @@ class _CountyDriver(UhcFindCareDriver):
         self.chosen.append(index)
         return True
 
+    def _plan_options(self, page):
+        return self.options, "url"
+
+
+def _resolve(d, plan="UnitedHealthcare Group Medicare Advantage (PPO)"):
+    q = PortalQuery(payer_key="uhc", npi="1902811656", plan=plan, zip_code="30144",
+                    member_zip="30101")
+    return d._resolve_county(object(), q)
+
 
 def test_one_county_is_selected_and_the_walk_continues():
     """No ambiguity: a ZIP inside a single county needs no choice made on the member's behalf."""
     d = _CountyDriver(["Cobb, GA"])
-    ok, why = d._resolve_county(object())
+    ok, why = _resolve(d)
     assert ok is True
     assert d.chosen == [0]
     assert "Cobb, GA" in why
 
 
-def test_several_counties_decline_rather_than_guess():
-    """The plan lists genuinely differ across these four — picking one is picking a network."""
-    d = _CountyDriver(ACWORTH_COUNTIES)
-    ok, why = d._resolve_county(object())
+def test_an_unsegmented_plan_makes_the_county_irrelevant_and_proceeds():
+    """H2001-819-000 is segment 000 — CMS does not split it by county, and it was byte-identical in
+    all four counties of ZIP 30101. No other county could have given a different network, so there
+    is nothing to guess and declining would be needless."""
+    d = _CountyDriver(ACWORTH_COUNTIES, options=COBB_OPTIONS)
+    ok, why = _resolve(d, "UnitedHealthcare Group Medicare Advantage (PPO)")
+    assert ok is True
+    assert d.chosen == [0]
+    assert "H2001-819-000" in why
+    assert "segment" in why.lower() or "does not segment" in why.lower()
+
+
+def test_a_county_segmented_plan_still_declines():
+    """H5322-047-001 in Cherokee/Cobb vs -002 in Bartow/Paulding: the county picks the segment, so
+    it picks the network."""
+    d = _CountyDriver(ACWORTH_COUNTIES, options=COBB_OPTIONS)
+    ok, why = _resolve(d, "AARP Medicare Advantage from UHC GA-5 (HMO-POS)")
     assert ok is False
-    assert d.chosen == [], "no county may be selected when the member's is unknown"
-    assert "cannot be determined" in why.lower() or "could not be determined" in why.lower()
+    assert "H5322-047-001" in why
+    assert "segment" in why.lower()
+
+
+def test_a_plan_that_resolves_nowhere_declines_and_names_the_counties():
+    d = _CountyDriver(ACWORTH_COUNTIES, options=COBB_OPTIONS)
+    ok, why = _resolve(d, "Some Plan Nobody Sells")
+    assert ok is False
+    for county in ACWORTH_COUNTIES:
+        assert county in why
+
+
+def test_several_counties_with_no_readable_plan_list_decline():
+    """Without a list there is nothing to test the segment against."""
+    d = _CountyDriver(ACWORTH_COUNTIES, options=())
+    ok, why = _resolve(d)
+    assert ok is False
+    assert "Bartow, GA" in why
 
 
 def test_the_decline_names_every_county_so_a_human_can_finish_it():
     """§8: a staffer who knows where the member lives can act on this; 'ambiguous' alone cannot."""
-    d = _CountyDriver(ACWORTH_COUNTIES)
-    _, why = d._resolve_county(object())
+    d = _CountyDriver(ACWORTH_COUNTIES, options=COBB_OPTIONS)
+    _, why = _resolve(d, "AARP Medicare Advantage from UHC GA-5 (HMO-POS)")
     for county in ACWORTH_COUNTIES:
         assert county in why
 
@@ -96,7 +145,7 @@ def test_the_decline_names_every_county_so_a_human_can_finish_it():
 def test_an_empty_county_list_is_a_decline_not_a_selection():
     """A modal we cannot read must never fall through as if it had been answered."""
     d = _CountyDriver([])
-    ok, why = d._resolve_county(object())
+    ok, why = _resolve(d)
     assert ok is False and d.chosen == []
     assert why
 
@@ -108,9 +157,54 @@ def test_a_failed_selection_is_reported_as_a_decline():
         def _choose_county(self, page, index):
             return False
 
-    ok, why = _Stuck(["Cobb, GA"])._resolve_county(object())
+    ok, why = _resolve(_Stuck(["Cobb, GA"]))
     assert ok is False
     assert "cobb" in why.lower()
+
+
+# --- the segment rule itself ----------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("plan_id,expected", [
+    ("H2001-819-000", True), ("R2604-002-000", True), ("H2406-052-000", True),
+    ("H5322-047-001", False), ("H5322-047-002", False), ("H3256-005-001", False),
+    (None, False), ("", False), ("GA-5", False), ("nonsense", False),
+])
+def test_only_segment_000_counts_as_unsegmented(plan_id, expected):
+    from network_probe.portal.drivers.uhc_findcare import _unsegmented
+
+    assert _unsegmented(plan_id) is expected
+
+
+def test_the_match_key_exposes_the_identifier_in_both_written_forms():
+    """A 271 may write H5322-047-001 or H5322047001, and `plan_match` decomposes the concatenated
+    form into contract / contract+PBP / contract+PBP+segment."""
+    from network_probe.portal.drivers.uhc_findcare import _match_key
+    from network_probe.portal.plan_match import identifiers
+
+    key = _match_key("AARP Medicare Advantage from UHC GA-5 (HMO-POS)", "H5322-047-001")
+    ids = identifiers(key)
+    assert {"H5322", "H5322047", "H5322047001"} <= ids
+
+
+def test_a_plan_with_no_identifier_matches_on_its_name_alone():
+    from network_probe.portal.drivers.uhc_findcare import _match_key
+
+    assert _match_key("UHC Dual Complete GA-S1 (PPO D-SNP)", None) == "UHC Dual Complete GA-S1 (PPO D-SNP)"
+
+
+def test_a_real_271_contract_now_pins_where_a_name_could_not():
+    """The point of reading the store. 'H2001819000' identifies exactly one plan; the rendered label
+    'UnitedHealthcare Group Medicare Advantage (PPO)' shares only non-distinctive words with it."""
+    from network_probe.portal.drivers.uhc_findcare import _match_key
+    from network_probe.portal.plan_match import match_plan
+
+    keys = [_match_key(n, i) for n, i in COBB_OPTIONS]
+    m = match_plan("UHC MEDICARE ADVANTAGE H2001819000", keys)
+    assert m is not None and m.index == 4
+    assert m.confidence == "high" and m.confirms_network, (
+        "an identifier match is the only thing that may license an out-of-network reading"
+    )
 
 
 # --- the walk must stop, and the capture must be UNKNOWN ------------------------------------------
@@ -131,7 +225,7 @@ class _WalkDriver(_CountyDriver):
     def _plan_list(self, page):
         return (), None
 
-    def _pick_plan(self, page, plan):
+    def _pick_plan(self, page, plan, options=None):
         return None
 
 
