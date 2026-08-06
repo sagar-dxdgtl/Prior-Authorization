@@ -80,6 +80,30 @@ county-scoped, and ACA is rated by area but was not gated behind a county here.
 a claim never established. The three cases are distinct and must stay distinct: unsegmented id →
 safe; segmented id → the county decides; **no id → unknown**, and say only that.
 
+### What is wired, and what is deliberately dormant
+
+The web form sends **only the Clinic ZIP**. It does not send a member ZIP, and that is a product
+decision, not an oversight: a walk must not be scoped by a value nobody on screen entered or could
+see. `member_zip` stays supported end-to-end all the same — `PortalQuery`, `PortalCaptureRequest`,
+the UHC driver and the Aetna Medicare driver all honour it — so an API caller can supply it and a
+form field would activate it with no backend change.
+
+Consequence, so nobody hunts for a bug that is not there:
+
+| function | fires in the UI path? |
+|---|---|
+| `describe()` | **yes** — names the clinic ZIP's counties on a county-segmented plan |
+| `counties_for_zip()`, `spans_multiple_counties()` | yes |
+| `same_county()` | **no** — needs two ZIPs, and the form supplies one |
+
+`same_county()` is therefore reachable only via `/api/portal/capture` with an explicit `member_zip`.
+It is tested directly and is not dead code. Do not delete it, and do not "activate" it by
+reintroducing a hidden ZIP read from the 271 — that is the exact thing that was removed.
+
+The accepted cost of one ZIP: MA plans are sold by county of residence, so a patient treated outside
+their home county can hold a plan absent from the clinic county's list. The driver reports that as
+unpinnable, or flags a segmented plan, rather than guessing — failing in the safe direction.
+
 ### `land_share` is not a decision
 
 Each county carries its share of the ZIP's land area, for ordering and for showing a human which
