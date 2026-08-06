@@ -118,6 +118,23 @@ def test_a_county_segmented_plan_still_declines():
     assert "segment" in why.lower()
 
 
+def test_a_plan_with_NO_identifier_is_not_called_county_segmented():
+    """County-scoping is a MEDICARE rule. Measured 2026-08-06 on the same multi-county ZIP, UHC
+    raises the county modal on the Medicare AND Medicaid paths but not on Commercial or ACA — and
+    Medicaid/commercial options carry no CMS contract id at all (commercial returned 87 labels, every
+    identifier None). `_unsegmented(None)` is False, so those plans fell through to the "this plan is
+    county-SEGMENTED" message, asserting a split that was never established. Unknown is not segmented.
+    """
+    opts = [("Amerigroup Community Care", None), ("Peach State Health Plan", None)]
+    d = _CountyDriver(ACWORTH_COUNTIES, options=opts)
+    ok, why = _resolve(d, "Amerigroup Community Care")
+    assert ok is False
+    assert "segmented" not in why.lower(), f"claims a segmentation it never established: {why}"
+    assert "no plan identifier" in why.lower()
+    for county in ACWORTH_COUNTIES:
+        assert county in why
+
+
 def test_a_plan_that_resolves_nowhere_declines_and_names_the_counties():
     d = _CountyDriver(ACWORTH_COUNTIES, options=COBB_OPTIONS)
     ok, why = _resolve(d, "Some Plan Nobody Sells")

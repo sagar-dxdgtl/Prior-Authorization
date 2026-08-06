@@ -525,10 +525,20 @@ class UhcFindCareDriver(PortalDriver):
                     f"member's plan is {options[m.index][0]} ({plan_id}), which CMS does not segment "
                     f"by county, so no other county could have given a different plan or network"
                 )
+            if _PLAN_ID.match((plan_id or "").strip()):
+                return False, (
+                    f"the member's ZIP spans {len(counties)} counties ({named}) and their plan is "
+                    f"{options[m.index][0]} ({plan_id}) — a county-SEGMENTED plan, so which county "
+                    f"they live in decides which segment's network applies and it cannot be read off "
+                    f"a ZIP"
+                )
+            # No CMS identifier at all — the case for Medicaid and commercial, which have no
+            # contract/PBP/segment. "Unknown" is NOT "segmented": claiming the plan is split by
+            # county would assert something never established, so say what is actually true.
             return False, (
-                f"the member's ZIP spans {len(counties)} counties ({named}) and their plan is "
-                f"{options[m.index][0]} ({plan_id}) — a county-SEGMENTED plan, so which county they "
-                f"live in decides which segment's network applies and it cannot be read off a ZIP"
+                f"the member's ZIP spans {len(counties)} counties ({named}) whose plan lists are "
+                f"scoped by county, and their plan {options[m.index][0]!r} carries no plan "
+                f"identifier — so whether it is the same plan in each of them cannot be established"
             )
         return False, (
             f"the member's ZIP spans {len(counties)} counties ({named}) whose UHC plan lists "

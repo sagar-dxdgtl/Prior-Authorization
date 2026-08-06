@@ -55,6 +55,31 @@ reproduced the portal exactly on all three, which is why it was chosen.
 swapped for one that collapses ZIPs to a single county, and
 `test_the_crosswalk_is_national_and_not_a_truncated_download` catches a partial rebuild.
 
+### County-scoping is per LINE OF BUSINESS — it is not universal
+
+County service areas are a **Medicare** rule, confirmed by CMS: *"Each State County Code (SCC) in a
+Plan's service area belongs to only one Segment. This enables MARx to automate the assignment of
+Segment IDs based upon the residence SCC of the beneficiary."* Two payers implement it the same way —
+UHC Find Care and Aetna's Medicare site (which has an explicit county select, `countyCode 17031 /
+Cook County`).
+
+Measured on UHC's guest flow, same multi-county ZIP (30101), 2026-08-06:
+
+| line | county modal? | identifiers on the plan options |
+|---|---|---|
+| Medicare | **yes** | CMS contract-PBP-segment (`H5322-047-001`) |
+| Medicaid | **yes** | none |
+| Commercial | no | none (87 network names: Charter, Choice, …) |
+| ACA Marketplace | no | non-CMS (`912`) |
+
+So the segment rule applies to **Medicare only**. Commercial networks are contract-scoped, not
+county-scoped, and ACA is rated by area but was not gated behind a county here.
+
+⚠ **"No identifier" is NOT "segmented."** `_unsegmented(None)` is False, so a plan with no CMS id
+(every Medicaid and commercial plan) once fell through to a message asserting it was county-split —
+a claim never established. The three cases are distinct and must stay distinct: unsegmented id →
+safe; segmented id → the county decides; **no id → unknown**, and say only that.
+
 ### `land_share` is not a decision
 
 Each county carries its share of the ZIP's land area, for ordering and for showing a human which
