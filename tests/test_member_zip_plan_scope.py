@@ -119,7 +119,18 @@ def test_the_plan_step_commits_the_MEMBER_zip_when_present():
 
 
 def test_it_falls_back_to_the_clinic_zip_when_the_271_gave_no_address():
-    """Old behaviour, and still right whenever the member is treated where they live."""
+    """This is now the path the PRODUCT takes, not just a fallback.
+
+    Decided 2026-08-06: the web form sends only the Clinic ZIP a user typed, and no longer forwards
+    the member's residence ZIP it had been reading out of the 271 — a walk should not be scoped by a
+    value nobody on screen entered or could see. `member_zip` stays supported end-to-end (the driver,
+    the API and the tests above all still honour it) for the day a field is added for it.
+
+    The accepted cost, measured: MA plans are sold by county of residence and UHC's plan step asks
+    "select the area where you live", so a patient treated outside their home county can have a plan
+    that is not in the clinic county's list. The driver reports that as unpinnable rather than
+    guessing, which is the safe direction.
+    """
     committed, trail = _walk(member_zip=None, clinic_zip="34986")
     assert committed == ["34986"]
     assert any("clinic ZIP 34986" in s for s in trail)

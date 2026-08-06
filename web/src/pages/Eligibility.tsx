@@ -314,10 +314,19 @@ export default function Eligibility() {
                 state: submitted.state ?? null,
                 city: submitted.city ?? null,
                 zip: submitted.zip ?? null,
-                // From the payer's own 271, not the form. UHC Medicare scopes its plan list by the
-                // member's county, so without this a member treated outside their home county has
-                // an unpinnable plan and the walk can never confirm a network.
-                member_zip: result?.member_zip ?? null,
+                // The Clinic ZIP typed on this form is the ONLY location sent, deliberately. It used
+                // to be joined by the member's residence ZIP read out of the 271, which then won the
+                // plan-list step — so a walk could be scoped by a ZIP nobody on screen had entered or
+                // could see. One visible, user-controlled input beats a hidden one.
+                //
+                // The trade is real and is accepted: Medicare Advantage plans are sold BY COUNTY OF
+                // RESIDENCE, and UHC's plan step asks "select the area where you live". Measured
+                // 2026-08-06, the county lists are disjoint — Cobb 12 plans, Cherokee 11, Bartow 14,
+                // with GA-D001 only in Cobb and GA-2 (PPO) only in Bartow/Paulding. So a patient who
+                // travels in from the next county may have a plan that is not in the clinic county's
+                // list at all, and the driver will report it as unpinnable rather than guess.
+                // `member_zip` stays supported end-to-end for the day a field is added for it.
+                member_zip: null,
                 tin: submitted.tin ?? null,
                 // The verdict as it stands now, so the portal answer is reconciled against it
                 // rather than displayed beside it.
