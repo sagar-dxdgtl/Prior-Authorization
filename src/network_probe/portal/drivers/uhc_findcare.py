@@ -838,7 +838,14 @@ class UhcFindCareDriver(PortalDriver):
         if m is None:
             m = self.choose_plan([n for n, _ in options], plan)
         if m is not None:
-            m.label = options[m.index][0]  # report the plan's own name, never the matching key
+            name, plan_id = options[m.index]
+            key = _match_key(name, plan_id)
+            m.label = name  # report the plan's own name, never the matching key
+            # The basis is stored and rendered as the audit note, and `plan_match` built it around
+            # whichever string it was handed — which for the identifier pass is the decorated key.
+            # A reader must see the plan, not our scaffolding.
+            if key != name and m.basis:
+                m.basis = m.basis.replace(key, name)
         return m
 
     def _pick_plan(self, page: Page, plan: str | None, options=None):

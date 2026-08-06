@@ -193,6 +193,17 @@ def test_a_plan_with_no_identifier_matches_on_its_name_alone():
     assert _match_key("UHC Dual Complete GA-S1 (PPO D-SNP)", None) == "UHC Dual Complete GA-S1 (PPO D-SNP)"
 
 
+def test_the_audit_note_shows_the_plan_name_not_our_matching_scaffolding():
+    """The basis is stored and rendered. A live run printed
+    'UnitedHealthcare Group Medicare Advantage (PPO) H2001-819-000 H2001819000' into the note,
+    which is the decorated key we match on, not anything the payer calls the plan."""
+    d = UhcFindCareDriver()
+    m = d._resolve_plan(COBB_OPTIONS, "LPPO-UNITEDHEALTHCARE GROUP MEDICARE ADVANTAGE (PP")
+    assert m is not None
+    assert m.label == "UnitedHealthcare Group Medicare Advantage (PPO)"
+    assert "H2001819000" not in m.basis, f"matching scaffolding leaked into the note: {m.basis}"
+
+
 def test_a_real_271_contract_now_pins_where_a_name_could_not():
     """The point of reading the store. 'H2001819000' identifies exactly one plan; the rendered label
     'UnitedHealthcare Group Medicare Advantage (PPO)' shares only non-distinctive words with it."""

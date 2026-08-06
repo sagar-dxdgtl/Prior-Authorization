@@ -60,6 +60,7 @@ _NON_DISTINCTIVE = frozenset({
     "INSURANCE", "GROUP", "NETWORK", "BENEFIT", "BENEFITS", "COVERAGE", "FROM", "WITH", "THE",
     "AND", "FOR", "INC", "LLC", "COMPANY", "MEMBER", "MEMBERS", "CHOICE",  # too generic alone
     "HMO", "PPO", "POS", "EPO", "SNP", "HMOPOS", "PFFS",  # plan TYPE, not plan identity
+    "LPPO", "RPPO",  # Medicare Local / Regional PPO — a plan type, same as HMO/PPO above
     "COMMERCIAL", "EMPLOYER", "INDIVIDUAL", "FAMILY", "MARKETPLACE", "EXCHANGE",
     "STATEWIDE", "NATIONAL", "REGIONAL", "OPEN", "SELECT", "PREFERRED", "STANDARD",
 })
@@ -67,6 +68,30 @@ _NON_DISTINCTIVE = frozenset({
 # separating UHC's "NHP HMO/POS" from "NHP HMO/POS Access", so discarding it made those two options
 # indistinguishable. The bar for this set is "appears in nearly every plan name for a line of business";
 # ACCESS does not clear it.
+
+# The plan TYPE a payer prefixes onto the plan-coverage string: "LPPO-UNITEDHEALTHCARE GROUP MEDICARE
+# ADVANTAGE (PPO)". LPPO/RPPO are Medicare's Local and Regional PPO — the same category as
+# `_NON_DISTINCTIVE`, a type rather than an identity — but this one also has to come OFF the front
+# before the exact tier can ask "is this string one of the labels", because no portal prints it.
+#
+# The pattern is broad, and that is only safe because stripping it is a FALLBACK: `_exact_candidates`
+# tries the string exactly as the payer sent it FIRST. Substituting the stripped form would destroy
+# real plans, and not hypothetically — "EPO Connect IN" is a plan string this system has actually
+# seen, and a substituting version of this pattern rewrites it to "Connect IN". Same for a plan
+# genuinely named "PPO Plus Advantage Select" or "HMO-POS Community Choice".
+_PLAN_TYPE_PREFIX = re.compile(r"^(?:LPPO|RPPO|HMOPOS|HMO|PPO|PFFS|MSA|POS|EPO)[-\s]+", re.I)
+
+# The 271's plan-coverage string is length-capped, and payers write past it. Measured over 41 real
+# plan strings (40 from this system's own audit rows plus a live 271 on 2026-08-06): every value that
+# reached 50 characters was cut dead there, mid-token —
+#
+#     LPPO-UNITEDHEALTHCARE GROUP MEDICARE ADVANTAGE (PP     <- "(PPO)" lost its last two characters
+#     LPPO-AARP MEDICARE ADVANTAGE FROM UHC FL-0026 (PPO
+#
+# and none exceeded it. So a string AT the cap is presumed truncated and may match a longer label by
+# prefix; a shorter one is complete and must not, or "Statewide PPO" — a real AZ Blue network in its
+# own right — would silently absorb "Statewide PPO/EPO".
+_TRUNCATION_LEN = 50
 
 _MIN_DISTINCTIVE_TOKENS = 2  # below this, word overlap is noise
 # 3, not 4. Network names carry short but highly discriminating codes — NHP (Neighborhood Health
@@ -140,6 +165,22 @@ def identifiers(text: str | None) -> set[str]:
     return found
 
 
+def _exact_candidates(wanted: str | None) -> list[str]:
+    """Normalised forms of the plan string to try, most literal first.
+
+    The string exactly as the payer sent it, then — only if it differs — the same string with a
+    leading plan-type prefix removed. Order is the whole safety property: because the raw form is
+    tried first, stripping can only ever ADD a match, never take one away. A plan really called
+    "EPO Connect IN" matches as itself before the pattern is ever consulted.
+    """
+    raw = (wanted or "").strip()
+    out = [_exact_key(raw)]
+    stripped = _PLAN_TYPE_PREFIX.sub("", raw, count=1)
+    if stripped != raw:
+        out.append(_exact_key(stripped))
+    return [k for k in out if k]
+
+
 def _exact_key(text: str | None) -> str:
     """Normalised form for deciding "this string IS that label".
 
@@ -205,8 +246,11 @@ def match_plan(wanted: str | None, options: list[str]) -> PlanMatch | None:
     # Confidence stays "medium" — identifier-only is the bar for `confirms_network`, stated in five
     # drivers, and an exact name is still a name: two markets of one payer can print the same network
     # name. This pins the search; it does not license an out-of-network reading.
-    want_exact = _exact_key(wanted)
-    if want_exact:
+    # The string AS SENT first, then the prefix-stripped form. That order is the safety property of
+    # this whole block: every match that resolved before this tier learned about prefixes still
+    # resolves, identically, because the raw form is asked first and returns first. Stripping can only
+    # ever ADD an answer where there was None. See `_exact_candidates`.
+    for want_exact in _exact_candidates(wanted):
         exact = [i for i, label in enumerate(options) if _exact_key(label) == want_exact]
         if len(exact) == 1:
             i = exact[0]
@@ -221,6 +265,37 @@ def match_plan(wanted: str | None, options: list[str]) -> PlanMatch | None:
             )
         if len(exact) > 1:
             return None  # the portal lists the label twice; picking one would be the guess we refuse
+
+    # The same question for a string the 271 cut off at its length cap: a truncated name cannot equal
+    # a label, but it can still name exactly one. Uniqueness is the whole guard — two labels sharing
+    # the surviving prefix is precisely the ambiguity the tie rule refuses, and it is the common case
+    # (…GROUP MEDICARE ADVANTAGE ( fits both the PPO and the HMO product).
+    #
+    # Gated twice over, because a prefix rule is the kind that quietly breaks working matches:
+    #   * it runs only after EVERY exact form above has been tried and declined, so a complete name
+    #     can never lose to a partial one;
+    #   * and only for a string AT the length cap, i.e. one the payer demonstrably could not finish.
+    #     "Statewide PPO" is a real AZ Blue network at 13 characters and stays untouched — without
+    #     this it would silently absorb "Statewide PPO/EPO".
+    # The RAW length is the test: `_exact_key` removes the spaces the cap counted, so a 50-char value
+    # normalises to ~45 and a normalised threshold would miss every truncation there is.
+    if len((wanted or "").strip()) >= _TRUNCATION_LEN:
+        for want_exact in _exact_candidates(wanted):
+            hits = [i for i, label in enumerate(options) if _exact_key(label).startswith(want_exact)]
+            if len(hits) == 1:
+                i = hits[0]
+                return PlanMatch(
+                    index=i, label=options[i], confidence="medium",
+                    tokens=want_tokens & distinctive_tokens(options[i]),
+                    basis=(
+                        f"the 271 cut the plan name off at its {_TRUNCATION_LEN}-character limit "
+                        f"({wanted!r}), and exactly one option continues it ({options[i]!r}). Unique, "
+                        f"so not a guess — but still a name, so it pins the search and does NOT "
+                        f"license an out-of-network reading."
+                    ),
+                )
+            if len(hits) > 1:
+                return None  # several plans survive the truncation; choosing one would be a guess
 
     # --- Tier 2: distinctive-token overlap. Weak, floored, and must have a unique winner.
     scored = sorted(
