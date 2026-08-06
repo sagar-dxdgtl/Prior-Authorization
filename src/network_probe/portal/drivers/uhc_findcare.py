@@ -9,6 +9,22 @@ Observed structure (2026-07-28): the entry URL hydrates into a Find Care shell w
 inputs — `primary-search-input` (keyword: name, NPI, procedure) and `location-search-input`. Plan
 selection is a separate guest step; when the shell exposes it we drive it from the 271's plan string,
 and when we cannot confirm which network was searched the verdict stays UNKNOWN rather than OON.
+
+2026-08-06 — THE UN-PINNED DIRECTORY IS GONE, AND SOME PLAN STRINGS CAN NEVER PIN. Both were measured
+live on Ins Test 3 row 1 (Manayan, NPI 1902811656, Kennesaw GA 30144, "UHC Medicare Advantage GA",
+staff ground truth IN), which took 136s to return "no results".
+
+  * The plan string carries no identifier and exactly ONE distinctive token ("UHC" — MEDICARE and
+    ADVANTAGE are non-distinctive, "GA" is under the 3-char floor), so `match_plan` returns None
+    against any option list. That is arithmetic, not flakiness, and no amount of driver quality fixes
+    it. Client plan strings routinely look like this; see the `_sweep` docstring for the answer.
+  * The `/browse` fallback this driver fell back to is DEAD. With no plan pinned it returned 0 for the
+    NPI, for the surname, for the full name, and for a control search of "Smith", rendering the
+    portal's own `suggestion-list-no-results`. There is no "union of every network UHC sells" to read
+    any more — without a plan the search index is empty, so the fallback cost ~80s and bought nothing.
+
+So an unpinnable plan is now answered by SWEEPING the county's own plan list rather than by guessing
+one plan or falling back to a directory that answers nothing. See `_sweep`.
 """
 
 from __future__ import annotations
@@ -38,6 +54,13 @@ class _Pin:
     name: str | None
     why: str
     confirms: bool = False  # identifier-grade plan match — the only thing that may license an OON
+    #: Every plan the walk saw, in portal order, and the URL they were listed at. Carried on the pin
+    #: rather than returned separately so `_walk_to_plan` keeps its (pin, trail) shape. This is what
+    #: `_sweep` needs when `name` is None: re-navigating to `list_url` restores the committed location
+    #: and re-renders the full list, which is what makes searching several plans affordable (measured
+    #: 2026-08-06: ~9s to return to the list, against ~54s to walk the flow again).
+    labels: tuple[str, ...] = ()
+    list_url: str | None = None
 
 """Observed guest flow (2026-07-28), each step gated on the previous:
 
@@ -51,6 +74,10 @@ class _Pin:
 Going straight to /browse (as the first cut did) yields an *unpinned* generic directory — the page
 even offers "Sign in for the most accurate plan". That path can never justify an OON, which is why the
 walk below is mandatory rather than an optimisation.
+
+2026-08-06: it can no longer justify an IN either, because it returns NOTHING at all without a plan
+(module docstring). `BROWSE` is kept only as the documented end of the flow — reached by pinning a
+plan, never navigated to directly.
 """
 
 ENTRY = "https://findcare.guest.uhc.com/guest-plan-selection"
@@ -58,6 +85,10 @@ BROWSE = "https://findcare.guest.uhc.com/guest-plan-selection/browse"
 
 _SEARCH = "[data-testid='primary-search-input']"
 _LOCATION = "[data-testid='location-search-input']"
+# The portal's OWN empty-state for the typeahead (observed testid: `suggestion-list-no-results`).
+# Keyed on the testid rather than the copy, which varies with the query: "No Results Found" on one
+# search, "No results found. Phone number and NPI require 10 digits." on a short one.
+_NO_RESULTS = "[data-testid*='no-results']"
 
 # Waiting is condition-based, not clock-based: see `_settle` and `_await_suggestions` for the measured
 # reasons. Both caps exist only so a wedged portal cannot hang a walk forever — in a healthy run
@@ -112,6 +143,31 @@ _PLAN_SURFACES = (
 )
 
 
+# How many plans an unpinnable plan string is worth searching. Each extra plan costs ~15s (re-navigate
+# to the list, re-pin, re-search), so this is the knob that keeps a sweep near the cost of the single
+# walk it replaces rather than 12x it. Four is enough to span GA's product families; the note always
+# states how many of how many were searched, because a sample reported as a whole list is a lie.
+_SWEEP_MAX_PLANS = 4
+
+
+def _sweep_indices(total: int, cap: int) -> list[int]:
+    """Up to `cap` positions spread ACROSS the list, not taken off the top.
+
+    The plan list is alphabetical, so the top N tend to be one product family — six of Cobb County's
+    first eight are Dual Complete variants. Sampling one family and calling the result plan-invariance
+    would be exactly the reasoning this driver refuses elsewhere. Spreading the sample is what makes
+    "present in every plan searched" mean anything.
+    """
+    if total <= 0 or cap <= 0:
+        return []
+    if total <= cap:
+        return list(range(total))
+    if cap == 1:
+        return [0]
+    step = (total - 1) / (cap - 1)
+    return sorted({round(i * step) for i in range(cap)})
+
+
 def _norm(s: str | None) -> str:
     return re.sub(r"[^a-z]", "", (s or "").lower())
 
@@ -152,17 +208,16 @@ class UhcFindCareDriver(PortalDriver):
         trail_box.extend(trail)
         shot("plan-walk")
         plan_confirmed = pin.name is not None
-        # Absence may only be read as OON when the pin is identifier-grade. A names-only pin still
-        # scopes the *search* — it just cannot license a negative.
-        blockers = self._absence_blockers(pin)
         if not plan_confirmed:
-            # Fall through to the unpinned directory: still worth a screenshot and an IN if the
-            # provider shows up (presence in UHC's directory at all is a real signal), but never an OON.
-            try:
-                page.goto(BROWSE, wait_until="domcontentloaded", timeout=45_000)
-                page.wait_for_timeout(3_000)
-            except (PlaywrightTimeout, PlaywrightError):
-                pass
+            # NOT a fall-through to /browse any more: that directory answers nothing without a plan
+            # (module docstring). Ask the portal the question it CAN answer instead — several of the
+            # county's own plans, one at a time.
+            return self._sweep(page, q, pin, shot, result)
+
+        # Absence may only be read as OON when the pin is identifier-grade. A names-only pin still
+        # scopes the *search* — it just cannot license a negative. Only the pinned path below reads
+        # absence at all; the sweep never does, so this is computed after its early return.
+        blockers = self._absence_blockers(pin)
 
         # Generous on purpose. This is a condition-based wait, so a longer ceiling costs nothing when
         # the input appears promptly — but plan selection re-renders the whole shell, and the walk
@@ -175,6 +230,9 @@ class UhcFindCareDriver(PortalDriver):
             return result(PortalStatus.BLOCKED, "no provider-search input appeared — portal shell did "
                           "not hydrate, or the guest flow changed.", screenshot=shot("no-search-input"))
 
+        # Once per pinned plan, not once per term. Plan selection leaves the search page's own location
+        # field empty (verified live), so it does need setting — but `_run_search` used to redo it for
+        # every term, which was three 4.1s round trips per capture for one committed location.
         if q.zip_code:
             self._set_location(page, q.zip_code)
 
@@ -276,6 +334,10 @@ class UhcFindCareDriver(PortalDriver):
             trail.append("location committed (Select)")
         self._dismiss_overlays(page)  # a fresh coachmark appears on the plan-selection step
 
+        # Read the list BEFORE picking, so a plan string that pins nothing still leaves `_sweep` the
+        # options and the URL it needs. Costs one locator read (measured: 0.0s).
+        labels, list_url = self._plan_list(page)
+
         m = self._pick_plan(page, q.plan)
         if m is not None:
             # The basis goes in the trail, not just the label: whether the pin was an identifier
@@ -284,9 +346,160 @@ class UhcFindCareDriver(PortalDriver):
             trail.append(f"plan pinned: {m.label} [{m.basis}]")
             if not m.confirms_network:
                 trail.append("pin is names-only — absence cannot be read as out-of-network")
-            return _Pin(m.label, m.basis, confirms=m.confirms_network), trail
-        return _Pin(None, f"no plan matched {q.plan!r}"), trail + [
-            f"no plan matched {q.plan!r} in the plan list"]
+            return _Pin(m.label, m.basis, confirms=m.confirms_network,
+                        labels=labels, list_url=list_url), trail
+        return _Pin(None, f"no plan matched {q.plan!r}", labels=labels, list_url=list_url), trail + [
+            f"no plan matched {q.plan!r} in the plan list ({len(labels)} offered)"]
+
+    def _plan_list(self, page: Page) -> tuple[tuple[str, ...], str | None]:
+        """The plan options on screen, in portal order, plus the URL they are listed at.
+
+        Returns `((), None)` for any page that cannot be read — a driver that could not see the list
+        must degrade to "no plan list", never to a partial one that a sweep would treat as complete.
+        """
+        for sel in _PLAN_SURFACES:
+            try:
+                loc = page.locator(f"{sel}:visible")
+                if loc.count():
+                    return tuple(self._plan_labels(loc)), page.url
+            except (PlaywrightTimeout, PlaywrightError, AttributeError):
+                continue
+        return (), None
+
+    # --- the unpinnable-plan path ---------------------------------------------------------------
+
+    def _sweep(self, page: Page, q: PortalQuery, pin: _Pin, shot, result) -> PortalCapture:
+        """The plan string named no plan. Ask about several of the county's plans instead of one.
+
+        A 271 plan string like "UHC Medicare Advantage GA" carries no identifier and too few
+        distinctive words to pick a plan out of a 12-option list, and `plan_match` rightly refuses to
+        guess — pinning the wrong plan produces a confident verdict about a network the member is not
+        in, the worst failure this layer has. But refusing to guess used to mean refusing to answer.
+
+        It does not have to. The question "is this provider in the member's network" has the same
+        answer under every plan the member could plausibly hold, whenever their participation does
+        not vary across those plans — and that is checkable. Pin each of a spread of the county's
+        plans in turn and search:
+
+          * present in every one  -> IN_NETWORK. Which plan the member holds is still unknown, and no
+            longer matters: the answer is invariant across the plans searched, so nothing was guessed.
+            Verified live 2026-08-06 for Manayan across HMO-POS / Regional PPO / D-SNP / Group PPO.
+          * presence VARIES       -> UNKNOWN, naming the plan that disagreed. Here the plan string IS
+            load-bearing and we cannot pin it, so declining is the only honest answer.
+          * present in none       -> UNKNOWN, never OON. The sweep is a bounded SAMPLE, so absence
+            across it is not absence from the member's plan, which may be one of the ones never
+            searched. Same asymmetry `_absence_blockers` enforces on the pinned path: presence is
+            positive evidence wherever it is found, absence needs proof we searched the right network.
+        """
+        if not pin.labels or not pin.list_url:
+            return result(
+                PortalStatus.UNKNOWN,
+                f"The plan string {q.plan!r} matched no plan, and the walk never reached a readable "
+                f"plan list, so there was no network to search NPI {q.npi} in. UHC's un-pinned "
+                f"directory is not a fallback: without a plan it returns no results for anyone.",
+                screenshot=shot("no-plan-list"),
+            )
+
+        total = len(pin.labels)
+        seen: list[tuple[str, bool, str | None]] = []
+        for n, i in enumerate(_sweep_indices(total, _SWEEP_MAX_PLANS)):
+            if not self._repin(page, pin.list_url, i, first=(n == 0)):
+                break  # a wedged re-pin is fewer plans searched, not a negative result
+            found, _count, matched, _kind = self._find_provider(page, q)
+            seen.append((pin.labels[i], found, matched))
+            if len({f for _, f, _ in seen}) > 1:
+                break  # presence already varies; further plans cannot change the answer
+
+        if not seen:
+            return result(
+                PortalStatus.UNKNOWN,
+                f"The plan string {q.plan!r} matched none of the {total} plans offered, and no plan "
+                f"could be selected to search NPI {q.npi} in.",
+                screenshot=shot("sweep-no-pin"),
+            )
+
+        searched = len(seen)
+        scope = (f"searched {searched} of {total} plans offered near "
+                 f"{q.zip_code or 'the clinic'}, spread across the list")
+        present = [lab for lab, f, _ in seen if f]
+        absent = [lab for lab, f, _ in seen if not f]
+        matched = next((m for _, f, m in seen if f and m), None)
+
+        if not absent:
+            return result(
+                PortalStatus.IN_NETWORK,
+                f"NPI {q.npi} is listed in UHC Find Care under EVERY plan searched — {scope}: "
+                + "; ".join(present)
+                + f". Listed as {matched!r}. The 271 named {q.plan!r}, which carries no plan "
+                f"identifier and so could not be pinned to one of these; it did not need to be, "
+                f"because the answer does not depend on which plan the member holds.",
+                result_count=searched, matched_name=matched, screenshot=shot("sweep-in"),
+            )
+        if present:
+            return result(
+                PortalStatus.UNKNOWN,
+                f"NPI {q.npi}'s network status DEPENDS on the plan, and {q.plan!r} carries no "
+                f"identifier that could pin one — {scope}. Listed under: " + "; ".join(present)
+                + ". NOT listed under: " + "; ".join(absent)
+                + ". Supply the member's plan identifier (contract/PBP or market code such as GA-5) "
+                "to settle it.",
+                result_count=searched, matched_name=matched, screenshot=shot("sweep-split"),
+            )
+        return result(
+            PortalStatus.UNKNOWN,
+            f"NPI {q.npi} was not listed under any plan searched — {scope}: " + "; ".join(absent)
+            + f". That is NOT out-of-network: {searched} of {total} plans is a sample, so the "
+            f"member's own plan may be one never searched, and {q.plan!r} carries no identifier to "
+            f"pin it. Supply the plan identifier to make an absence reading valid.",
+            result_count=0, screenshot=shot("sweep-absent"),
+        )
+
+    def _repin(self, page: Page, list_url: str, index: int, *, first: bool = False) -> bool:
+        """Select the index-th plan, returning to the plan list first when we have already left it.
+
+        The return trip is a plain `goto`: the committed location survives it and the full list
+        re-renders (verified live 2026-08-06, ~9s), which is what keeps a sweep near the cost of the
+        single walk it replaces instead of multiplying it.
+        """
+        if not first:
+            try:
+                page.goto(list_url, wait_until="domcontentloaded", timeout=45_000)
+            except (PlaywrightTimeout, PlaywrightError):
+                return False
+            self._settle(page, 2_500)
+            self._dismiss_overlays(page)
+        for sel in _PLAN_SURFACES:
+            try:
+                loc = page.locator(f"{sel}:visible")
+                if loc.count() <= index:
+                    continue
+                loc.nth(index).click()
+            except (PlaywrightTimeout, PlaywrightError):
+                continue
+            self._settle(page, 3_000)
+            return True
+        return False
+
+    def _find_provider(self, page: Page, q: PortalQuery) -> tuple[bool, int, str | None, str | None]:
+        """Run this driver's search terms against whatever plan is currently pinned.
+
+        Returns (found, result_count, matched_name, term_kind). Absence detail is deliberately thin —
+        the sweep only ever reads presence, because a bounded sample cannot license an absence verdict.
+        """
+        try:
+            search = page.locator(_SEARCH).first
+            search.wait_for(state="visible", timeout=_SEARCH_INPUT_MAX_MS)
+        except (PlaywrightTimeout, PlaywrightError):
+            return False, 0, None, None
+        if q.zip_code:
+            self._set_location(page, q.zip_code)
+        widest = 0
+        for term, kind in self._search_terms(q):
+            found, count, matched = self._run_search(page, search, term, q)
+            if found:
+                return True, count, matched, kind
+            widest = max(widest, count)
+        return False, widest, None, None
 
     def _coverage_type(self, q: PortalQuery) -> str:
         """Map the 271's plan string to UHC's coverage-type card. Reuses the domain's own LOB rules so
@@ -517,16 +730,26 @@ class UhcFindCareDriver(PortalDriver):
         that absence-among-present-results is what made the verdict OON. So we read the suggestions.
 
         The plan-selection step leaves the search page's own location field EMPTY (verified live), so it
-        is refilled here — an unscoped search is not the search a staffer performs.
+        must be refilled — but by the CALLER, once per pinned plan. Doing it here re-committed the same
+        location for every term, three 4.1s round trips per capture for one unchanged ZIP.
         """
-        if q.zip_code:
-            self._set_location(page, q.zip_code)
         try:
             search.click()
             search.fill(term)
         except (PlaywrightTimeout, PlaywrightError):
             return False, 0, None
         cands = self._await_suggestions(page)
+        # Fast path: the typeahead has already named our provider, so the results page cannot add
+        # anything. `_cards` has returned 0 on EVERY live observation of this portal — the suggestion
+        # list is its result surface — while pressing Enter and settling costs ~5s, which a sweep pays
+        # once per plan searched. Taken only on a positive identification: an empty or stranger-only
+        # list still opens the results page, because that is the surface that might carry more.
+        ours_early, _ = self.identify(cands, q)
+        if ours_early:
+            return True, len(cands), ours_early
+        if cands and q.npi and q.npi in self._page_text(page):
+            return True, len(cands), self._matched_name(cands, q) or f"NPI {q.npi} present on page"
+
         # Try to open a full results page too; when it works the cards are richer than the suggestions.
         cards = []
         try:
@@ -563,6 +786,11 @@ class UhcFindCareDriver(PortalDriver):
         The initial debounce wait is not optional: `_suggestions` falls back to `[role=option]`, which
         also matches the LOCATION autocomplete, so polling the instant we type can read the location
         options as if they were provider hits.
+
+        The deadline is the LAST resort, not the normal exit. The portal renders its own empty-state
+        when it has nothing, and reading it is what separates "has not answered yet" from "answered:
+        nothing" — without that, every fruitless search waited the full 12s ceiling. Measured
+        2026-08-06: 13.3s per term, three terms per capture, on a page that had already said so.
         """
         try:
             page.wait_for_timeout(_TYPEAHEAD_DEBOUNCE_MS)
@@ -573,11 +801,26 @@ class UhcFindCareDriver(PortalDriver):
             got = self._suggestions(page)
             if got:
                 return got
+            # Checked AFTER suggestions, so a page carrying both a stale empty-state and fresh hits
+            # is read as hits. Presence is the direction that must never be lost to a race.
+            if self._says_no_results(page):
+                return []
             try:
                 page.wait_for_timeout(_TYPEAHEAD_POLL_MS)
             except PlaywrightError:
                 break
         return []
+
+    def _says_no_results(self, page: Page) -> bool:
+        """Whether the portal has rendered its own empty-state for the typeahead.
+
+        Fails closed: a DOM that cannot be read is not the portal saying "nothing", and treating it
+        as such would turn a detached element into a false absence.
+        """
+        try:
+            return bool(page.locator(_NO_RESULTS).first.is_visible())
+        except (PlaywrightTimeout, PlaywrightError):
+            return False
 
     def _suggestions(self, page: Page) -> list[str]:
         """The typeahead's provider suggestions. Read via UHC's own suggestion testid first, because
