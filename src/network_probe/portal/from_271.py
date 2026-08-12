@@ -116,9 +116,11 @@ def portal_query_from_271(result, provider: ProviderTarget, payer_key: str) -> P
     )
 
 
-#: A CMS contract-PBP-segment, ANCHORED. `H0354027000` and `H0354-027-000` are the same plan written
-#: two ways. Anchored on purpose — see `plan_pin_from_identifier`.
-_CMS_PLAN_ID_RE = re.compile(r"^([HRS]\d{4})-?(\d{3})-?(\d{3})$", re.I)
+#: A CMS contract-PBP-segment, ANCHORED. `H0354027000`, `H0354-027-000` and `H0354_027_000` are the
+#: same plan written three ways — the UNDERSCORE form is how HealthSpring's own 271 returns it as
+#: `planInformation.groupNumber`, and omitting it cost a portal pin. Anchored on purpose: see
+#: `plan_pin_from_identifier`.
+_CMS_PLAN_ID_RE = re.compile(r"^([HRS]\d{4})[-_]?(\d{3})[-_]?(\d{3})$", re.I)
 
 
 def plan_pin_from_identifier(value: str | None) -> str | None:

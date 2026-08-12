@@ -95,6 +95,26 @@ def check_eligibility(
                     if audit.get(key):
                         audit[key] = f"{audit[key]}{extra}"
                 result.source_audit = audit
+    # THE PLAN THE PAYER NAMED MAY CARRY NO IDENTIFIER WHILE ITS GROUP NUMBER IS ONE. Supplying the
+    # correct member ID for row 9 fixed eligibility and broke the portal: the 271 named the plan
+    # "HealthSpring Achieve (HMO C-SNP)" — a name and nothing else — while putting the pin in
+    # `planInformation.groupNumber` as H0354_027_000. A Medicare portal that keys on
+    # contract-PBP-segment then had nothing to pin and correctly refused to guess a network by name.
+    #
+    # `plan_string_from_271` excludes `group` wholesale because that field can hold MEMBER
+    # identifiers in this client's workbook. This is the narrow exception its docstring invites:
+    # the value is shape-tested by the same anchored recogniser, so only a contract-PBP-segment is
+    # ever appended and a member id can never ride along. The payer's own name is kept alongside it.
+    named = result.selected_plan or result.plan_name
+    if named:
+        from network_probe.portal.from_271 import plan_pin_from_identifier
+        from network_probe.portal.plan_match import identifiers
+
+        # Only when the name identifies nothing — never staple a second contract id onto a plan that
+        # already names one, which would leave two different plans in one string.
+        if not identifiers(named) and (pin := plan_pin_from_identifier(getattr(result, "group", None))):
+            result.selected_plan = f"{named} {pin}"
+
     # The 271 knows the member's real plan; scope the directory leg by it when the caller gave none.
     if not q.plan_hint and result.selected_plan:
         q.plan_hint = result.selected_plan

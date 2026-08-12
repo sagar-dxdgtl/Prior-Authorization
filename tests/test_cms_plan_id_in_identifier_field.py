@@ -167,3 +167,64 @@ class TestTheRejectSaysWhatIsActuallyWrong:
         r = self._run("ZCS716365N00")
         assert "plan identifier" not in r.source_audit["note"].lower()
         assert r.selected_plan is None
+
+
+class TestTheGroupNumberCarriesThePinWhenThePlanNameDoesNot:
+    """LIVE 2026-08-12. With the REAL member ID (U7737453201) the HealthSpring 271 answers:
+
+        plan:            "HealthSpring Achieve (HMO C-SNP)"
+        planInformation: {"groupNumber": "H0354_027_000", ...}
+
+    So supplying the correct member ID FIXED eligibility and BROKE the portal, which pins by CMS
+    contract-PBP-segment alone and correctly refused a name: "the plan string 'HealthSpring Achieve
+    (HMO C-SNP)' carries no CMS contract-PBP-segment". The identifier was in the response the whole
+    time — as the group number, separated by UNDERSCORES, which the pin recogniser did not accept.
+
+    Note the payer settles the earlier argument in passing: HealthSpring itself calls
+    H0354_027_000 the groupNumber, which is exactly what the sheet's "Ins Group Number" column held.
+    """
+
+    def test_underscores_are_a_separator_too(self):
+        assert plan_pin_from_identifier("H0354_027_000") == "H0354-027-000"
+        assert plan_pin_from_identifier("H0354-027-000") == "H0354-027-000"
+        assert plan_pin_from_identifier("H0354027000") == "H0354-027-000"
+
+    def test_a_group_number_that_is_not_a_cms_plan_id_still_yields_nothing(self):
+        for v in ("716365N00", "3336313", "080094301300000", "2501434", "047674101000001"):
+            assert plan_pin_from_identifier(v) is None, v
+
+    def _run(self, plan_name, group):
+        from network_probe.domain import eligibility as el
+        from network_probe.domain.benefits import EligibilityResult
+        from network_probe.domain.models import NetworkStatus, ProviderQuery
+
+        class _Src:
+            def check(_self, q):
+                return EligibilityResult(
+                    coverage_active=True, plan_name=plan_name, group=group, coverage_dates={},
+                    network_status=NetworkStatus.UNKNOWN, benefits=[], pcp_required=None,
+                    prior_auth_required=None, referral_required=None, cob=None,
+                    network_verdict=None, corroboration=[], source_audit={})
+
+        q = ProviderQuery(payer="healthspring", npi="1992078745", member_id="U7737453201",
+                          first_name="Jose", last_name="Chavez", dob="2/12/1961", plan_hint=None)
+        return el.check_eligibility(q, stedi=_Src(), catalogue=_FakeCat())
+
+    def test_the_pin_is_appended_so_the_medicare_portal_can_use_it(self):
+        from network_probe.portal.drivers.healthspring_phynd import cms_plan_id
+
+        r = self._run("HealthSpring Achieve (HMO C-SNP)", "H0354_027_000")
+        assert "H0354-027-000" in (r.selected_plan or "")
+        assert "HealthSpring Achieve" in r.selected_plan, "keep the payer's own plan name too"
+        assert cms_plan_id(r.selected_plan) == "H0354-027-000"
+
+    def test_a_plan_name_that_already_carries_an_identifier_is_left_alone(self):
+        r = self._run("HealthSpring Preferred H0354-001-000", "H0354_027_000")
+        assert r.selected_plan is None or "H0354-027-000" not in (r.selected_plan or ""), (
+            "never staple a second, different contract id onto a plan that already names one"
+        )
+
+    def test_a_group_number_that_is_a_member_id_shape_is_never_appended(self):
+        """The whole reason plan_string_from_271 excludes `group`: it can hold member identifiers."""
+        r = self._run("Some Commercial PPO", "SRG12345678")
+        assert "SRG12345678" not in (r.selected_plan or "") and (r.selected_plan or "") == ""
