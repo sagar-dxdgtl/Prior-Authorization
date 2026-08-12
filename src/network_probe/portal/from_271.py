@@ -20,6 +20,7 @@ see `plan_string_from_271` for why that one is excluded despite looking like pla
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from network_probe.portal.models import PortalQuery
@@ -113,6 +114,33 @@ def portal_query_from_271(result, provider: ProviderTarget, payer_key: str) -> P
         zip_code=provider.zip_code,
         tin=provider.tin,
     )
+
+
+#: A CMS contract-PBP-segment, ANCHORED. `H0354027000` and `H0354-027-000` are the same plan written
+#: two ways. Anchored on purpose — see `plan_pin_from_identifier`.
+_CMS_PLAN_ID_RE = re.compile(r"^([HRS]\d{4})-?(\d{3})-?(\d{3})$", re.I)
+
+
+def plan_pin_from_identifier(value: str | None) -> str | None:
+    """A CMS contract-PBP-segment typed into an identifier field, as a plan pin — or None.
+
+    THE EXPLICIT PATH THIS MODULE'S DOCSTRING ASKS FOR. `plan_string_from_271` refuses to sweep in
+    `EligibilityResult.group` because in this client's workbook that column also carries MEMBER
+    identifiers, and the plan string is typed into a public payer search box and stored in the audit
+    note. So the field is not swept: it is *shape-tested*, and only a value that IS a
+    contract-PBP-segment comes back out. `716365N00`, `SRG12345678` and a 12-digit member id all
+    yield None, and nothing else about the field can escape.
+
+    The regex is ANCHORED rather than searched. A `re.search` would mine an id out of free text — a
+    note that merely mentions a contract would start pinning networks — so the whole value must be
+    the identifier and nothing else.
+
+    Real case: the 8-12-26 sheet's only identifier column holds `H0354027000` for its HealthSpring
+    row, which is contract H0354, PBP 027, segment 000 — exactly what `healthspring_phynd` pins by,
+    and what its portal takes as `healthPlan=H0354-027-000`.
+    """
+    m = _CMS_PLAN_ID_RE.match((value or "").strip())
+    return f"{m.group(1).upper()}-{m.group(2)}-{m.group(3)}" if m else None
 
 
 def plan_is_pinnable(result) -> bool:

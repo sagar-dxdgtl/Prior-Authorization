@@ -62,6 +62,18 @@ def check_eligibility(
     effective_id = stedi_payer_id or (payer.stedi_payer_id if payer else None)
     source = stedi or StediEligibilityClient(payer_id=effective_id)
     result = source.check(q)
+    # THE PLAN CAN ARRIVE IN THE IDENTIFIER FIELD. When the payer names no plan — because it rejected
+    # the identity, which is the normal outcome for a sheet whose only identifier column is a group
+    # number — a CMS contract-PBP-segment typed into that field is still a valid plan pin, and for a
+    # Medicare portal it is the ONLY thing that pins a network. Shape-tested, never swept: a value
+    # that is not a contract-PBP-segment yields nothing, so no member identifier can leave this way.
+    # See portal/from_271.plan_pin_from_identifier for why that test is the whole safety argument.
+    if not result.selected_plan and not result.plan_name:
+        from network_probe.portal.from_271 import plan_pin_from_identifier
+
+        if (pin := plan_pin_from_identifier(getattr(q, "member_id", None))):
+            result.selected_plan = pin
+            result.plan_pin_source = "identifier field on the form (a CMS plan id, not the payer's 271)"
     # The 271 knows the member's real plan; scope the directory leg by it when the caller gave none.
     if not q.plan_hint and result.selected_plan:
         q.plan_hint = result.selected_plan

@@ -74,6 +74,11 @@ class EligibilityResult:
     source_audit: dict
     plan_candidates: list = field(default_factory=list)
     selected_plan: str | None = None
+    #: Where `selected_plan` came from, when it did NOT come from the payer's 271. Set only for the
+    #: CMS-plan-id-in-the-identifier-field path, so a reader can tell a plan the payer named from one
+    #: an operator typed — the two do not deserve equal confidence, and a portal walk pinned by the
+    #: second is only as right as the value on the sheet. None means the payer named it.
+    plan_pin_source: str | None = None
     stedi_network_status: NetworkStatus | None = None
     # Plan-level out-of-network coverage from the 271 benefit tiers: True if the plan returns OON
     # cost-shares (PPO-style → pays OON, i.e. "OON w/ benefits"), False if in-network-only (HMO-style),
@@ -116,6 +121,7 @@ class EligibilityResult:
             "source_audit": self.source_audit,
             "plan_candidates": self.plan_candidates,
             "selected_plan": self.selected_plan,
+            "plan_pin_source": self.plan_pin_source,
             "stedi_network_status": self.stedi_network_status.value if self.stedi_network_status else None,
             "out_of_network_benefits": self.out_of_network_benefits,
             "plan_oon_capability": self.plan_oon_capability,
