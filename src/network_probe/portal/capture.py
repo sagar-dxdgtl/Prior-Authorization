@@ -29,6 +29,10 @@ from network_probe.portal.drivers.healthsparq import HealthSparqDriver
 from network_probe.portal.drivers.humana_finder import HumanaFinderDriver
 from network_probe.portal.drivers.molina_provider_search import MolinaProviderSearchDriver
 from network_probe.portal.drivers.oscar_care_options import OscarCareOptionsDriver
+from network_probe.portal.drivers.sapphire_shopping import (
+    PublixSapphireDriver,
+    SapphireShoppingDriver,
+)
 from network_probe.portal.drivers.uhc_findcare import UhcFindCareDriver
 from network_probe.portal.drivers.wellcare_hub import WellcareHubDriver
 from network_probe.portal.models import PortalCapture, PortalQuery, PortalStatus
@@ -50,6 +54,8 @@ DRIVERS: tuple[PortalDriver, ...] = (
     WellcareHubDriver(),
     OscarCareOptionsDriver(),
     HumanaFinderDriver(),
+    SapphireShoppingDriver(),
+    PublixSapphireDriver(),
 )
 
 log = logging.getLogger(__name__)

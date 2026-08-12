@@ -208,6 +208,49 @@ TARGETS: tuple[PortalTarget, ...] = (
         search_hints=("input[type=search]", "input[placeholder*='Search']"),
     ),
     PortalTarget(
+        key="bcbssc-sapphire",
+        portal_name="BlueCross BlueShield of South Carolina (Zelis Sapphire, guest)",
+        entry_url="https://shoppingforcare.sapphirethreesixtyfive.com/?ci=BCBSSC",
+        # BCBS SC is its OWN Blue licensee — not HCSC, and nothing to do with bcbsil-provider-finder.
+        # Its directory is Zelis Sapphire, the same product Molina runs on its own host.
+        payer_keys=(
+            "bcbs-south-carolina",
+            "bcbs-south-carolina-ga-atlanta",
+            "bcbs-south-carolina-fl-tampa",
+            "bcbs-south-carolina-fl-south-florida",
+        ),
+        sheet_rows=("BCBS South Carolina",),
+        platform="Zelis Sapphire",
+        notes=(
+            "Guest-searchable, 200, no WAF (2026-08-12). Answers for OUT-OF-STATE providers via "
+            "BlueCard: with the network pinned to 'Preferred Blue', the Lake Worth FL clinic ZIP "
+            "returned the sheet's own physician at the sheet's own street address, and the Atlanta "
+            "clinic ZIP returned 10 GA providers. Result cards state the pinned network inline "
+            "('In \"Preferred Blue\" Network'), so the attestation is in the screenshot."
+        ),
+        search_hints=("input[data-cy='autosuggest.input']",),
+    ),
+    PortalTarget(
+        key="publix-sapphire",
+        portal_name="Publix / BlueCross BlueShield of South Carolina (Zelis Sapphire, guest)",
+        entry_url="https://shoppingforcare.sapphirethreesixtyfive.com/?ci=Publix",
+        # Same Zelis instance as BCBSSC, one query parameter apart — but a DIFFERENT network book:
+        # 3 allowable networks vs 41, and network id 10 renders as "PBB - Blue Choice PPO" here and
+        # "Preferred Blue" there. Same id, different network: never carry one across tenants.
+        payer_keys=(
+            "bcbs-south-carolina-publix",
+            "bcbs-south-carolina-publix-fl-south-florida",
+        ),
+        sheet_rows=("BCBS South Carolina Publix",),
+        platform="Zelis Sapphire",
+        notes=(
+            "Publix's self-funded book on BCBS SC's Zelis tenant (ci=Publix). Three networks, each "
+            "self-identifying by code: PBB - Blue Choice PPO, PWA - Blue Open Access POS, "
+            "PXN - Network Blue. No alpha-prefix route (alpha_prefix.network_enabled = false)."
+        ),
+        search_hints=("input[data-cy='autosuggest.input']",),
+    ),
+    PortalTarget(
         key="molina-provider-search",
         portal_name="Molina Provider Search (TX Medicaid)",
         # The live tool is Zelis "Sapphire", found 2026-07-28 by driving candidates in a real browser.
