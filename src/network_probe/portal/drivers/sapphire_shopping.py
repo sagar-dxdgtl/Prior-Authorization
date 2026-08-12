@@ -768,8 +768,9 @@ class SapphireShoppingDriver(PortalDriver):
         """
         last = (q.provider_last_name or "").strip()
         first = (q.provider_first_name or "").strip()
-        if not last:
-            trail.append("no provider surname to search")
+        npi = (q.npi or "").strip()
+        if not last and not npi:
+            trail.append("no provider NPI or surname to search")
             return ResultSet(surfaced=False), last
         # Full name first: it narrows the candidate list this driver then has to open one profile at
         # a time. THE SURNAME ALONE IS THE FALLBACK, and it is not optional.
@@ -783,7 +784,24 @@ class SapphireShoppingDriver(PortalDriver):
         # comes back empty it is the honest second question — and it also covers the case the comment
         # was originally written for, where the sheet's given name is not the directory's ("Desire"
         # vs "Desiree Amelia Clarke").
-        terms = [t for t in dict.fromkeys([f"{first} {last}".strip() if first else last, last]) if t]
+        #
+        # THE NPI GOES FIRST, AND USUALLY ENDS IT. This tenant accepts an NPI in the same box and
+        # answers "Matched on: PROVIDER IDENTIFIER" — proven live 2026-08-12 at New Port Richey:
+        #
+        #     '1861933087'    -> 1 card, Romina Deldar, MD   Matched on: PROVIDER IDENTIFIER
+        #     'ROMINA CROSBY' -> 0 cards, "No results for ROMINA CROSBY"
+        #     'Romina Deldar' -> 1 card                      Matched on: NAME
+        #
+        # THE NAMES DISAGREE ACROSS SOURCES, which is why the name search is a coin flip: NPPES
+        # calls that provider ROMINA CROSBY and this directory calls her Romina Deldar. The app
+        # resolves a provider name from NPPES because the form has no provider-name field, so the UI
+        # searched a name the portal has never heard of and got an authoritative-looking "No
+        # results". An NPI cannot be spelled two ways, it is what `_identify` verifies by in any
+        # case, and it returns ONE card instead of two to ten — so the sweep needs no return trip to
+        # the result list, which is the step trap 5 measured failing 4 times in 12.
+        terms = [t for t in dict.fromkeys(
+            [npi, f"{first} {last}".strip() if first else last, last]
+        ) if t]
 
         rs = ResultSet(surfaced=False)
         term = terms[0]

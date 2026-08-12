@@ -212,7 +212,9 @@ class TestTheSurnameFallbackTheDocstringPromised:
             return ResultSet(surfaced=True, cards=[Card(text="Michelle D Mon, MD\nSurgery")])
 
         d, seen, page = self._driver(monkeypatch, script)
-        q = PortalQuery(payer_key="p", npi="1639148703",
+        # npi="" on purpose: the NPI is searched first now (see TestTheNpiIsSearchedFirst), and
+        # this test is about the NAME fallback in isolation.
+        q = PortalQuery(payer_key="p", npi="",
                         provider_first_name="MICHELLE", provider_last_name="MON", zip_code="30307")
         trail: list[str] = []
         rs, term = d._search(page, q, "33.7,-84.3", trail)
@@ -226,7 +228,7 @@ class TestTheSurnameFallbackTheDocstringPromised:
 
         d, seen, page = self._driver(
             monkeypatch, lambda term: ResultSet(surfaced=True, cards=[Card(text="Michelle D Mon, MD")]))
-        q = PortalQuery(payer_key="p", npi="1", provider_first_name="MICHELLE",
+        q = PortalQuery(payer_key="p", npi="", provider_first_name="MICHELLE",
                         provider_last_name="MON", zip_code="30307")
         d._search(page, q, "33.7,-84.3", [])
         assert seen == ["MICHELLE MON"], "a good first search must not cost a second one"
@@ -237,8 +239,109 @@ class TestTheSurnameFallbackTheDocstringPromised:
 
         d, seen, page = self._driver(
             monkeypatch, lambda term: ResultSet(surfaced=True, none_header=f"No results for {term}"))
-        q = PortalQuery(payer_key="p", npi="1", provider_first_name="MICHELLE",
+        q = PortalQuery(payer_key="p", npi="", provider_first_name="MICHELLE",
                         provider_last_name="MON", zip_code="30307")
         rs, _ = d._search(page, q, "33.7,-84.3", [])
         assert seen == ["MICHELLE MON", "MON"]
         assert rs.surfaced and not rs.populated
+
+
+class TestTheNpiIsSearchedFirst:
+    """LIVE-PROVEN 2026-08-12 on ci=BCBSSC, New Port Richey 34655:
+
+        '1861933087'    -> 1 card: Romina Deldar, MD   "Matched on: PROVIDER IDENTIFIER"
+        'ROMINA CROSBY' -> 0 cards: "No results for ROMINA CROSBY"
+        'Romina Deldar' -> 1 card                      "Matched on: NAME"
+
+    The name search is a coin flip because the NAMES DISAGREE ACROSS SOURCES. NPPES calls sheet row
+    3's provider ROMINA CROSBY and the portal calls her Romina Deldar; the app resolves the provider
+    name from NPPES (the form has no provider-name field), so the UI searched a name this directory
+    has never heard of and got an authoritative-looking "No results".
+
+    Searching the NPI removes the whole class: it cannot be spelled differently, it is what the
+    sweep identifies by anyway, and it returns ONE card instead of two to ten — so the profile sweep
+    needs no return trip to the result list, which is the step trap 5 says fails 4 times in 12.
+    """
+
+    def _driver(self, monkeypatch, script):
+        from network_probe.portal.drivers import sapphire_shopping as ss
+
+        d = ss.SapphireShoppingDriver()
+        seen: list[str] = []
+
+        class _Box:
+            def focus(self):
+                pass
+
+        class _P(_Page):
+            class keyboard:  # noqa: N801
+                @staticmethod
+                def type(t, delay=None):  # noqa: ARG004
+                    seen.append(t)
+
+                @staticmethod
+                def press(k):
+                    pass
+
+        monkeypatch.setattr(d, "_dismiss_overlays", lambda page: False)
+        monkeypatch.setattr(d, "_visible", lambda page, sel, limit=8: _Box())
+        monkeypatch.setattr(d, "_obstruction", lambda page, box: None)
+        monkeypatch.setattr(d, "_wait_results", lambda page, timeout_s=60.0: True)
+        monkeypatch.setattr(d, "_read_results", lambda page: script(seen[-1] if seen else ""))
+        return d, seen, _P(overlay=False)
+
+    def _q(self, **kw):
+        from network_probe.portal.models import PortalQuery
+
+        base = dict(payer_key="bcbs-south-carolina-fl-tampa", npi="1861933087",
+                    provider_first_name="ROMINA", provider_last_name="CROSBY", zip_code="34655")
+        base.update(kw)
+        return PortalQuery(**base)
+
+    def test_the_npi_is_tried_before_any_name(self, monkeypatch):
+        from network_probe.portal.drivers.sapphire_shopping import Card, ResultSet
+
+        d, seen, page = self._driver(
+            monkeypatch, lambda t: ResultSet(surfaced=True, cards=[Card(text="Romina Deldar, MD")]))
+        rs, term = d._search(page, self._q(), "28.2,-82.7", [])
+        assert seen == ["1861933087"], f"the NPI must be the first and only search: {seen}"
+        assert term == "1861933087"
+        assert rs.populated
+
+    def test_a_wrong_name_from_nppes_no_longer_sinks_the_walk(self, monkeypatch):
+        """The exact live case: the NPI hits, the NPPES name would have returned nothing."""
+        from network_probe.portal.drivers.sapphire_shopping import Card, ResultSet
+
+        def script(term):
+            if term == "1861933087":
+                return ResultSet(surfaced=True, cards=[Card(text="Romina Deldar, MD\nSurgery")])
+            return ResultSet(surfaced=True, none_header=f"No results for {term}")
+
+        d, seen, page = self._driver(monkeypatch, script)
+        rs, _ = d._search(page, self._q(), "28.2,-82.7", [])
+        assert rs.populated and seen == ["1861933087"]
+
+    def test_an_npi_that_finds_nothing_still_falls_back_to_the_names(self, monkeypatch):
+        """A portal that does not index this NPI must not end the walk — the names are still worth
+        asking, and only a populated-and-missing set may ever support an absence."""
+        from network_probe.portal.drivers.sapphire_shopping import Card, ResultSet
+
+        def script(term):
+            if term == "1861933087":
+                return ResultSet(surfaced=True, none_header="No results for 1861933087")
+            if term == "ROMINA CROSBY":
+                return ResultSet(surfaced=True, none_header="No results for ROMINA CROSBY")
+            return ResultSet(surfaced=True, cards=[Card(text="Romina Deldar, MD")])
+
+        d, seen, page = self._driver(monkeypatch, script)
+        rs, term = d._search(page, self._q(), "28.2,-82.7", [])
+        assert seen == ["1861933087", "ROMINA CROSBY", "CROSBY"], seen
+        assert rs.populated and term == "CROSBY"
+
+    def test_a_query_with_no_npi_still_searches_by_name(self, monkeypatch):
+        from network_probe.portal.drivers.sapphire_shopping import Card, ResultSet
+
+        d, seen, page = self._driver(
+            monkeypatch, lambda t: ResultSet(surfaced=True, cards=[Card(text="X")]))
+        d._search(page, self._q(npi=""), "28.2,-82.7", [])
+        assert seen == ["ROMINA CROSBY"]
