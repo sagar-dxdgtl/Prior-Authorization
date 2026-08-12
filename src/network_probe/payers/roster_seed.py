@@ -696,8 +696,28 @@ SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
     # BlueCross BlueShield of South Carolina — its OWN Blue licensee, unrelated to HCSC/BCBS IL. The
     # member-facing directory is Zelis Sapphire (ci=BCBSSC), guest-searchable and now driven by
     # portal/drivers/sapphire_shopping.py. tic_url is the BlueCard host-plan index: measured
-    # 2026-08-12 it is a CONTROL-PLAN index carrying 169 other Blues' networks, and it needs a
-    # `Referer: https://provider.bcbssc.com/` header plus a US exit or it 403s.
+    # 2026-08-12 it is a CONTROL-PLAN index carrying 169 distinct file descriptions.
+    #
+    # ⚠ IT IS THE USER-AGENT, NOT THE REFERER. An earlier note credited the Referer; measured
+    # against the CDN on 2026-08-12, Referer alone is 403 and a browser UA alone is 200:
+    #     Referer only -> 403      UA only -> 206      UA + Referer -> 206
+    # curl's default UA is what gets refused. A US exit is also needed, and a DATACENTER US exit is
+    # not enough — a Seattle VPN on AS212238 still 403'd where a residential US exit did not, which
+    # is the same datacenter-IP rule browser.py documents for Centene.
+    #
+    # ⚠ BCBS SC'S OWN MRF HOLDS ONLY SOUTH CAROLINA PROVIDERS, SO IT IS THE WRONG FILE FOR A
+    # BLUECARD ROW. Measured on 2026-08-12 against the real 126 MB PREFERRED BLUE file (1.5 GB
+    # decompressed): 10,979 top-level provider_references holding 6,983,160 provider_groups and
+    # 9,168,531 npi entries, which de-duplicate to just 8,534 (npi, tin) pairs — 12 of 12 sampled
+    # against NPPES were in SC. All four of the 8-12-26 sheet's BCBS SC members are treated in GA
+    # and FL, and their NPIs and TINs appear ZERO times in the whole file, while the payer's own
+    # portal attests one of them is in "Preferred Blue". That is not a contradiction and must never
+    # be read as out-of-network: an out-of-state provider is reached through the HOST plan, whose
+    # rates are in the host plan's file. The index already carries them —
+    #     BCBS Georgia - BlueChoice PPO (114)     BCBS Florida - Blue Choice PPO (106)
+    #     BCBS Georgia - Blue Open Access POS (50) BCBS Florida - NetworkBlue (60)
+    #     BCBS Georgia - PAR providers (14)        BCBS Florida - Traditional (14)
+    # — so a TiC check for these rows must select by the CLINIC's state, not the payer's home state.
     #
     # ⚠ THIS ROW IS ONE OF SEVEN BCBS SC ELIGIBILITY ENTITIES, AND 0044 GAVE IT 00401. BCBS SC's own
     # provider table ("Table-Claim Edits 251 and B57") routes a 270 by the MEMBER-ID PREFIX, and
