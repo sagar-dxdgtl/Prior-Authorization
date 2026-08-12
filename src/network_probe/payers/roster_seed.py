@@ -41,10 +41,15 @@ ROSTER = [
     ("BCBS South Carolina", "Commercial", "GA-Atlanta", "00401", "supported"),
     ("BCBS South Carolina", "Commercial", "FL-Tampa", "00401", "supported"),
     ("BCBS South Carolina", "Commercial", "FL-South Florida", "00401", "supported"),
-    # Stedi lists the employer entity but CANNOT run an eligibility check against it, so enrolling
-    # would not help -- a distinct fact from "needs enrollment". Not repointed at BCBS SC's 00401:
-    # the Publix book runs on a co-branded Florida Blue tenant and the 270 routing is unconfirmed.
-    ("BCBS South Carolina Publix", "Commercial", "FL-South Florida", "J1897", "not_supported"),
+    # Publix is a BRAND on BCBS SC's own systems, not a standalone payer: its provider pages are
+    # served from provider.bcbssc.com/web/public/brands/publix/ and its member portal is BCBS SC's
+    # My Health Toolkit. Stedi's J1897 ("Publix Super Markets Incorporated") is the EMPLOYER record,
+    # which is why it cannot run an eligibility check -- so the row uses BCBS SC's 00401.
+    # ⚠ The book is co-branded with Florida Blue (the directory tenant renders "Florida Blue +
+    # Publix" and its network files are BCBS Florida's). Under BlueCard a 270 answers at the
+    # member's HOME plan, decided by the ID alpha prefix, so a Florida-home member may need Florida
+    # Blue's id instead. 00401 is the better-evidenced default, not a certainty.
+    ("BCBS South Carolina Publix", "Commercial", "FL-South Florida", "00401", "supported"),
     # --- Arizona ---
     ("Aetna", "Commercial", "AZ", "60054", "needs_enrollment"),
     ("Aetna", "Medicare Advantage", "AZ", "60054", "needs_enrollment"),
