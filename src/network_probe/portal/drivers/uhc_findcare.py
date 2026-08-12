@@ -208,6 +208,13 @@ def _match_key(name: str, plan_id: str | None) -> str:
 # Waiting is condition-based, not clock-based: see `_settle` and `_await_suggestions` for the measured
 # reasons. Both caps exist only so a wedged portal cannot hang a walk forever — in a healthy run
 # neither is reached.
+# The Abyss shell's own hydration budget, and the widest wait in this driver by far. Sized off
+# measurement, not taste: five loads of the Surest deeplink on 2026-08-12 rendered their first
+# control at 56s, 64s, and twice not within 150s, with one goto timing out — while Optum's
+# flex.optum FHIR returned 504 and 500 in the same window. 150s is "this portal is having a bad
+# day, say so" rather than "these controls are gone".
+_SHELL_TIMEOUT_S = 150.0
+_SHELL_POLL_MS = 2_000
 _TYPEAHEAD_DEBOUNCE_MS = 1_200  # let the location autocomplete close before reading provider hits
 _TYPEAHEAD_MAX_S = 12.0  # a genuinely empty typeahead must be waited out, not assumed
 _TYPEAHEAD_POLL_MS = 300
@@ -414,13 +421,25 @@ class UhcFindCareDriver(PortalDriver):
         it may license reading an absence as OUT_OF_NETWORK.
         """
         trail: list[str] = []
+        # NOTHING MAY BE CLICKED BEFORE THE SHELL EXISTS. Measured 2026-08-12 across five loads of the
+        # Surest deeplink in one session, time-to-hydrate was 56s, 64s, >120s, >150s and one outright
+        # goto timeout, while Optum's own flex.optum returned 504 and 500 in the same window. The
+        # entry's 3s settle plus 8s per `_click_any` is far inside that, and a click into an
+        # unhydrated SPA finds no control — so every step reports "NOT clickable" and a slow portal
+        # is indistinguishable from a redesigned one. Worse, it is a transport failure wearing the
+        # costume of a network finding.
+        if not self._await_shell(page):
+            why = "the portal never hydrated — no plan surface rendered, so nothing was clicked"
+            return _Pin(None, why), trail + [why]
+
         self._dismiss_overlays(page)
         trail.append("overlays dismissed")
 
         # A Surest deeplink has already set lob=EI and pinned the network by reciprocityId, so the
         # coverage-type card is not on screen — clicking for it would fail the walk on a step the
         # portal legitimately skipped.
-        if self._surest_network(q):
+        surest_pinned = bool(self._surest_network(q))
+        if surest_pinned:
             trail.append("coverage: set by the Surest deeplink (lob=EI)")
         else:
             sel, label = _COVERAGE[self._coverage_type(q)]
@@ -430,10 +449,24 @@ class UhcFindCareDriver(PortalDriver):
             trail.append(f"coverage: {label}")
 
         # "Type of care" — always Medical for a physician network check.
-        if not self._click_any(page, "[data-testid*='medical']", "Medical"):
+        #
+        # THE SAME DEEPLINK ANSWERS THIS STEP TOO, and the portal says so in the URL it redirects to:
+        # `plan-selection?planSelectionLob=EI&coverageType=M&chipValue=All`. Its payload carries
+        # `"coverageType":"M"` right beside `"lob":"EI"`. Measured live on the hydrated page there is
+        # no care control at all — `[data-testid*='medical']` and `[data-testid*='care']` are both
+        # count=0, while `location` is 3 and `plan` is 1: it asks only where you are. Treating that
+        # absence as a failure killed a walk on a step that had already been answered.
+        #
+        # Scoped deliberately to the deeplink. On the ordinary guest flow the care step is real, and
+        # a missing control there means the walk cannot continue — sailing past it would answer about
+        # whatever network the portal happened to be holding.
+        if self._click_any(page, "[data-testid*='medical']", "Medical"):
+            trail.append("care: Medical")
+        elif surest_pinned:
+            trail.append("care: Medical, set by the Surest deeplink (coverageType=M)")
+        else:
             return _Pin(None, "type of care 'Medical' NOT clickable"), trail + [
                 "type of care 'Medical' NOT clickable"]
-        trail.append("care: Medical")
 
         # THE MEMBER'S ZIP, not the clinic's. This step is UHC's "Select the area where you live",
         # and its plan list is scoped to the member's county — measured 2026-08-03, Port St. Lucie
@@ -896,6 +929,31 @@ class UhcFindCareDriver(PortalDriver):
                     page.wait_for_timeout(1_000)
             except Exception:  # noqa: BLE001 — best-effort by design; see the docstring
                 continue
+
+    def _await_shell(self, page: Page, timeout_s: float = _SHELL_TIMEOUT_S) -> bool:
+        """Poll until the Abyss shell has rendered something interactive. False if it never does.
+
+        Condition-based, because a clock is exactly what failed here: the entry settles 3s and each
+        step allows 8s, but this SPA's measured time-to-first-control on 2026-08-12 was 56s, 64s and
+        twice beyond 150s, in one session, on one URL. Clicking inside that window finds nothing and
+        the walk reports the portal's controls as missing — a transport problem misreported as a
+        portal change, one step away from being misread as a network finding.
+
+        A button or a text input is the signal, not body text: the footer's legal boilerplate paints
+        long before the plan surface does, so a length-of-text test passes while nothing is usable.
+        """
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            try:
+                if page.locator("button").count() or page.locator("input").count():
+                    return True
+            except PlaywrightError:
+                pass
+            try:
+                page.wait_for_timeout(_SHELL_POLL_MS)
+            except PlaywrightError:
+                return False
+        return False
 
     def _click_any(self, page: Page, testid_sel: str, label: str, timeout_ms: int = 8_000) -> bool:
         """Click by testid, falling back to the visible label. UHC renames testids between releases,

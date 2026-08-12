@@ -308,6 +308,11 @@ def test_a_real_271_contract_now_pins_where_a_name_could_not():
 class _WalkDriver(_CountyDriver):
     """Enough of the walk to reach the county step with a fake page."""
 
+    def _await_shell(self, page, **kw):
+        # The walk now refuses to click into an unhydrated shell (UHC's own measured 56s–150s
+        # time-to-first-control). A bare object() page cannot answer that; declare it ready.
+        return True
+
     def _dismiss_overlays(self, page):
         return None
 

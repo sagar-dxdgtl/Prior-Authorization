@@ -100,6 +100,9 @@ def _walk(member_zip, clinic_zip="34986"):
     committed: list[str] = []
     d = UhcFindCareDriver()
     d._dismiss_overlays = lambda page: None
+    # The walk now refuses to click into an unhydrated shell; a bare object() page cannot answer
+    # that, so the fake declares itself ready. Nothing else about this test changes.
+    d._await_shell = lambda page, **kw: True
     d._click_any = lambda page, sel, label, timeout_ms=8_000: True
     d._commit_location = lambda page, z: (committed.append(z), True)[1]
     # stop after the location step; we only assert the ZIP
