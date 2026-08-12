@@ -21,6 +21,15 @@ import re
 # (see docs/payer-sources/MATRIX.md). Newly-confirmed ids flip a row from `needs_payer_id` to
 # `needs_enrollment` (it has an id but is not yet a public-FHIR/adapter-supported payer).
 ROSTER = [
+    # --- UHC Surest (8-12-26 sheet) ---
+    # A separate payer row on purpose. Typing "Surest" previously found nothing, and "UHC Surest"
+    # silently returned plain UnitedHealthcare markets -- worse than nothing, because it looks like a
+    # match while naming a different network. Surest's networks (Choice Plus / Select Plus POS /
+    # Options PPO) are pinned on UHC's own guest portal by reciprocityId.
+    ("UHC Surest", "Commercial", "TX-Houston", None, "needs_payer_id"),
+    ("UHC Surest", "Commercial", "TX-Dallas", None, "needs_payer_id"),
+    ("UHC Surest", "Commercial", "GA-Atlanta", None, "needs_payer_id"),
+    ("UHC Surest", "Commercial", "IL", None, "needs_payer_id"),
     # --- BlueCross BlueShield of South Carolina (8-12-26 sheet) ---
     # SC members treated OUT OF STATE, which is ordinary BlueCard: the SC directory answers for GA and
     # FL providers under the member's own "Preferred Blue" network, verified live 2026-08-12 (the
@@ -678,6 +687,15 @@ SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
     # portal/drivers/sapphire_shopping.py. tic_url is the BlueCard host-plan index: measured
     # 2026-08-12 it is a CONTROL-PLAN index carrying 169 other Blues' networks, and it needs a
     # `Referer: https://provider.bcbssc.com/` header plus a US exit or it 403s.
+    # Surest is a UnitedHealthcare company, not a separate carrier: its member site links its
+    # provider directories straight into findcare.guest.uhc.com with a deeplink that pins the network
+    # by reciprocityId. Same portal as UHC, different network book -- hence a distinct payer row.
+    "UHC Surest": (
+        None,
+        None,
+        "https://benefits.surest.com/",
+        "public-guest",
+    ),
     "BCBS South Carolina": (
         None,
         "https://d2vbl1kcu4hfid.cloudfront.net/bcbssc_index.json",

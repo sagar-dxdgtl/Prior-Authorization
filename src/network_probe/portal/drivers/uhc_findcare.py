@@ -81,6 +81,57 @@ plan, never navigated to directly.
 """
 
 ENTRY = "https://findcare.guest.uhc.com/guest-plan-selection"
+
+# SUREST IS NOT A DIFFERENT PORTAL. Surest is a UnitedHealthcare company and its member site
+# (benefits.surest.com) links its provider directories straight back HERE — four links, each a
+# base64 `deeplink` payload carrying UHC's own guest flag:
+#
+#   {"language":"en-US","lob":"EI","coverageType":"M","reciprocityId":"52",
+#    "planName":"Choice Plus","portal":"psx","signin":"disable"}
+#
+# `reciprocityId` PINS THE NETWORK BY IDENTIFIER, which is strictly better than the plan picker this
+# driver otherwise walks: no name matching, no plan list to score. Verified live 2026-08-12 — the
+# Choice Plus deeplink redirects to plan-selection and the page renders "Plan: Choice Plus", where the
+# bare /browse entry renders the generic sign-in shell instead.
+#
+# Which of these a given Surest member holds is a PLAN-level fact, not a portal one. The driver will
+# not guess: with no network named it declines rather than pinning one of four.
+SUREST_NETWORKS: dict[str, str] = {
+    "choice plus": "52",
+    "select plus": "03",
+    "select plus pos": "03",
+    "options ppo": "01",
+}
+_SUREST_DEEPLINK = (
+    "https://findcare.guest.uhc.com/guest-plan-selection/browse?deeplink="
+)
+
+
+def surest_deeplink(network: str) -> str | None:
+    """The guest URL that pins one Surest network, or None when the network is not named.
+
+    The payload is built rather than pasted so a typo cannot silently pin the WRONG network: every
+    field is the one Surest itself publishes, and reciprocityId is looked up, never inferred.
+    """
+    import base64
+    import json
+
+    rid = SUREST_NETWORKS.get((network or "").strip().lower())
+    if not rid:
+        return None
+    payload = {"language": "en-US", "lob": "EI", "coverageType": "M", "reciprocityId": rid,
+               "planName": network.title(), "portal": "psx", "signin": "disable"}
+    blob = base64.b64encode(json.dumps(payload, separators=(",", ":")).encode()).decode()
+    return f"{_SUREST_DEEPLINK}{blob}"
+
+
+def surest_network_from_plan(plan: str | None) -> str | None:
+    """Which Surest network a 271 plan string names, if it names one at all."""
+    text = (plan or "").lower()
+    for name in sorted(SUREST_NETWORKS, key=len, reverse=True):
+        if name in text:
+            return name
+    return None
 BROWSE = "https://findcare.guest.uhc.com/guest-plan-selection/browse"
 
 _SEARCH = "[data-testid='primary-search-input']"
@@ -257,7 +308,7 @@ class UhcFindCareDriver(PortalDriver):
             )
 
         try:
-            page.goto(ENTRY, wait_until="domcontentloaded", timeout=45_000)
+            page.goto(self._entry_url(q), wait_until="domcontentloaded", timeout=45_000)
         except PlaywrightTimeout:
             pass
         except PlaywrightError as e:
@@ -366,11 +417,17 @@ class UhcFindCareDriver(PortalDriver):
         self._dismiss_overlays(page)
         trail.append("overlays dismissed")
 
-        sel, label = _COVERAGE[self._coverage_type(q)]
-        if not self._click_any(page, sel, label):
-            return _Pin(None, f"coverage type {label!r} NOT clickable"), trail + [
-                f"coverage type {label!r} NOT clickable"]
-        trail.append(f"coverage: {label}")
+        # A Surest deeplink has already set lob=EI and pinned the network by reciprocityId, so the
+        # coverage-type card is not on screen — clicking for it would fail the walk on a step the
+        # portal legitimately skipped.
+        if self._surest_network(q):
+            trail.append("coverage: set by the Surest deeplink (lob=EI)")
+        else:
+            sel, label = _COVERAGE[self._coverage_type(q)]
+            if not self._click_any(page, sel, label):
+                return _Pin(None, f"coverage type {label!r} NOT clickable"), trail + [
+                    f"coverage type {label!r} NOT clickable"]
+            trail.append(f"coverage: {label}")
 
         # "Type of care" — always Medical for a physician network check.
         if not self._click_any(page, "[data-testid*='medical']", "Medical"):
@@ -410,6 +467,19 @@ class UhcFindCareDriver(PortalDriver):
         # options and the URL it needs. Costs one locator read (measured: 0.0s).
         options, list_url = self._plan_options(page)
         labels = tuple(name for name, _ in options)
+
+        # A Surest deeplink pins the network by reciprocityId BEFORE the page loads, so there is no
+        # plan list to choose from — the portal renders "Plan: Choice Plus" and asks only for a
+        # location. Measured live: continuing into the picker here found 0 plans offered and failed a
+        # walk that had already succeeded. The pin is an IDENTIFIER pin, so absence under it is
+        # readable as out-of-network, exactly like a CMS-id match.
+        surest = self._surest_network(q)
+        if surest and not options:
+            label = surest.title()
+            trail.append(f"plan pinned by Surest deeplink: {label} "
+                         f"(reciprocityId {SUREST_NETWORKS[surest]})")
+            return _Pin(label, "Surest deeplink reciprocityId", confirms=True,
+                        labels=labels, list_url=list_url), trail
 
         m = self._pick_plan(page, q.plan, options)
         if m is not None:
@@ -781,6 +851,23 @@ class UhcFindCareDriver(PortalDriver):
                 return True, count, matched, kind
             widest = max(widest, count)
         return False, widest, None, None
+
+    def _surest_network(self, q: PortalQuery) -> str | None:
+        """The Surest network this query names, or None when this is not a Surest row.
+
+        Requires BOTH that the payer is Surest and that a network is actually named. Surest sells at
+        least four (Choice Plus, Select Plus POS, Options PPO, and a separate behavioural network),
+        and which one a member holds is a plan-level fact this portal cannot tell us. Pinning one of
+        four by guesswork is the failure this layer refuses, so an unnamed network falls back to the
+        ordinary plan-picker walk, which declines rather than inventing a match.
+        """
+        if "surest" not in (q.payer_key or "").lower():
+            return None
+        return surest_network_from_plan(q.plan)
+
+    def _entry_url(self, q: PortalQuery) -> str:
+        net = self._surest_network(q)
+        return (net and surest_deeplink(net)) or ENTRY
 
     def _coverage_type(self, q: PortalQuery) -> str:
         """Map the 271's plan string to UHC's coverage-type card. Reuses the domain's own LOB rules so

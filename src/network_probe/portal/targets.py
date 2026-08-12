@@ -46,6 +46,13 @@ TARGETS: tuple[PortalTarget, ...] = (
             "unitedhealthcare-ny",
             "unitedhealthcare-tx-dallas",
             "unitedhealthcare-tx-houston",
+            # Surest is a UHC company and its own member site deeplinks BACK to this portal, pinning
+            # the network by reciprocityId (Choice Plus 52 / Select Plus POS 03 / Options PPO 01).
+            # Same portal, different network book -- so same driver, separate payer keys.
+            "uhc-surest-ga-atlanta",
+            "uhc-surest-il",
+            "uhc-surest-tx-dallas",
+            "uhc-surest-tx-houston",
         ),
         sheet_rows=(
             "UHC Medicare Advantage GA",
