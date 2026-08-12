@@ -85,6 +85,36 @@ def test_aaa_reject_is_unknown_and_redacted():
     assert "ABC123" not in json.dumps(r.source_audit)
 
 
+# An identity reject IS the payer answering, and the two outcomes call for opposite actions: retry
+# an outage, correct the member ID for a reject. Measured live 2026-08-12 against BCBS SC (Stedi
+# payer 00401) with a group number in the member-id field: the payer named itself and returned
+# AAA-72 in seconds. Reporting that as "payer could not respond" sends the user to retry forever.
+def test_an_identity_reject_is_reported_as_the_payer_answering_not_as_an_outage():
+    r = parse_271_benefits({
+        "errors": [{"code": "72", "description": "Invalid/Missing Subscriber/Insured ID"}],
+        "payer": {"name": "BLUECROSS BLUESHIELD OF SOUTH CAROLINA"},
+    })
+    note = r.source_audit["note"]
+    assert "could not respond" not in note
+    assert "member ID" in note
+    # the note must name what to do about it, not just what happened
+    assert "card" in note.lower()
+    assert r.source_audit["payer_answered"] is True
+    assert r.source_audit["note"] == r.source_audit["error_note"]
+
+
+def test_a_payer_outage_still_reads_as_the_payer_not_answering():
+    r = parse_271_benefits({"errors": [{"code": "42", "description": "try later"}]})
+    assert r.source_audit["payer_answered"] is False
+    assert "retry" in r.source_audit["note"]
+
+
+def test_the_payers_own_words_never_reach_the_note():
+    # AAA descriptions carry the member id verbatim; only our static text may be shown.
+    r = parse_271_benefits({"errors": [{"code": "72", "description": "id 716365N00 invalid"}]})
+    assert "716365N00" not in json.dumps(r.source_audit)
+
+
 def test_inactive_coverage():
     r = parse_271_benefits({"benefitsInformation": [{"code": "6", "name": "Inactive"}]})
     assert r.coverage_active is False

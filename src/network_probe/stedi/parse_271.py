@@ -72,10 +72,32 @@ def _pair_met(lines: list[BenefitLine]) -> list[BenefitLine]:
 _AAA_MEANINGS = {
     "42": "payer unable to respond right now — retry",
     "71": "date of birth mismatch",
-    "72": "invalid or missing member ID",
+    "72": "this member ID is not recognised",
     "73": "subscriber name mismatch",
     "75": "subscriber not found — verify member ID",
     "79": "invalid participant identification",
+}
+
+# AN IDENTITY REJECT IS THE PAYER ANSWERING. Only 42 means "ask again later"; every other AAA code
+# is the payer telling us our identity data is wrong, in seconds, having named itself in the 271.
+# Those two outcomes call for OPPOSITE actions — retry an outage, correct the data on a reject — so
+# collapsing both into "payer could not respond" (which is what this module used to report for every
+# code) sends the user to retry a request that will never succeed. Measured live 2026-08-12: BCBS SC
+# returned AAA-72 for all four identity shapes the retry ladder can build, because the value in the
+# member-id field was a GROUP number; the no-member-id last resort came back `AAA*N` — this payer
+# will not answer without one at all.
+_AAA_NO_ANSWER = {"42"}
+
+# What to DO about it, kept separate from the meaning so the meaning stays a plain statement of what
+# the payer said. Static text only — the payer's own description echoes the member id back.
+_AAA_ACTIONS = {
+    "71": "Check the date of birth against the member's card.",
+    "72": (
+        "Enter the ID exactly as printed on the member's card — a group number is not a member ID, "
+        "and the 80840 card-issuer prefix is not part of it."
+    ),
+    "73": "Check the spelling of the member's name as the payer holds it.",
+    "75": "Check the member ID and that this is the plan that covers them.",
 }
 
 
@@ -103,10 +125,19 @@ def parse_271_benefits(data: dict) -> EligibilityResult:
         # PHI-safe reason for the UI: map the AAA CODE to STATIC text — never echo the payer's raw
         # description, which can contain the member ID. AAA-72/73/75 mean the payer couldn't match
         # the subscriber (fix the member ID / DOB / name); 42 is a transient payer outage.
-        error_note = (
-            "; ".join(f"{_AAA_MEANINGS.get(c, 'payer could not respond')} (AAA {c})" for c in codes)
-            if codes else "payer could not respond"
-        )
+        answered = bool(codes) and any(c not in _AAA_NO_ANSWER for c in codes)
+        said = "; ".join(
+            f"{_AAA_MEANINGS.get(c, 'the request was rejected')} (AAA {c})" for c in codes
+        ) if codes else "payer could not respond"
+        do = " ".join(_AAA_ACTIONS[c] for c in dict.fromkeys(codes) if c in _AAA_ACTIONS)
+        if answered:
+            # Name the payer so the line cannot be read as "nobody was home". The payer's NAME is not
+            # PHI — the member's identifiers, which sit next to it in the 271, are, and none of them
+            # are touched here.
+            who = " ".join(str((data.get("payer") or {}).get("name") or "The payer").split())[:60]
+            error_note = f"{who} answered: {said}." + (f" {do}" if do else "")
+        else:
+            error_note = said
         return EligibilityResult(
             coverage_active=None,
             plan_name=None,
@@ -124,7 +155,11 @@ def parse_271_benefits(data: dict) -> EligibilityResult:
                 "source": "stedi-271",
                 "error_codes": codes,
                 "error_note": error_note,
-                "note": "payer could not respond",
+                # The UI's Network Finding tab renders `note`, and it used to read "payer could not
+                # respond" for every AAA code — including the ones where the payer answered in
+                # seconds. Same text in both places now, so the two tabs cannot disagree.
+                "note": error_note,
+                "payer_answered": answered,
             },
         )
     infos = data.get("benefitsInformation") or []
