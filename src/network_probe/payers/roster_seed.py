@@ -26,19 +26,25 @@ ROSTER = [
     # silently returned plain UnitedHealthcare markets -- worse than nothing, because it looks like a
     # match while naming a different network. Surest's networks (Choice Plus / Select Plus POS /
     # Options PPO) are pinned on UHC's own guest portal by reciprocityId.
-    ("UHC Surest", "Commercial", "TX-Houston", None, "needs_payer_id"),
-    ("UHC Surest", "Commercial", "TX-Dallas", None, "needs_payer_id"),
-    ("UHC Surest", "Commercial", "GA-Atlanta", None, "needs_payer_id"),
-    ("UHC Surest", "Commercial", "IL", None, "needs_payer_id"),
+    ("UHC Surest", "Commercial", "TX-Houston", "25463", "supported"),
+    ("UHC Surest", "Commercial", "TX-Dallas", "25463", "supported"),
+    ("UHC Surest", "Commercial", "GA-Atlanta", "25463", "supported"),
+    ("UHC Surest", "Commercial", "IL", "25463", "supported"),
     # --- BlueCross BlueShield of South Carolina (8-12-26 sheet) ---
     # SC members treated OUT OF STATE, which is ordinary BlueCard: the SC directory answers for GA and
     # FL providers under the member's own "Preferred Blue" network, verified live 2026-08-12 (the
     # sheet's own physician came back at the sheet's own street address). Markets are the CLINIC's,
     # not the member's. No Stedi id is baked — unverified ids stay needs_payer_id per the note above.
-    ("BCBS South Carolina", "Commercial", "GA-Atlanta", None, "needs_payer_id"),
-    ("BCBS South Carolina", "Commercial", "FL-Tampa", None, "needs_payer_id"),
-    ("BCBS South Carolina", "Commercial", "FL-South Florida", None, "needs_payer_id"),
-    ("BCBS South Carolina Publix", "Commercial", "FL-South Florida", None, "needs_payer_id"),
+    # Ids resolved 2026-08-12 from Stedi's full 3,660-payer directory, filtered locally --
+    # search_stedi returned the same 20 payers for every query, so it was not filtering at all.
+    # enrollment_status comes from Stedi's transactionSupport.eligibilityCheck, per 0041.
+    ("BCBS South Carolina", "Commercial", "GA-Atlanta", "00401", "supported"),
+    ("BCBS South Carolina", "Commercial", "FL-Tampa", "00401", "supported"),
+    ("BCBS South Carolina", "Commercial", "FL-South Florida", "00401", "supported"),
+    # Stedi lists the employer entity but CANNOT run an eligibility check against it, so enrolling
+    # would not help -- a distinct fact from "needs enrollment". Not repointed at BCBS SC's 00401:
+    # the Publix book runs on a co-branded Florida Blue tenant and the 270 routing is unconfirmed.
+    ("BCBS South Carolina Publix", "Commercial", "FL-South Florida", "J1897", "not_supported"),
     # --- Arizona ---
     ("Aetna", "Commercial", "AZ", "60054", "needs_enrollment"),
     ("Aetna", "Medicare Advantage", "AZ", "60054", "needs_enrollment"),
