@@ -61,14 +61,21 @@ def facts_from_crosswalk_csv(
     Rows missing an NPI or a TIN are skipped: a fact needs both to mean anything.
     """
     rows: list[dict] = []
-    seen: set[tuple[str, str]] = set()
+    seen: set[tuple[str, str, str]] = set()
     with Path(path).open(newline="", encoding="utf-8") as fh:
         for raw in csv.DictReader(fh):
             rec = {(k or "").strip().lower(): v for k, v in raw.items()}
             npi, tin = _digits(rec.get("npi")), _digits(rec.get("tin"))
-            if not npi or not tin or (npi, tin) in seen:
+            # THE MRF'S OWN LABEL WINS OVER THE FLAG. `network` is the network_name the in-network
+            # file put on this provider group; `network_name` is a label a human passed for the
+            # whole file. The data knows things the flag cannot: one file can carry several networks,
+            # and one provider group can be sold into two of them. The flag stays as the fallback for
+            # rows that carry none (negotiated_rates groups) and for CSVs written before the column
+            # existed — DictReader simply finds no key there.
+            net = " ".join((rec.get("network") or "").split()) or network_name
+            if not npi or not tin or (npi, tin, net or "") in seen:
                 continue
-            seen.add((npi, tin))
+            seen.add((npi, tin, net or ""))
             fact = {
                 "payer_key": payer_key,
                 "npi": npi,
@@ -76,12 +83,12 @@ def facts_from_crosswalk_csv(
                 "in_network": True,
                 "source": source,
             }
-            if network_name:
-                fact["network_name"] = network_name
+            if net:
+                fact["network_name"] = net
                 # Stamp the file's own build date so a later disagreement can be dated rather than
                 # argued. Omitted entirely when the label carries none — an absent value is
                 # "undated", and defaulting it to today would make every stale file look fresh.
-                built = source_built_at_from_label(network_name)
+                built = source_built_at_from_label(net)
                 if built:
                     fact["source_built_at"] = built
             rows.append(fact)
