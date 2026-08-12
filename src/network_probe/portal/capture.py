@@ -26,6 +26,7 @@ from network_probe.portal.drivers.base import PortalDriver
 from network_probe.portal.drivers.bcbsil_provider_finder import BcbsilProviderFinderDriver
 from network_probe.portal.drivers.cigna_hcp import CignaHcpDriver
 from network_probe.portal.drivers.healthsparq import HealthSparqDriver
+from network_probe.portal.drivers.healthspring_phynd import HealthSpringPhyndDriver
 from network_probe.portal.drivers.humana_finder import HumanaFinderDriver
 from network_probe.portal.drivers.molina_provider_search import MolinaProviderSearchDriver
 from network_probe.portal.drivers.oscar_care_options import OscarCareOptionsDriver
@@ -54,6 +55,7 @@ DRIVERS: tuple[PortalDriver, ...] = (
     WellcareHubDriver(),
     OscarCareOptionsDriver(),
     HumanaFinderDriver(),
+    HealthSpringPhyndDriver(),
     SapphireShoppingDriver(),
     PublixSapphireDriver(),
 )

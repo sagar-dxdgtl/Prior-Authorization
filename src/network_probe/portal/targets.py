@@ -251,6 +251,37 @@ TARGETS: tuple[PortalTarget, ...] = (
         search_hints=("input[data-cy='autosuggest.input']",),
     ),
     PortalTarget(
+        key="healthspring-phynd",
+        portal_name="HealthSpring Find a Provider (Phynd, guest)",
+        entry_url="https://healthspring-search.phynd.com/",
+        # Cigna Medicare rebranded to HealthSpring for 2026 and moved OFF hcpdirectory.cigna.com onto
+        # Phynd. cigna-hcp cannot answer these rows: it lists medicare in _OFF_DIRECTORY_LOB and
+        # refuses rather than score a Medicare plan against its commercial list.
+        payer_keys=(
+            "healthspring",
+            "healthspring-az",
+            "healthspring-co-denver",
+            "healthspring-ga-atlanta",
+            "healthspring-tx-houston",
+            "healthspring-tx-dallas",
+            "healthspring-fl-south-florida",
+            "healthspring-fl-tampa",
+            "healthspring-nj-vascular-health",
+        ),
+        sheet_rows=("Health Spring MCR",),
+        platform="Phynd",
+        fhir_fallback="Cigna PDEX Plan-Net (p-hi2.digitaledge.cigna.com, already in the catalogue)",
+        notes=(
+            "Guest-searchable, 4 steps (ZIP -> plan type -> plan -> provider), no CAPTCHA (2026-08-12). "
+            "The plan picker is keyed by CMS contract-PBP-segment: 'HealthSpring Preferred (HMO)' is "
+            "healthPlan=H0354-001-000, so a 271 carrying H0354027000 pins the member's own plan by "
+            "identifier. Two traps: the pin is only honoured on a COLD load (changing the param on a "
+            "live page left the previous plan named in the header), and the search box requires a "
+            "typeahead selection -- free text returns 0 results for providers it has not tested."
+        ),
+        search_hints=("input[type=search]", "input[type=text]"),
+    ),
+    PortalTarget(
         key="molina-provider-search",
         portal_name="Molina Provider Search (TX Medicaid)",
         # The live tool is Zelis "Sapphire", found 2026-07-28 by driving candidates in a real browser.
