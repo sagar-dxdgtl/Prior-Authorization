@@ -118,3 +118,52 @@ class TestItReachesTheResultTheFrontendSends:
 class _FakeCat:
     def resolve(self, payer):
         return None
+
+
+class TestTheRejectSaysWhatIsActuallyWrong:
+    """Live 2026-08-12, sheet row 9 (Jose Chavez, DOB 2/12/1961, AZ): HEALTHSPRING answered AAA 75,
+    "subscriber not found", and the UI said "Check the member ID and that this is the plan that
+    covers them" beside "plan '—'". Both misled: the value IS a correct identifier, just not a
+    member's — it is the CMS contract-PBP-segment H0354-027-000 — and the system had already
+    recognised it and pinned the plan with it. A reader is left thinking the id is malformed and the
+    plan unknown, when neither is true."""
+
+    def _run(self, member_id, code="75"):
+        from network_probe.domain import eligibility as el
+        from network_probe.domain.benefits import EligibilityResult
+        from network_probe.domain.models import NetworkStatus, ProviderQuery
+
+        class _Src:
+            def check(_self, q):
+                return EligibilityResult(
+                    coverage_active=None, plan_name=None, group=None, coverage_dates={},
+                    network_status=NetworkStatus.UNKNOWN, benefits=[], pcp_required=None,
+                    prior_auth_required=None, referral_required=None, cob=None,
+                    network_verdict=None, corroboration=[],
+                    source_audit={"source": "stedi-271", "error_codes": [code],
+                                  "error_note": "HEALTHSPRING answered: subscriber not found "
+                                                "— verify member ID (AAA 75).",
+                                  "note": "HEALTHSPRING answered: subscriber not found "
+                                          "— verify member ID (AAA 75).",
+                                  "payer_answered": True})
+
+        q = ProviderQuery(payer="healthspring", npi="1992078745", member_id=member_id,
+                          first_name="Jose", last_name="Chavez", dob="2/12/1961", plan_hint=None)
+        return el.check_eligibility(q, stedi=_Src(), catalogue=_FakeCat())
+
+    def test_it_names_the_value_as_a_plan_id_rather_than_blaming_the_member_id(self):
+        r = self._run("H0354027000")
+        note = r.source_audit["note"]
+        assert "H0354-027-000" in note, "name the identifier we recognised"
+        assert "plan identifier" in note.lower() or "not a member id" in note.lower(), note
+
+    def test_it_says_the_value_was_not_wasted(self):
+        """It pinned the plan for the portal walk — a reader should not think it was discarded."""
+        r = self._run("H0354027000")
+        assert r.selected_plan == "H0354-027-000"
+        assert "pin" in r.source_audit["note"].lower()
+
+    def test_a_real_member_id_reject_is_left_alone(self):
+        r = self._run("ZCS716365N00")
+        assert "plan identifier" not in r.source_audit["note"].lower()
+        assert r.selected_plan is None

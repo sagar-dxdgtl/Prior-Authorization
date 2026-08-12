@@ -38,15 +38,27 @@ def _stedi_source(result) -> dict:
     # so a reviewer sees "verify member ID" / "map the payer" instead of a bare "unknown".
     audit = result.source_audit or {}
     reason = audit.get("error_note") or (audit.get("note") if status == "UNKNOWN" else None)
-    why = f" Reason: {reason}." if (status == "UNKNOWN" and reason) else ""
+    why = f" Reason: {str(reason).rstrip().rstrip('.')}." if (status == "UNKNOWN" and reason) else ""
+    # SHOW THE PLAN WE ACTUALLY HAVE. This read `plan_name` alone, so a plan the app had already
+    # resolved rendered as "plan '—'" — which invites the reader to conclude the plan is unknown
+    # when it is not. Row 9 of the 8-12-26 sheet is the case: the payer named no plan (it rejected
+    # the identity), but the CMS contract-PBP-segment on the form pinned H0354-027-000, and the
+    # portal check ran on it. Where the plan did NOT come from the payer, say so rather than let a
+    # typed value borrow the authority of a 271.
+    plan = result.plan_name or getattr(result, "selected_plan", None)
+    pin_src = getattr(result, "plan_pin_source", None)
+    plan_txt = f"'{plan}'" if plan else "'—'"
+    if plan and not result.plan_name and pin_src:
+        plan_txt = f"{plan_txt} (from the {pin_src})"
     return {
         "source": "Stedi 271 (eligibility)",
         "answers": "coverage + plan tier",
         "status": status,
         "tone": _tone(status),
         "detail": (
-            f"Coverage {status.lower()}; plan '{result.plan_name or '—'}'. Plan-level out-of-network "
-            f"benefits: {oon_str}. A 271 gives plan-tier only — provider-specific network is UNKNOWN here."
+            f"Coverage {status.lower()}; plan {plan_txt}. Plan-level out-of-network "
+            f"benefits: {oon_str}. A 271 gives plan-tier only — provider-specific network is "
+            f"UNKNOWN here."
             + why
         ),
     }

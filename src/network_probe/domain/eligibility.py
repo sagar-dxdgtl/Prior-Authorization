@@ -73,7 +73,28 @@ def check_eligibility(
 
         if (pin := plan_pin_from_identifier(getattr(q, "member_id", None))):
             result.selected_plan = pin
-            result.plan_pin_source = "identifier field on the form (a CMS plan id, not the payer's 271)"
+            result.plan_pin_source = "CMS plan id supplied on the form, not the payer's 271"
+            # SAY WHAT IS ACTUALLY WRONG. The payer rejects this value as a subscriber, and the
+            # generic advice ("verify the member ID") reads as though it were malformed. It is not:
+            # it is a perfectly well-formed identifier of a PLAN. Row 9 of the 8-12-26 sheet is the
+            # case — HEALTHSPRING answered AAA 75 for H0354027000, which is contract H0354, PBP 027,
+            # segment 000. Telling the operator to re-check a value that is already correct sends
+            # them looking for a typo that does not exist; telling them it identifies the plan and
+            # not the member is the thing they can act on. And it was not wasted — it pinned the
+            # plan the portal walk needs, so the note says so rather than implying it was dropped.
+            audit = result.source_audit or {}
+            if audit.get("error_codes"):
+                extra = (
+                    f" Note: the value supplied in the member-ID field is a CMS plan identifier "
+                    f"({pin}) — a contract-PBP-segment, which names the PLAN and not the member — "
+                    f"so no payer can match a subscriber by it. A member ID from the member's card "
+                    f"is needed for eligibility. It was not discarded: it pinned the plan for the "
+                    f"provider-network check."
+                )
+                for key in ("note", "error_note"):
+                    if audit.get(key):
+                        audit[key] = f"{audit[key]}{extra}"
+                result.source_audit = audit
     # The 271 knows the member's real plan; scope the directory leg by it when the caller gave none.
     if not q.plan_hint and result.selected_plan:
         q.plan_hint = result.selected_plan
