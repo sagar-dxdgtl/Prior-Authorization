@@ -48,6 +48,15 @@ TRAPS, ALL MEASURED LIVE ON 2026-08-12 AND ALL OF WHICH COST A WALK BEFORE THEY 
     that returned no status turned a candidate it never opened into "1 profile did not render an
     NPI" — a claim about a provider nobody had looked at. `candidate_order` then makes the common
     case need no restore at all by opening the name-matching card first.
+ 6. A POPOVER COVERS THE SEARCH BOX, and `is_visible()` does not notice. After the location commits,
+    Zelis raises "Narrow Your Search Results — Log in now or enter the first characters of your
+    member ID…" over the provider search input. The input keeps its bounding box and its display, so
+    it reads as reachable; `elementFromPoint` at its centre returns the popover's own paragraph.
+    focus() is a JS call with no hit-test, so the walk typed into a covered control and came back
+    with nothing — one step short of reporting that nothing as an absence. `_dismiss_overlays` runs
+    before the network read, the search and every profile click, and `_obstruction` refuses to
+    search a box something else is sitting on. ⚠ Its "Enter Card ID" button is NEVER clicked: it
+    opens a member-ID field, and no member identifier may reach a portal (HANDOFF §7).
 
 WHAT THIS PORTAL IS UNUSUALLY GOOD AT. Every result card states the pinned network inline — `In
 "Preferred Blue" Network` — so the verdict carries the portal's own attestation of the network it was
@@ -98,6 +107,19 @@ LOC_SUGGEST_SUB = "[data-cy^='list-item-secondary-text']"
 # that typed a ZIP and moved on were reading a location the portal had never accepted.
 LOC_APPLY = "[data-cy='dialog-footer-button-1']"
 SEARCH = "input[data-cy='autosuggest.input']"
+# TRAP 6 — the popover that covers the search box. Measured live 2026-08-12 on the New Port Richey
+# walk, after the location committed and the network pinned: a card headed "Narrow Your Search
+# Results" offering [Dismiss] and [Enter Card ID], sitting on top of the provider search input.
+# Its container matches [data-cy*='tooltip'].
+#
+# ⚠ NEVER CLICK "ENTER CARD ID". It opens a member-ID entry field, and no member identifier ever
+# reaches a portal (HANDOFF §7) — that rule is the reason this driver searches by provider name and
+# clinic ZIP alone. Dismiss is the only acceptable action here.
+OVERLAY_HOSTS = ("[data-cy*='tooltip']", "[role=tooltip]", "[role=dialog]", ".cdk-overlay-pane")
+OVERLAY_DISMISS_TEXT = ("dismiss", "close", "no thanks", "not now", "got it")
+OVERLAY_NEVER_CLICK = ("enter card id", "log in", "sign in", "register")
+# The phrase itself, so an obstruction can be NAMED in the trail rather than reported as a mystery.
+OVERLAY_RE = re.compile(r"narrow your search results", re.I)
 OPTION = "mat-option"
 CARDS = "[data-cy^='search-results.card-']"
 RESULTS_FOR = "[data-cy='search-results-header.results-for']"
@@ -247,6 +269,10 @@ class ResultSet:
     cards: list[Card] = field(default_factory=list)
     none_header: str | None = None
     results_for: str | None = None
+    #: Why the search never happened, when it never happened. Without it every non-surfaced read is
+    #: reported as "the results surface never rendered", which is wrong for a search box that was
+    #: covered by a popover — a different problem with a different fix.
+    blocked_by: str | None = None
     #: The portal said it could not fill the page within the radius asked for and widened it itself.
     radius_expanded: bool = False
 
@@ -383,6 +409,11 @@ class SapphireShoppingDriver(PortalDriver):
             )
         trail.append(f"location: {committed!r} → geo {geo}")
 
+        # Trap 6 again: the popover fires right after the location commits, so clear it before
+        # reading the network too. Idempotent — with nothing up it clicks nothing.
+        if self._dismiss_overlays(page):
+            trail.append("dismissed the 'Narrow Your Search Results' popover")
+
         network = self._pinned_network(page)
         if not network:
             return result(PortalStatus.UNKNOWN,
@@ -396,11 +427,14 @@ class SapphireShoppingDriver(PortalDriver):
         shot_name = shot("results")
 
         if not rs.surfaced:
+            why = rs.blocked_by or (
+                f"the results surface never rendered for {searched!r} — neither result cards nor "
+                f"the portal's own no-results header appeared"
+            )
             return result(
                 PortalStatus.UNKNOWN,
-                f"the results surface never rendered for {searched!r} — neither result cards nor the "
-                f"portal's own no-results header appeared. That is an inconclusive read, not an "
-                f"absence, so it is not reported as out-of-network.",
+                f"{why}. That is an inconclusive read, not an absence, so it is not reported as "
+                f"out-of-network.",
                 screenshot=shot_name, matched_name=None,
             )
 
@@ -516,6 +550,67 @@ class SapphireShoppingDriver(PortalDriver):
             except PlaywrightError:
                 return False
         return False
+
+    def _dismiss_overlays(self, page: Page) -> bool:
+        """Close any coachmark/popover covering the controls. True if something was dismissed.
+
+        Trap 6. Only buttons whose text is an explicit dismissal are clicked, and anything in
+        OVERLAY_NEVER_CLICK is refused outright — "Enter Card ID" would open a member-ID field, and
+        a member identifier must never reach a portal. Idempotent: with no overlay up it clicks
+        nothing and returns False, so it is safe to call before every step.
+        """
+        try:
+            if not OVERLAY_RE.search(page.inner_text("body") or ""):
+                return False
+        except PlaywrightError:
+            return False
+        for sel in ("button", "a[role=button]"):
+            try:
+                loc = page.locator(sel)
+                n = min(loc.count(), 30)
+            except PlaywrightError:
+                continue
+            for i in range(n):
+                cand = loc.nth(i)
+                try:
+                    if not cand.is_visible():
+                        continue
+                    label = " ".join((cand.inner_text() or "").split()).lower()
+                except PlaywrightError:
+                    continue
+                if not label or any(bad in label for bad in OVERLAY_NEVER_CLICK):
+                    continue
+                if not any(ok == label or ok in label for ok in OVERLAY_DISMISS_TEXT):
+                    continue
+                try:
+                    cand.click(timeout=5_000)
+                except (PlaywrightTimeout, PlaywrightError):
+                    continue
+                self._settle(page, 1_500)
+                return True
+        return False
+
+    def _obstruction(self, page: Page, box) -> str | None:
+        """What is really on top of `box`, when it is not the box itself.
+
+        `is_visible()` is not enough: the popover leaves the input with a bounding box and no
+        display:none, so the driver read it as reachable and typed into a covered control. Measured,
+        `elementFromPoint` at the input's centre returned the popover's own paragraph. focus() is a
+        JS call with no hit-test, which is exactly why this went unnoticed.
+        """
+        try:
+            bb = box.bounding_box()
+            if not bb or not bb.get("width"):
+                return None
+            hit = page.evaluate(
+                "([x,y]) => { const e = document.elementFromPoint(x,y); if (!e) return null;"
+                " const i = e.closest('input,textarea'); if (i) return null;"
+                " return (e.innerText || e.tagName || '').trim().slice(0,90); }",
+                [bb["x"] + bb["width"] / 2, bb["y"] + bb["height"] / 2],
+            )
+        except (PlaywrightTimeout, PlaywrightError):
+            return None
+        return " ".join(str(hit).split())[:90] if hit else None
 
     def _settle(self, page: Page, pause_ms: int = 2_500) -> None:
         """networkidle never fires on these analytics-heavy portals; wait a bounded beat instead."""
@@ -677,29 +772,65 @@ class SapphireShoppingDriver(PortalDriver):
             trail.append("no provider surname to search")
             return ResultSet(surfaced=False), last
         # Full name first: it narrows the candidate list this driver then has to open one profile at
-        # a time. The surname alone is the fallback, because the sheet's given name is not always the
-        # directory's ("Desire" vs "Desiree Amelia").
-        term = f"{first} {last}".strip() if first else last
+        # a time. THE SURNAME ALONE IS THE FALLBACK, and it is not optional.
+        #
+        # This comment promised a fallback the code never performed — `term` was computed once and
+        # used once. Measured 2026-08-12: the portal answered 'MICHELLE MON' with its own "No results
+        # for MICHELLE MON" header, for a provider it had listed twice the same day at the same ZIP
+        # on the same network. A no-results header is the portal ANSWERING, which makes it the most
+        # dangerous empty there is: it looks authoritative, and the walk reported UNKNOWN on a row
+        # that is in fact in-network. The surname is a strictly broader query, so when the full name
+        # comes back empty it is the honest second question — and it also covers the case the comment
+        # was originally written for, where the sheet's given name is not the directory's ("Desire"
+        # vs "Desiree Amelia Clarke").
+        terms = [t for t in dict.fromkeys([f"{first} {last}".strip() if first else last, last]) if t]
 
-        # Type into the portal's own box and press Enter, rather than navigating a hand-built URL.
-        # A direct /search/name/... goto renders zero cards unless the session already carries the
-        # committed location, and "zero cards" is exactly the reading that must never be wrong here.
+        rs = ResultSet(surfaced=False)
+        term = terms[0]
+        for i, term in enumerate(terms):
+            rs = self._search_once(page, term, geo, trail)
+            if rs.populated or rs.blocked_by:
+                break
+            if i + 1 < len(terms):
+                trail.append(f"{term!r} returned nothing; retrying with the surname alone")
+        return rs, term
+
+    def _search_once(self, page: Page, term: str, geo: str, trail: list[str]) -> ResultSet:
+        """One search: clear the box, type `term`, press Enter, read the terminal state.
+
+        Typed into the portal's own box rather than navigated as a hand-built URL: a direct
+        /search/name/… goto renders zero cards unless the session already carries the committed
+        location, and "zero cards" is exactly the reading that must never be wrong here.
+        """
+        # Trap 6: clear the "Narrow Your Search Results" popover before reading the box, and only
+        # then decide whether the box is reachable.
+        if self._dismiss_overlays(page):
+            trail.append("dismissed the 'Narrow Your Search Results' popover")
+
         box = self._visible(page, SEARCH)
         if box is None:
             trail.append("search box never became visible")
-            return ResultSet(surfaced=False), term
+            return ResultSet(surfaced=False)
+        # VISIBLE IS NOT REACHABLE. A covered box takes focus() and keystrokes without error and
+        # returns nothing, and "nothing" one step later is indistinguishable from an absence.
+        if (over := self._obstruction(page, box)):
+            trail.append(f"search box still obstructed by {over!r}")
+            return ResultSet(surfaced=False, blocked_by=f"the search box was covered by {over!r}")
         try:
             box.focus()
+            # Select any previous term first: on the second attempt the box still holds the first
+            # one, and typing would append to it and search for "MICHELLE MONMON".
+            page.keyboard.press("ControlOrMeta+a")
             page.keyboard.type(term, delay=90)
             self._settle(page, 2_500)
             page.keyboard.press("Enter")
         except (PlaywrightTimeout, PlaywrightError) as e:
             trail.append(f"search box not driveable: {type(e).__name__}")
-            return ResultSet(surfaced=False), term
+            return ResultSet(surfaced=False)
         trail.append(f"searched {term!r} at geo {geo}")
         self._wait_results(page)
         self._settle(page, 3_000)
-        return self._read_results(page), term
+        return self._read_results(page)
 
     def _wait_results(self, page: Page, timeout_s: float = 60.0) -> bool:
         """Wait for a TERMINAL results state: cards, or the portal's own no-results header.
@@ -822,6 +953,7 @@ class SapphireShoppingDriver(PortalDriver):
 
     def _open_profile(self, page: Page, index: int) -> bool:
         """Click into candidate `index`'s profile. False when the card or its link is not there."""
+        self._dismiss_overlays(page)  # trap 6 — a coachmark over the card would eat the click
         link = self._card_link(page, index)
         if link is None:
             return False
