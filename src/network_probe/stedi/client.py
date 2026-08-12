@@ -145,6 +145,15 @@ class StediEligibilityClient:
             variants.append(_subscriber(stripped, False))
             if had_name:
                 variants.append(_subscriber(stripped, True))
+        # LAST RESORT: name + DOB with NO member id at all. Every variant above assumes the id we
+        # were given IS a member id, so when it is something else they all fail the same way. That is
+        # not hypothetical: the 8-12-26 sheet has an "Ins Group Number" column and no member-id
+        # column, so a BCBS group number ("716365N00") went out as a member id and the payer
+        # correctly rejected it with AAA-72 — which the UI then reported as "invalid or missing
+        # member ID", true but not actionable. A payer that can match on name+DOB answers this shape;
+        # one that cannot returns the same identity error and we are no worse off.
+        if had_name and dob:
+            variants.append(_subscriber(None, True))
 
         first_data = None
         for subscriber in variants:
