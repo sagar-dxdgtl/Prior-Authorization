@@ -698,6 +698,29 @@ SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
     # portal/drivers/sapphire_shopping.py. tic_url is the BlueCard host-plan index: measured
     # 2026-08-12 it is a CONTROL-PLAN index carrying 169 other Blues' networks, and it needs a
     # `Referer: https://provider.bcbssc.com/` header plus a US exit or it 403s.
+    #
+    # ⚠ THIS ROW IS ONE OF SEVEN BCBS SC ELIGIBILITY ENTITIES, AND 0044 GAVE IT 00401. BCBS SC's own
+    # provider table ("Table-Claim Edits 251 and B57") routes a 270 by the MEMBER-ID PREFIX, and
+    # Stedi lists every one of them separately, all eligibilityCheck SUPPORTED (2026-08-12):
+    #
+    #     00401  all prefixes except those below     Preferred Blue / BlueEssentials   <- this row
+    #     400    ZCK, ZCS                            State Health Plan
+    #     00922  ZCC ZCG ZCI ZCJ ZCL ZCX             BlueChoice HealthPlan / Blue Option
+    #     00402  "R"                                 Federal Employee Program
+    #     00C63  ZHP, ZOH, ZOM                       Medicare Blue (Medicare Advantage)
+    #     00403  ZCD                                 Healthy Blue (BlueChoice Medicaid)
+    #     00886  8 digits, usually begins "1"        Planned Administrators (PAI)
+    #
+    # 00401 is the right DEFAULT — its row is literally "all prefixes except those listed" — but a
+    # member on any of the other six answers a 270 sent here with AAA-72, the SAME code a bad member
+    # id returns. So an AAA-72 on this key does not by itself mean the id is wrong; it can mean the
+    # id is right and the entity is not. Route by the card's prefix before concluding anything.
+    #
+    # ⚠ AND DO NOT VALIDATE A BLUES MEMBER ID BY ITS SHAPE. The 3-character prefix is no longer
+    # alpha-only: BCBS SC's 2021 ID Card Guide states the alpha pool "is now exhausted" and that
+    # numbers have been incorporated into the prefix for new groups, so "all Blue Plans and providers
+    # must now be able to accept a prefix that includes a combination of alpha and numeric
+    # characters". A "must start with 3 letters" check would reject valid cards.
     # Surest is a UnitedHealthcare company, not a separate carrier: its member site links its
     # provider directories straight into findcare.guest.uhc.com with a deeplink that pins the network
     # by reciprocityId. Same portal as UHC, different network book -- hence a distinct payer row.
