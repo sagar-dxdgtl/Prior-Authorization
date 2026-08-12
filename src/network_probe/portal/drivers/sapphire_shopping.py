@@ -40,6 +40,14 @@ TRAPS, ALL MEASURED LIVE ON 2026-08-12 AND ALL OF WHICH COST A WALK BEFORE THEY 
     not an absence. New Port Richey did exactly this. Reporting it as OON would invent an OON out of
     a hydration timeout, so `_read_results` distinguishes the two and only a populated-but-missing
     result set is allowed to produce OUT_OF_NETWORK.
+ 5. The NPI is only on the profile, so a sweep must return to the result list between candidates —
+    and that return re-runs the search server-side. Measured over one session, 4 of 12 restores had
+    not repainted within 30s; screenshotted, the page had lost nothing (network and location still
+    pinned) and was sitting on the portal's own "Looking for matches to your search… This could take
+    a few minutes". So the restore is retried against a real budget AND checked, because the version
+    that returned no status turned a candidate it never opened into "1 profile did not render an
+    NPI" — a claim about a provider nobody had looked at. `candidate_order` then makes the common
+    case need no restore at all by opening the name-matching card first.
 
 WHAT THIS PORTAL IS UNUSUALLY GOOD AT. Every result card states the pinned network inline — `In
 "Preferred Blue" Network` — so the verdict carries the portal's own attestation of the network it was
@@ -57,7 +65,7 @@ from __future__ import annotations
 import re
 import time
 from dataclasses import dataclass, field
-from urllib.parse import parse_qs, quote, unquote, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Locator, Page
@@ -115,8 +123,22 @@ _SHELL_TIMEOUT_S = 75.0  # trap 1 — the SPA genuinely takes this long sometime
 _SHELL_POLL_MS = 1_500
 _MAX_CARDS = 40
 # Every candidate costs a profile navigation, so the sweep is bounded. Exceeding it does not
-# produce an OON — `checked < len(cards)` downgrades the verdict to UNKNOWN instead.
+# produce an OON — an unread candidate downgrades the verdict to UNKNOWN instead.
 _MAX_PROFILES = 8
+# TRAP 5, MEASURED 2026-08-12. Returning to the result list between candidates is a full cold boot
+# of the SPA, and it re-runs the search server-side. Screenshotted in that state, the page is not
+# broken and has lost nothing — network "Preferred Blue" and location "Atlanta, GA — 30307" are both
+# still pinned — it is sitting on the portal's OWN spinner: "Looking for matches to your search…
+# This could take a few minutes". The old 30s budget simply expired inside a wait the portal warns
+# can run for minutes. Over one session, restores that beat 30s landed at ~20s and 4 did not beat it
+# at all, so this needs both a longer budget and more than one try (a fresh navigation frequently
+# lands on a warm result). Bounded overall, because a slow portal must not become an endless walk.
+_RESTORE_ATTEMPT_S = 40.0
+_RESTORE_BUDGET_S = 90.0
+_RESTORE_ATTEMPTS = 3
+# What that spinner says, so a walk that ran out of patience can report the portal was still working
+# rather than implying the list was lost.
+_SEARCHING_RE = re.compile(r"looking for matches to your search", re.I)
 _NPI_RE = re.compile(r"\bNPI:?\s*(\d{10})\b")
 
 # The portal's own search query string, copied from a real Enter-driven search rather than invented.
@@ -199,6 +221,23 @@ class Card:
         return self.text.split("\n")[0][:120] if self.text else ""
 
 
+@dataclass(frozen=True)
+class ProfileRead:
+    """What became of one candidate in the sweep.
+
+    THE THREE FAILURES ARE NOT ONE FAILURE. A profile that would not OPEN says nothing whatever
+    about that provider; a profile that opened and carried no NPI at least tells us the portal shows
+    none. Both used to be counted together and reported as "did not render an NPI", so the walk that
+    never opened Michelle D Mon's profile said it had read a profile for her — a claim about a
+    provider it had not looked at.
+    """
+
+    index: int
+    headline: str
+    outcome: str  # "read" | "no-npi" | "unopened"
+    reason: str = ""
+
+
 @dataclass
 class ResultSet:
     """What the results surface said. `surfaced` separates 'the portal answered' from 'it never
@@ -214,6 +253,39 @@ class ResultSet:
     @property
     def populated(self) -> bool:
         return bool(self.cards)
+
+
+def _tokens(s: str | None) -> set[str]:
+    return {t for t in re.split(r"[^a-z]+", (s or "").lower()) if len(t) > 1}
+
+
+def candidate_order(cards: list[Card], q: PortalQuery) -> list[int]:
+    """Indices of `cards`, the ones whose name looks like the query first.
+
+    THIS IS AN ORDER, NEVER AN IDENTIFICATION. The NPI still decides (see `_identify`), so a wrong
+    order costs one profile navigation and can never cost a wrong verdict; a card that sorts last is
+    still opened. It earns its place because every candidate after the first costs a return trip to
+    the result list, and that trip is the step that intermittently fails — so the fewer of them a
+    walk needs, the fewer chances it has to lose the provider it was asked about.
+
+    Measured 2026-08-12: "MICHELLE MON" returns "Micaela R Moen, MD" at index 0 and our "Michelle D
+    Mon, MD" at index 1. Sweeping in portal order opened the stranger, then hit an empty restore and
+    never opened ours at all. Sweeping name-first finds ours on the first profile, with no restore.
+    """
+    want = _tokens(f"{q.provider_first_name or ''} {q.provider_last_name or ''}")
+    if not want:
+        return list(range(len(cards)))
+
+    def rank(i: int) -> tuple[int, int, int]:
+        toks = _tokens(cards[i].headline)
+        exact = len(want & toks)
+        # A shared opening catches the directory's fuller name ("Desire" vs "Desiree Amelia") without
+        # licensing anything: it only moves a card up the queue.
+        near = sum(1 for w in want
+                   if any(t.startswith(w[:4]) or w.startswith(t[:4]) for t in toks))
+        return (-exact, -near, i)
+
+    return sorted(range(len(cards)), key=rank)
 
 
 def network_attested(text: str | None, label: str | None) -> bool:
@@ -337,7 +409,8 @@ class SapphireShoppingDriver(PortalDriver):
         # and the sheet's "Desire Clarke" does not token-match the portal's "Desiree Amelia Clarke",
         # which turned a provider the portal DOES list into a confident OUT_OF_NETWORK. Every
         # candidate is opened and its NPI read before any verdict is issued.
-        ours, checked, profile_note = self._identify(page, rs, q, trail)
+        ours, reads = self._identify(page, rs, q, trail)
+        checked = sum(1 for r in reads if r.outcome == "read")
         if ours is not None:
             if network_negated(ours.text, network):
                 return result(
@@ -370,9 +443,10 @@ class SapphireShoppingDriver(PortalDriver):
             if checked < len(rs.cards):
                 return result(
                     PortalStatus.UNKNOWN,
-                    f"the portal returned {len(rs.cards)} provider(s) for {searched!r} on {network!r}, "
-                    f"but only {checked} profile(s) could be opened to read an NPI. NPI {q.npi} was "
-                    f"not among those, and an unread profile is not an absence.{profile_note}",
+                    f"the portal returned {len(rs.cards)} provider(s) for {searched!r} on {network!r} "
+                    f"and {checked} profile(s) were read for an NPI; {q.npi} was not among them. "
+                    f"{self._unread_detail(rs, reads)} An unchecked provider is not an absence, so "
+                    f"this is not reported as out-of-network.",
                     screenshot=shot_name,
                 )
             if rs.radius_expanded:
@@ -681,59 +755,105 @@ class SapphireShoppingDriver(PortalDriver):
 
     def _identify(
         self, page: Page, rs: ResultSet, q: PortalQuery, trail: list[str]
-    ) -> tuple[Card | None, int, str]:
-        """Open each result's profile and read its NPI. Returns (our provider, profiles read, note).
+    ) -> tuple[Card | None, list[ProfileRead]]:
+        """Open each result's profile and read its NPI. Returns (our provider, one read per candidate).
 
         Identification is by NPI ONLY. The name on the sheet is not the name in the directory —
         "Desire Clarke" is listed as "Desiree Amelia Clarke, MD" — so a name test either invents an
         absence (as it did here) or, with a looser rule, matches a stranger: this portal's sibling
-        answered the surname "Orem" with "Shoaf, Noremi D".
+        answered the surname "Orem" with "Shoaf, Noremi D". The name is allowed to pick the ORDER
+        (`candidate_order`) and nothing else.
 
         The returned Card carries the PROFILE text, because that is where both the NPI and the
         network attestation live.
         """
         results_url = page.url
-        checked = 0
-        failures = 0
-        for i in range(min(len(rs.cards), _MAX_PROFILES)):
-            link = self._card_link(page, i)
-            if link is None:
-                failures += 1
+        order = candidate_order(rs.cards, q)[:_MAX_PROFILES]
+        reads: list[ProfileRead] = []
+
+        def note_read(i: int, outcome: str, reason: str = "") -> None:
+            head = rs.cards[i].headline or f"card {i}"
+            reads.append(ProfileRead(index=i, headline=head, outcome=outcome, reason=reason))
+            trail.append(f"profile {head!r}: {outcome}" + (f" ({reason})" if reason else ""))
+
+        for n, i in enumerate(order):
+            if n and not self._back_to(page, results_url):
+                # The result list did not come back, so nothing below this point can be opened.
+                # Say so for each of them rather than letting them look like profiles that were read.
+                why = ("the portal was still running its own search"
+                       if self._still_searching(page) else "the portal did not re-render its results")
+                for j in order[n:]:
+                    note_read(j, "unopened", why)
+                break
+            if not self._open_profile(page, i):
+                note_read(i, "unopened", "the card's link was not reachable")
                 continue
-            try:
-                link.click(timeout=10_000)
-            except (PlaywrightTimeout, PlaywrightError):
-                failures += 1
-                self._back_to(page, results_url)
-                continue
-            self._settle(page, 4_000)
-            self._wait_profile(page)
-            try:
-                text = page.inner_text("body") or ""
-            except PlaywrightError:
-                text = ""
+            text = self._profile_body(page)
             npis = tuple(_NPI_RE.findall(text))
-            if npis:
-                checked += 1
-            else:
-                failures += 1
+            note_read(i, "read" if npis else "no-npi")
             if q.npi and q.npi in npis:
-                trail.append(f"profile {i}: NPI {q.npi} matched")
-                # Name it from the profile's own heading. `text` starts with the skip-to-content link,
-                # so a first-line headline would report "Skip to main content" as the provider.
-                return Card(text=text, npis=npis, name=self._profile_name(page)), checked, ""
-            self._back_to(page, results_url)
-        note = (f" {failures} profile(s) did not render an NPI." if failures else "")
+                trail.append(f"NPI {q.npi} matched")
+                # NAME IT FROM THE CARD, which is the portal's own rendering of this provider
+                # ("Michelle D Mon, MD"). Not from the body text, whose first line is the
+                # skip-to-content link, and not from the profile URL — see `_profile_name`.
+                return (Card(text=text, npis=npis,
+                             name=rs.cards[i].headline or self._profile_name(page)), reads)
+        checked = sum(1 for r in reads if r.outcome == "read")
         trail.append(f"profiles read: {checked} of {len(rs.cards)}")
-        return None, checked, note
+        return None, reads
+
+    def _unread_detail(self, rs: ResultSet, reads: list[ProfileRead]) -> str:
+        """Why the set was not fully read, naming the providers — so a reviewer can see at a glance
+        whether the one they care about was among them."""
+        seen = {r.index for r in reads}
+        parts: list[str] = []
+        unopened = [r for r in reads if r.outcome == "unopened"]
+        no_npi = [r.headline for r in reads if r.outcome == "no-npi"]
+        if unopened:
+            why = next((r.reason for r in unopened if r.reason), "")
+            parts.append(f"{', '.join(repr(r.headline) for r in unopened)} could not be opened"
+                         + (f" — {why}" if why else ""))
+        if no_npi:
+            parts.append(f"{', '.join(repr(h) for h in no_npi)} opened but showed no NPI")
+        skipped = [c.headline for i, c in enumerate(rs.cards) if i not in seen]
+        if skipped:
+            parts.append(f"{len(skipped)} further result(s) were beyond this walk's profile budget")
+        return ("; ".join(parts) + ".") if parts else ""
+
+    def _open_profile(self, page: Page, index: int) -> bool:
+        """Click into candidate `index`'s profile. False when the card or its link is not there."""
+        link = self._card_link(page, index)
+        if link is None:
+            return False
+        try:
+            link.click(timeout=10_000)
+        except (PlaywrightTimeout, PlaywrightError):
+            return False
+        self._settle(page, 4_000)
+        return True
+
+    def _profile_body(self, page: Page) -> str:
+        """The profile's text, once the NPI has had its chance to render. Read ONCE — both the NPI
+        and the network attestation come out of this same string, so they cannot describe two
+        different renders of the page."""
+        self._wait_profile(page)
+        try:
+            return page.inner_text("body") or ""
+        except PlaywrightError:
+            return ""
 
     def _profile_name(self, page: Page) -> str | None:
-        """The provider name as the PORTAL holds it.
+        """Last-resort name, for a candidate whose card carried no text at all.
 
-        Read from the profile URL, whose last path segment is the portal's own JSON state and carries
-        `"name":"Randal Orem"`. The visible headings are unreliable here: `h1` is the page title
-        ("Find a Provider - Provider Profile") and the card's ProviderName node does not exist on the
-        profile route, so both name the page rather than the provider.
+        ⚠ THE URL'S `name` IS THE SEARCH TERM, NOT THE PROVIDER. The profile's last path segment is
+        the portal's own JSON state, and on a name search it echoes what WE typed:
+        `…"name":"MICHELLE MON","npi_identifier":"1639148703"…` for a provider the portal itself
+        renders as "Michelle D Mon, MD". Reading it back made the capture say "the portal listed
+        'MICHELLE MON'" — our own input, quoted as if it were the payer's answer. The card's headline
+        is the portal's word for the provider and is preferred everywhere; this is the fallback.
+
+        The visible headings are no better: `h1` is the page title ("Find a Provider - Provider
+        Profile") and the card's ProviderName node does not exist on the profile route.
         """
         m = re.search(r'"name"\s*:\s*"([^"]{1,80})"', unquote(page.url))
         if m:
@@ -762,14 +882,49 @@ class SapphireShoppingDriver(PortalDriver):
             return None
         return None
 
-    def _back_to(self, page: Page, url: str) -> None:
-        """Return to the result set. go_back() is unreliable on this SPA, so re-navigate."""
+    def _back_to(self, page: Page, url: str) -> bool:
+        """Return to the result set, and SAY whether the cards actually came back.
+
+        go_back() is unreliable on this SPA, so re-navigate — but a re-navigation is a cold boot of
+        the app and it intermittently repaints nothing at all. Measured 2026-08-12 over one session,
+        alternating between two profiles: 2 of 5 restores rendered ZERO cards and were still empty
+        15s later, and on BOTH the very next navigation brought them back within 20s.
+
+        This used to return nothing, so a dead restore was invisible: `_card_link` found no card,
+        returned None, and the candidate was tallied as a profile that "did not render an NPI". That
+        is how a walk came to report on a provider it had never opened. Retried, then reported.
+        """
+        deadline = time.monotonic() + _RESTORE_BUDGET_S
+        # Bounded by BOTH a wall-clock budget and an attempt count: the budget keeps a slow portal
+        # from becoming an endless walk, and the count keeps a page that fails instantly (a closed
+        # context raises on every call) from spinning hot until the budget expires.
+        for _ in range(_RESTORE_ATTEMPTS):
+            try:
+                page.goto(url, wait_until="domcontentloaded", timeout=45_000)
+            except (PlaywrightTimeout, PlaywrightError):
+                if time.monotonic() >= deadline:
+                    break
+                continue
+            left = deadline - time.monotonic()
+            # Cards specifically, not `_wait_results`' terminal state: on a restore the no-results
+            # header would mean the committed location was lost, which is not a restored list.
+            self._wait_results(page, timeout_s=min(_RESTORE_ATTEMPT_S, max(left, 1.0)))
+            self._settle(page, 2_500)
+            try:
+                if page.locator(CARDS).count():
+                    return True
+            except PlaywrightError:
+                pass
+            if time.monotonic() >= deadline:
+                break
+        return False
+
+    def _still_searching(self, page: Page) -> bool:
+        """The portal's own spinner is still up — it is working, not empty-handed."""
         try:
-            page.goto(url, wait_until="domcontentloaded", timeout=45_000)
-        except (PlaywrightTimeout, PlaywrightError):
-            return
-        self._wait_results(page, timeout_s=30.0)
-        self._settle(page, 2_500)
+            return bool(_SEARCHING_RE.search(page.inner_text("body") or ""))
+        except PlaywrightError:
+            return False
 
     def _expand_identifiers(self, page: Page) -> bool:
         """Open the profile's Identifiers accordion, where the NPI is."""
