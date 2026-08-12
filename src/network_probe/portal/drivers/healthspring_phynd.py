@@ -30,6 +30,14 @@ and one that must not be collapsed into it.
 from the dropdown suggestions to ensure accurate results." Free text returned "0 results / No
 providers found" for a provider whose network status was never actually tested. Zero results from an
 unselected free-text query is NOT an absence, and `_search` refuses to treat it as one.
+
+KNOWN LIMIT, MEASURED AND NOT YET CLOSED. When the typeahead has a real provider it appears to
+navigate to that provider's PROFILE rather than a result list, so `_read_results` (which reads
+"Showing N results") finds no surface and the capture returns UNKNOWN — a control search for "Smith"
+did exactly this. The not-found path is sound: for a surname the typeahead cannot match it offers
+only its generic "Search: <term>" entry, and taking that yields a real zero. So an OUT_OF_NETWORK
+from this driver is trustworthy, while an IN_NETWORK is not yet reachable through it. Closing this
+needs `_read_results` to recognise the profile route as a result of one.
 """
 
 from __future__ import annotations
@@ -37,7 +45,7 @@ from __future__ import annotations
 import re
 import time
 from dataclasses import dataclass, field
-from urllib.parse import urlencode
+from urllib.parse import parse_qs, urlparse, urlencode
 
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Locator, Page
@@ -133,6 +141,7 @@ class HealthSpringPhyndDriver(PortalDriver):
                 f"Medicare network chosen by name would be a guess.",
             )
         zip_code = (q.zip_code or "").strip()
+        self._zip = zip_code
         if not zip_code:
             return result(PortalStatus.UNKNOWN, "no clinic ZIP to scope the search with.")
 
@@ -146,21 +155,19 @@ class HealthSpringPhyndDriver(PortalDriver):
                 f"portal will not accept a plan until it has one.",
                 screenshot=shot("no-location"),
             )
-        url = f"{HOST}/providers?" + urlencode(
-            {"radius": _DEFAULT_RADIUS, "zipcode": zip_code, "healthPlan": plan_id})
-        try:
-            page.goto(url, wait_until="domcontentloaded", timeout=45_000)
-        except PlaywrightTimeout:
-            pass
-        except PlaywrightError as e:
-            return result(PortalStatus.BLOCKED, f"navigation failed: {type(e).__name__}: {e}",
-                          screenshot=shot("nav-failed"))
-        if "/select-a-location" in page.url:
+        # The plan is pinned by WALKING the wizard, not by URL. A healthPlan parameter is inert unless
+        # the picker put it there: a cold deep link bounces to /select-a-location, and after only the
+        # location step the providers page carries no plan at all and returns the entire directory
+        # (6,583 providers for Maricopa). Both look exactly like a search that found nothing.
+        picked = self._pick_plan(page, plan_id, trail)
+        if picked is None:
             return result(
                 PortalStatus.UNKNOWN,
-                f"the portal bounced the pinned-plan URL back to its location step, so {plan_id} was "
-                f"never applied and nothing was searched under the member's plan.",
-                screenshot=shot("bounced"),
+                f"{plan_id} was not among the plans this portal offers at {zip_code}. An MA plan is "
+                f"sold by county, so this reads as the member's plan not being available where the "
+                f"clinic is — which is a different finding from the provider being out-of-network, "
+                f"and must not be reported as one.",
+                screenshot=shot("plan-not-offered"),
             )
         if not self._wait_shell(page):
             return result(PortalStatus.BLOCKED,
@@ -172,8 +179,8 @@ class HealthSpringPhyndDriver(PortalDriver):
 
         # Read the pin back. A cold load should name the plan we asked for; anything else means the
         # portal answered about a different plan, and the search must not be issued.
-        shown = self._plan_header(page)
-        trail.append(f"plan requested {plan_id}, portal shows {shown!r}")
+        shown = self._plan_header(page) or picked
+        trail.append(f"plan requested {plan_id}, portal pinned {picked!r} (header {shown!r})")
         if not shown:
             return result(
                 PortalStatus.UNKNOWN,
@@ -235,6 +242,93 @@ class HealthSpringPhyndDriver(PortalDriver):
         )
 
     # ------------------------------------------------------------- mechanics
+
+    def _pick_plan(self, page: Page, plan_id: str, trail: list[str]) -> str | None:
+        """Walk Plan Type -> Plan and select the option that IS this member's plan.
+
+        The plan buttons carry no identifier in the DOM — only their marketing name — so the mapping
+        is learned the only way the portal exposes it: click an option and read the `healthPlan` the
+        portal itself puts in the URL. Measured for Maricopa 2026-08-12:
+
+            H0354-001-000  HealthSpring Preferred (HMO)
+            H0354-027-000  HealthSpring Achieve (HMO C-SNP)
+            H0354-028-000  HealthSpring Alliance (HMO)
+            H0354-029-000  HealthSpring Preferred Savings (HMO)
+            H0354-030-000  HealthSpring Preferred Full Savings (HMO)
+            H7849-065-000  HealthSpring True Choice (PPO)
+
+        Names are NOT hardcoded from that table: the list is county-specific and CMS renames plans
+        every year, so it is re-read live and matched on the identifier. Returns the plan's label, or
+        None when this county does not offer it.
+        """
+        # The plan-type list only renders after the "search by name" card is chosen.
+        self._click_text(page, "Search by name, specialty, or condition")
+        for label in ("Individual Medicare Advantage Plans", "Group Medicare Advantage Plans"):
+            if not self._click_text(page, label):
+                continue
+            trail.append(f"plan type: {label}")
+            hit = self._scan_plans(page, plan_id, trail, plan_type=label)
+            if hit:
+                return hit
+            # Not in this book — try the other one from a clean plan-type step.
+            self._goto_step(page, "select-a-plan-type")
+            self._click_text(page, "Search by name, specialty, or condition")
+        return None
+
+    def _scan_plans(self, page: Page, plan_id: str, trail: list[str],
+                    plan_type: str = "Individual Medicare Advantage Plans") -> str | None:
+        names = self._plan_names(page)
+        trail.append(f"{len(names)} plan(s) offered here")
+        for name in names[:12]:
+            if not self._click_text(page, name):
+                continue
+            self._settle(page, 5_000)
+            got = parse_qs(urlparse(page.url).query).get("healthPlan", [None])[0]
+            if (got or "").upper() == plan_id.upper():
+                trail.append(f"plan pinned: {name!r} = {got}")
+                return name
+            # Returning to /select-a-plan directly renders an EMPTY list — the step only populates
+            # after the "search by name" card is chosen — so the wizard is re-walked rather than
+            # abandoned. Giving up here reported "plan not offered" for a plan that was two clicks
+            # away, which would have read as the member's plan being unavailable in the county.
+            self._goto_step(page, "select-a-plan")
+            if not self._plan_names(page):
+                self._goto_step(page, "select-a-plan-type")
+                self._click_text(page, "Search by name, specialty, or condition")
+                self._click_text(page, plan_type)
+                if not self._plan_names(page):
+                    return None
+        return None
+
+    def _plan_names(self, page: Page) -> list[str]:
+        try:
+            return page.evaluate(
+                r"""() => Array.from(document.querySelectorAll('button'))
+                     .filter(e=>{const r=e.getBoundingClientRect();return r.width>0&&r.height>0;})
+                     .map(e=>(e.innerText||'').replace(/\s+/g,' ').trim())
+                     .filter(t=>/^HealthSpring /i.test(t))"""
+            )
+        except PlaywrightError:
+            return []
+
+    def _goto_step(self, page: Page, step: str) -> None:
+        try:
+            page.goto(f"{HOST}/{step}?radius={_DEFAULT_RADIUS}&zipcode={self._zip}",
+                      wait_until="domcontentloaded", timeout=45_000)
+            self._settle(page, 5_000)
+        except (PlaywrightTimeout, PlaywrightError):
+            pass
+
+    def _click_text(self, page: Page, text: str, timeout_ms: int = 12_000) -> bool:
+        for build in (lambda: page.get_by_role("button", name=text).first,
+                      lambda: page.get_by_text(text, exact=False).first):
+            try:
+                build().click(timeout=timeout_ms)
+                self._settle(page, 5_000)
+                return True
+            except (PlaywrightTimeout, PlaywrightError):
+                continue
+        return False
 
     def _commit_location(self, page: Page, zip_code: str, trail: list[str]) -> bool:
         """Wizard step 1: type the clinic ZIP, take the suggestion, continue."""
