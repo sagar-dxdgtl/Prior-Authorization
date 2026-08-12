@@ -100,6 +100,12 @@ class ScriptedDriver(OscarCareOptionsDriver):
     """The real `capture()` over a scripted portal: navigation, dropdowns and typing are stubbed; the
     plan-confirmation, term-ladder, folding, identity and note logic are the shipped code."""
 
+    def _confirm_on_profile(self, page, q, href, shot):
+        """The profile round-trip is a live-browser step with its own suite
+        (tests/test_oscar_profile_npi.py). Here it is "the profile did not open", which is the
+        best-effort path: the verdict must be unchanged from before it existed."""
+        return None, "not exercised in this scripted run", None
+
     def __init__(self, pinned: dict, crumb: str | None, answers: dict, url: str = SEARCH_URL) -> None:
         self.pinned, self.crumb, self.answers, self.search_url = pinned, crumb, answers, url
 

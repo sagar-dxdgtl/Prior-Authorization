@@ -77,9 +77,16 @@ Traps that cost a live run, all recorded so nobody re-derives them:
     in a portal elsewhere in the DOM.
   * The search page pre-fills a ZIP (30308, Atlanta) — the clinic ZIP must overwrite it, or the
     distance-sorted list is scoped to the wrong place.
-  * Oscar's directory is NOT NPI-searchable (DISCOVERY.md: an NPI query returns 0 results), and no
-    NPI appears anywhere on the profile page or in its source. Identity here is name-only; the NPI
-    check belongs to the JSON adapter, which reads it from `doctor_name_fields.npi`.
+  * Oscar's directory is NOT NPI-searchable (DISCOVERY.md: an NPI query returns 0 results), so the
+    QUERY is always a name. IDENTITY, HOWEVER, IS NOT NAME-ONLY ANY MORE — this bullet used to say
+    "no NPI appears anywhere on the profile page or in its source", and that is false as of
+    2026-08-12. Clicking the matched suggestion opens /people/<entity>/<hash>/, and its "Provider
+    information" block states `NPI 1548202799` (with the medical-group affiliations) once "Show all"
+    is clicked. `_confirm_on_profile` does exactly that, so the verdict rests on an identifier and
+    the filed screenshot is the provider's own page rather than a dropdown of ten namesakes.
+    Two traps: a COLD deep-link to the profile bounces to /care-options, so it is reachable only by
+    clicking the row from inside the flow; and "Show all" must be matched EXACTLY, because the same
+    page carries "See all locations (5)", which navigates away and loses the profile.
   * A MULTI-WORD QUERY RETURNS NOTHING. Verified twice on 2026-07-28: "Desiree Clarke" answered
     "No results. Try another search." in the browser (network 070) and 0 rows from the autocomplete
     API in 066, 070 and 019, while the bare surname "Clarke" returned 10 in each. So a zero from a
@@ -166,6 +173,19 @@ _PROVIDER_ROW = "a[href*='/people/']"  # provider suggestions only; facilities/d
 # an absence. Verified 2026-07-28: "Clarke" = 10 rows in the browser and from the API in all three FL
 # networks.
 _SUGGEST_CAP = 10
+
+# THE PROFILE CARRIES THE NPI — the suggestion list never did. Measured live 2026-08-12 by driving
+# the real flow: clicking the matched row opens /people/<entity>/<hash>/, and the "Provider
+# information" block reveals `NPI 1548202799` (plus the medical-group affiliations) once "Show all"
+# is clicked. Two traps, both measured:
+#   * a COLD deep-link to the profile URL bounces to /care-options, so it is reachable only by
+#     clicking the row from inside the flow;
+#   * "Show all" must match EXACTLY. The same page carries "See all locations (5)", which navigates
+#     away and loses the profile entirely.
+_PROFILE_EXPANDER = "Show all"
+_PROFILE_SECTION = "Provider information"
+_PROFILE_NPI_RE = re.compile(r"\bNPI\b\s*:?\s*(\d{10})\b", re.I)
+_PROFILE_WAIT_MS = 9_000
 
 # Cost ceilings for the combination probe. Oscar's widest state today is Florida with 3 coverage
 # areas; these are generous enough for that and bound the click count if Oscar expands. NB these caps
@@ -319,6 +339,31 @@ class OscarCareOptionsDriver(PortalDriver):
         name_only = (f"NB Oscar shows no NPI anywhere in this UI, so identity here is name-only "
                      f"(surname as whole tokens + first-name agreement); NPI {q.npi} is confirmed by "
                      f"the Oscar JSON adapter, not by this screenshot.")
+
+        # IDENTITY, UPGRADED FROM A NAME TO AN IDENTIFIER. The suggestion list gives a name and ten
+        # namesakes; the profile behind it states the NPI. Opening it costs one click and turns the
+        # filed screenshot from a dropdown of strangers into the provider's own page. Best-effort:
+        # a profile that will not open leaves the name-only reading exactly as it was.
+        prof_ok, prof_why, prof_png = (None, "", None)
+        if found["match"] and found["href"]:
+            prof_ok, prof_why, prof_png = self._confirm_on_profile(page, q, found["href"], shot)
+            trail_box.append(f"profile: {prof_why}")
+            if prof_png:
+                found["match_shot"] = prof_png
+            if prof_ok is True:
+                name_only = (f"Identity is confirmed on the portal's own profile page: {prof_why}.")
+            elif prof_ok is False:
+                # A wrong NPI on the profile unmakes the match — the row was a namesake.
+                return result(
+                    PortalStatus.UNKNOWN,
+                    f"Oscar's suggestion {found['match']!r} in {where}{near} is NOT this provider: "
+                    f"{prof_why}. Presence of a namesake is not presence of the provider, so nothing "
+                    f"follows about the network.",
+                    result_count=found["match_count"], matched_name=found["match"],
+                    screenshot=prof_png or found["match_shot"],
+                )
+            else:
+                name_only = f"{name_only} Profile check: {prof_why}."
 
         if found["match"]:
             if found["match_badge"] == "out":
@@ -859,6 +904,70 @@ class OscarCareOptionsDriver(PortalDriver):
             if name or why_m == "ambiguous":
                 break
         return self._fold(steps, failures)
+
+    def _confirm_on_profile(self, page: Page, q: PortalQuery, href: str,
+                            shot) -> tuple[bool | None, str, str | None]:
+        """Open the matched row's profile, click "Show all", and read the NPI off it.
+
+        Returns (matched, why, screenshot):
+          True  — the profile's NPI is this provider's. Identity is now identifier-grade, and the
+                  filed screenshot shows that identifier next to the name and address.
+          False — the profile names a DIFFERENT NPI. The namesake case the dropdown could never rule
+                  out: ten people share the surname and the row said only "David G Stone".
+          None  — the profile would not open or showed no NPI. Unknown, never a mismatch; the caller
+                  keeps its name-only reading rather than inventing a contradiction.
+
+        Best-effort throughout: a profile that will not open must not downgrade a verdict the
+        suggestion list already supports, so every failure returns None and the walk continues.
+        """
+        try:
+            row = page.locator(f"a[href='{href}']").first
+            if not row.count():
+                return None, "the matched suggestion row could not be re-located to open it", None
+            row.click(timeout=10_000)
+        except (PlaywrightTimeout, PlaywrightError) as e:
+            return None, f"the profile would not open ({type(e).__name__})", None
+        try:
+            page.wait_for_timeout(_PROFILE_WAIT_MS)
+        except PlaywrightError:
+            pass
+
+        # Scroll the section into view first: the identifiers render lazily beneath it.
+        try:
+            page.get_by_text(_PROFILE_SECTION, exact=False).first.scroll_into_view_if_needed(
+                timeout=8_000)
+            page.wait_for_timeout(2_500)
+        except (PlaywrightTimeout, PlaywrightError):
+            pass
+        # EXACT match, and by role. "See all locations (5)" is one loose substring away and it
+        # navigates off the profile.
+        expanded = False
+        try:
+            btn = page.get_by_role("button", name=_PROFILE_EXPANDER, exact=True).first
+            if btn.count() and btn.is_visible():
+                btn.click(timeout=8_000)
+                page.wait_for_timeout(4_000)
+                expanded = True
+        except (PlaywrightTimeout, PlaywrightError):
+            pass
+
+        try:
+            body = page.inner_text("body") or ""
+        except PlaywrightError:
+            body = ""
+        png = shot("profile")
+        m = _PROFILE_NPI_RE.search(body)
+        if not m:
+            return None, (
+                "the profile opened but showed no NPI"
+                + ("" if expanded else f" (its {_PROFILE_EXPANDER!r} control was not reachable, and "
+                                       f"the identifiers are not in the page until it is clicked)")
+            ), png
+        found = m.group(1)
+        if q.npi and found != q.npi:
+            return False, (f"the profile for this listing carries NPI {found}, not {q.npi} — a "
+                           f"namesake, which is exactly what a surname list cannot rule out"), png
+        return True, f"the profile states NPI {found}, matching the provider asked about", png
 
     def _should_narrow(self, steps: list[dict]) -> bool:
         """Only worth typing a full name when the surname list was truncated and had no match."""
