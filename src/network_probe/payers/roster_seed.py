@@ -21,6 +21,15 @@ import re
 # (see docs/payer-sources/MATRIX.md). Newly-confirmed ids flip a row from `needs_payer_id` to
 # `needs_enrollment` (it has an id but is not yet a public-FHIR/adapter-supported payer).
 ROSTER = [
+    # --- BlueCross BlueShield of South Carolina (8-12-26 sheet) ---
+    # SC members treated OUT OF STATE, which is ordinary BlueCard: the SC directory answers for GA and
+    # FL providers under the member's own "Preferred Blue" network, verified live 2026-08-12 (the
+    # sheet's own physician came back at the sheet's own street address). Markets are the CLINIC's,
+    # not the member's. No Stedi id is baked — unverified ids stay needs_payer_id per the note above.
+    ("BCBS South Carolina", "Commercial", "GA-Atlanta", None, "needs_payer_id"),
+    ("BCBS South Carolina", "Commercial", "FL-Tampa", None, "needs_payer_id"),
+    ("BCBS South Carolina", "Commercial", "FL-South Florida", None, "needs_payer_id"),
+    ("BCBS South Carolina Publix", "Commercial", "FL-South Florida", None, "needs_payer_id"),
     # --- Arizona ---
     ("Aetna", "Commercial", "AZ", "60054", "needs_enrollment"),
     ("Aetna", "Medicare Advantage", "AZ", "60054", "needs_enrollment"),
@@ -663,6 +672,27 @@ SOURCES: dict[str, tuple[str | None, str | None, str | None, str]] = {
         None,
         "https://providerdirectory.healthchoiceaz.com/",
         "needs-authorized-api",
+    ),
+    # BlueCross BlueShield of South Carolina — its OWN Blue licensee, unrelated to HCSC/BCBS IL. The
+    # member-facing directory is Zelis Sapphire (ci=BCBSSC), guest-searchable and now driven by
+    # portal/drivers/sapphire_shopping.py. tic_url is the BlueCard host-plan index: measured
+    # 2026-08-12 it is a CONTROL-PLAN index carrying 169 other Blues' networks, and it needs a
+    # `Referer: https://provider.bcbssc.com/` header plus a US exit or it 403s.
+    "BCBS South Carolina": (
+        None,
+        "https://d2vbl1kcu4hfid.cloudfront.net/bcbssc_index.json",
+        "https://shoppingforcare.sapphirethreesixtyfive.com/?ci=BCBSSC",
+        "public-guest",
+    ),
+    # Publix's self-funded book on the SAME Zelis instance, one query parameter apart (ci=Publix) —
+    # but a DIFFERENT network book: 3 allowable networks vs BCBSSC's 41, and network id 10 renders as
+    # "PBB - Blue Choice PPO" here and "Preferred Blue" there. The tenant is co-branded Florida Blue +
+    # Publix, and its TiC files are BCBS Florida's (Blue Choice PPO / NetworkBlue).
+    "BCBS South Carolina Publix": (
+        None,
+        "https://d2vbl1kcu4hfid.cloudfront.net/bcbssc_index.json",
+        "https://shoppingforcare.sapphirethreesixtyfive.com/?ci=Publix",
+        "public-guest",
     ),
     "Healthspring": (
         "https://p-hi2.digitaledge.cigna.com/ProviderDirectory/v1",

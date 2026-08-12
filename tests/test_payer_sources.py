@@ -40,7 +40,13 @@ _FHIR_PAYERS = {
     "UnitedHealthcare Community Plan": UHC_FHIR,
     "UMR": UHC_FHIR,
 }
-_DIRECTORY_ACCESS = {"public-fhir", "authorized-fhir", "needs-authorized-api", "none", "pdf-directory"}
+# "public-guest" is the portal-driver category and postdates the other five: a payer whose directory
+# is openly searchable as a guest HTML portal but which publishes NO FHIR endpoint. It is not
+# "public-fhir" (UHC/Cigna/Oscar carry that because they ALSO expose FHIR, not because their portal is
+# public) and not "needs-authorized-api" (nothing needs authorising — the guest walk works today).
+# BCBS South Carolina is the first: Zelis Sapphire guest search, no FHIR base URL.
+_DIRECTORY_ACCESS = {"public-fhir", "authorized-fhir", "needs-authorized-api", "none",
+                     "pdf-directory", "public-guest"}
 
 ANTHEM_LABEL = "BCBS / Empire (Anthem / Elevance)"
 ANTHEM_FHIR = "https://totalview.healthos.elevancehealth.com/resources/unregistered/api/v1/fhir/cms_mandate/mcd"

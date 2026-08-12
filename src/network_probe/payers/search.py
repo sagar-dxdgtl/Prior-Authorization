@@ -37,6 +37,12 @@ _ALIASES = {
     "uhg": "unitedhealthcare",
     "aarp": "unitedhealthcare",
     "bcbsa": "bcbs",
+    # "BCBS SC" is what the client's own sheet writes, but the state abbreviation shares no letters
+    # with "south carolina", so the query matched 20 unrelated Blues and never the payer meant. The
+    # Publix book is a SEPARATE payer on a separate network list, so it is expanded separately rather
+    # than folded into the same term.
+    "bcbs sc publix": "bcbs south carolina publix",
+    "bcbs sc": "bcbs south carolina",
 }
 
 # Benefit / plan / geography noise dropped before brand-token matching. A match must rest on a real
